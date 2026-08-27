@@ -8,6 +8,11 @@
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
 
+The ordered backlog and completion criteria are maintained in
+`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. Its immediate next block is
+R05.2: harden and deploy the allowlisted DATASUS CORS proxy, then connect the
+public GitHub Pages build and prove the live SIH-RD acquisition workflow.
+
 ## 2026-08-27 R05.1 CSV-import and selected-DBF update
 
 CSV and TSV files can now enter the normal records -> AnalysisSpec -> QueryPlan

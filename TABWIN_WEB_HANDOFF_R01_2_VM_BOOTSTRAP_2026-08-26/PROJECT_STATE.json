@@ -120,6 +120,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
+    "harden-deploy-and-connect-public-datasus-cors-proxy",
     "close-cataloged-tabwin-415-feature-families",
     "move-DBC-processing-to-cancellable-Web-Worker",
     "add-offline-recent-files-screen-and-cache-controls",
