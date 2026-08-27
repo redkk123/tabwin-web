@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.3 advanced-filter milestone.
+Verified on 2026-08-27 through the R04.4 safe-expression milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 57 tests;
-- 57 passed;
+- 61 tests;
+- 61 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -42,6 +42,12 @@ exclusive numeric bounds, unmatched CNV selection and explicit unclassified
 axis materialization. Browser verification over the real G001 assets checked
 `SEXO=3` exclusion (1,761 accepted), `IDADE=20–39` inclusion (1,663 accepted)
 and a zero-valued `Não classificados` row for `COMPLEX2.CNV`.
+
+R04.4 adds four expression tests covering precedence, parentheses,
+right-associative power, unary signs, `Cnn`/key/bracketed-label references,
+explicit zero-division handling, non-finite results and rejection of executable
+syntax. Browser verification over the real G001 DBC checked `C01 * 2 + 1`
+and obtained `2 -> 5` with the exact expression recorded in Audit.
 
 ## Live official-source verification
 

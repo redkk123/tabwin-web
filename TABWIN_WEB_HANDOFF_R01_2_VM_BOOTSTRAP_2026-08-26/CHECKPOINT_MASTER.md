@@ -1,12 +1,25 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.3-advanced-filters-and-unclassified
+**Revision:** R04.4-safe-table-expression-columns
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; table operations, presentation and advanced selection workbench implemented
+**Status:** G001 exact golden passed; advanced selections and safe expression columns implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.4 expression-column update
+
+The documented New Column workflow now has a purpose-built parser rather than
+`eval`. Expressions support constants, `C01`/`C02` one-based references, exact
+column keys, bracketed labels, parentheses, unary signs and `+ - * / ^` with
+explicit precedence and right-associative power. Division by zero remains an
+explicit error/zero policy, and every row must produce a finite number.
+
+Expression operations are immutable result transforms, persist in recipes and
+appear in Audit. Portable verification is 61/61 plus browser typecheck and
+production build. A real DBC browser case verified `C01 * 2 + 1` as `2 -> 5`.
+Evidence is in `docs/handoffs/R04_4_SAFE_TABLE_EXPRESSIONS_REPORT.md`.
 
 ## 2026-08-27 R04.3 advanced-selection update
 

@@ -143,6 +143,12 @@ export type TableOperation =
       kind: 'constant';
       value: number;
       output: DerivedColumnSpec;
+    }
+  | {
+      kind: 'expression';
+      expression: string;
+      divisionByZero: 'error' | 'zero';
+      output: DerivedColumnSpec;
     };
 
 export type DataRecord = Record<string, unknown>;

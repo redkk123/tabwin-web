@@ -147,6 +147,8 @@ const tableOperationLeftLabel = element<HTMLElement>('#table-operation-left-labe
 const tableOperationRightLabel = element<HTMLElement>('#table-operation-right-label');
 const tableOperationNumberLabel = element<HTMLElement>('#table-operation-number-label');
 const tableOperationNumber = element<HTMLInputElement>('#table-operation-number');
+const tableOperationExpressionLabel = element<HTMLElement>('#table-operation-expression-label');
+const tableOperationExpression = element<HTMLInputElement>('#table-operation-expression');
 const tableOperationZeroLabel = element<HTMLElement>('#table-operation-zero-label');
 const tableOperationZero = element<HTMLSelectElement>('#table-operation-zero');
 const tableOperationLabel = element<HTMLInputElement>('#table-operation-label');
@@ -723,6 +725,7 @@ function operationLabel(operation: TableOperation): string {
     add: 'soma', subtract: 'subtração', multiply: 'produto', divide: 'divisão',
     minimum: 'mínimo', maximum: 'máximo', percentage: 'percentual', factor: 'fator',
     cumulative: 'acumulado', absolute: 'absoluto', integer: 'inteiro', sequence: 'sequência', constant: 'constante',
+    expression: 'expressão',
   };
   return `${operation.output.label} · ${names[operation.kind === 'binary' ? operation.operator : operation.kind] ?? operation.kind}`;
 }
@@ -745,11 +748,12 @@ function updateTableOperationControls(): void {
 
   const kind = tableOperationKind.value;
   const binary = ['add', 'subtract', 'multiply', 'divide', 'minimum', 'maximum', 'percentage'].includes(kind);
-  const sourceFree = kind === 'sequence' || kind === 'constant';
+  const sourceFree = kind === 'sequence' || kind === 'constant' || kind === 'expression';
   tableOperationLeftLabel.hidden = sourceFree;
   tableOperationRightLabel.hidden = !binary;
   tableOperationNumberLabel.hidden = kind !== 'factor' && kind !== 'sequence' && kind !== 'constant';
-  tableOperationZeroLabel.hidden = kind !== 'divide' && kind !== 'percentage';
+  tableOperationExpressionLabel.hidden = kind !== 'expression';
+  tableOperationZeroLabel.hidden = kind !== 'divide' && kind !== 'percentage' && kind !== 'expression';
   tableOperationUndo.disabled = tableOperations.length === 0;
   tableOperationReset.disabled = tableOperations.length === 0;
   tableOperationApply.disabled = !currentResult?.columns.length && !sourceFree;
@@ -769,7 +773,7 @@ function suggestedOperationLabel(kind: string): string {
     divide: `${left} ÷ ${right}`, minimum: `Mínimo (${left}, ${right})`, maximum: `Máximo (${left}, ${right})`,
     percentage: `% ${left} / ${right}`, factor: `${left} × ${tableOperationNumber.value || '1'}`,
     cumulative: `Acumulado: ${left}`, absolute: `Absoluto: ${left}`, integer: `Inteiro: ${left}`,
-    sequence: 'Sequência', constant: 'Nova coluna',
+    sequence: 'Sequência', constant: 'Nova coluna', expression: 'Coluna calculada',
   };
   return labels[kind] ?? 'Nova coluna';
 }
@@ -801,12 +805,18 @@ function applySelectedTableOperation(): void {
     operation = { kind, sourceColumnKey: tableOperationLeft.value, rounding: 'truncate', output };
   } else if (kind === 'sequence') {
     operation = { kind, start: numeric, step: 1, output };
+  } else if (kind === 'expression') {
+    operation = {
+      kind, expression: tableOperationExpression.value,
+      divisionByZero: tableOperationZero.value as 'error' | 'zero', output,
+    };
   } else {
     operation = { kind: 'constant', value: numeric, output };
   }
   currentResult = applyTableOperation(currentResult, operation).result;
   tableOperations.push(operation);
   tableOperationLabel.value = '';
+  if (operation.kind === 'expression') tableOperationExpression.value = '';
   renderResult();
   showToast(`${operation.output.label}: coluna calculada`);
 }

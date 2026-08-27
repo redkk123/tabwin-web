@@ -73,7 +73,7 @@ explicit, replayable result transforms and must never mutate the source
 | Absolute value and integer values | **Web / modern policy** — UI integer conversion uses truncation toward zero; kernel also represents round/floor/ceil. |
 | Define sequence | **Web / modern policy** — UI exposes start value and unit step. |
 | Recalculate total / change total type | **Web / modern policy** — none, sum, product, mean, initial, final, min and max are explicit per derived column. |
-| Insert a new column | **Web / modern policy** — constant numeric columns are supported. |
+| Insert a new column | **Web / modern policy** — constants and safe expressions support `C01`, exact keys, bracketed titles, parentheses and `+ - * / ^`. |
 
 All implemented transforms are immutable, replayable and shown in the Audit
 view. They sit after `TabulationResult`; none silently rewrites the source

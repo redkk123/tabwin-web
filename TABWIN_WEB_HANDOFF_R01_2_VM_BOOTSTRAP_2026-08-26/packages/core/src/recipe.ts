@@ -141,7 +141,7 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
 function validateTableOperation(value: unknown): asserts value is TableOperation {
   if (!value || typeof value !== 'object') throw new Error('invalid table operation in TabWin Web recipe');
   const operation = value as Partial<TableOperation> & Record<string, unknown> & { output?: Record<string, unknown> };
-  const allowedKinds = new Set(['binary', 'factor', 'cumulative', 'absolute', 'integer', 'sequence', 'constant']);
+  const allowedKinds = new Set(['binary', 'factor', 'cumulative', 'absolute', 'integer', 'sequence', 'constant', 'expression']);
   if (!operation.kind || !allowedKinds.has(operation.kind) || !operation.output
     || typeof operation.output.key !== 'string' || !operation.output.key.trim()
     || typeof operation.output.label !== 'string' || !operation.output.label.trim()
@@ -166,7 +166,10 @@ function validateTableOperation(value: unknown): asserts value is TableOperation
     }
   } else if (operation.kind === 'sequence') {
     if (!finiteField('start') || !finiteField('step')) throw new Error('invalid sequence operation in TabWin Web recipe');
-  } else if (!finiteField('value')) {
+  } else if (operation.kind === 'constant' && !finiteField('value')) {
     throw new Error('invalid constant operation in TabWin Web recipe');
+  } else if (operation.kind === 'expression'
+    && (!stringField('expression') || !new Set(['error', 'zero']).has(String(operation.divisionByZero)))) {
+    throw new Error('invalid expression operation in TabWin Web recipe');
   }
 }

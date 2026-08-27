@@ -3,6 +3,7 @@ import type {
   TableOperation,
   TotalPolicy,
 } from '../../core/src/model.js';
+import { evaluateTableExpression, parseTableExpression } from './table-expression.js';
 
 export interface TableOperationAudit {
   operation: TableOperation;
@@ -48,6 +49,8 @@ export function applyTableOperation(
     || operation.kind === 'absolute' || operation.kind === 'integer'
     ? columnIndex(source, operation.sourceColumnKey)
     : -1;
+  const expression = operation.kind === 'expression'
+    ? parseTableExpression(source, operation.expression) : undefined;
 
   const values = source.cells.map((cells, rowIndex) => {
     let value: number;
@@ -77,8 +80,10 @@ export function applyTableOperation(
           : operation.rounding === 'floor' ? Math.floor(input) : Math.ceil(input);
     } else if (operation.kind === 'sequence') {
       value = operation.start + operation.step * rowIndex;
-    } else {
+    } else if (operation.kind === 'constant') {
       value = operation.value;
+    } else {
+      value = evaluateTableExpression(expression!, cells, operation.divisionByZero, rowIndex);
     }
     return finite(value, `row ${rowIndex + 1}`);
   });

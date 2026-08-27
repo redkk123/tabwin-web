@@ -1,10 +1,10 @@
 {
-  "revision": "R04.3-advanced-filters-and-unclassified",
+  "revision": "R04.4-safe-table-expression-columns",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 57,
-    "passed": 57,
+    "total": 61,
+    "passed": 61,
     "failed": 0,
     "command": "npm run check"
   },
@@ -62,6 +62,10 @@
     ,"filter-select-all-and-clear-controls"
     ,"explicit-unclassified-filter-selection"
     ,"explicit-unclassified-axis-discrimination"
+    ,"safe-table-expression-parser-without-eval"
+    ,"expression-column-cnn-key-and-bracketed-title-references"
+    ,"expression-parentheses-unary-precedence-and-powers"
+    ,"recipe-persisted-expression-columns"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -86,7 +90,7 @@
     "xlsx-parquet-svg-geojson-kml-exports",
     "golden-cases-beyond-g001"
     ,"golden-equivalence-for-post-tabulation-operations"
-    ,"advanced-table-expression-parser-normalization-column-and-row-editing"
+    ,"table-normalization-column-and-row-editing"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
