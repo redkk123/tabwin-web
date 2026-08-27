@@ -63,17 +63,22 @@ explicit, replayable result transforms and must never mutate the source
 
 | Operation | Status |
 | --- | --- |
-| Indicator calculation | **Cataloged** |
-| Add two or more columns | **Cataloged** |
-| Subtract, multiply or divide two columns | **Cataloged** |
-| Minimum and maximum | **Cataloged** |
-| Multiply by a factor | **Cataloged** |
-| Percentage | **Cataloged** |
-| Accumulate a column | **Cataloged** |
-| Absolute value and integer values | **Cataloged** |
-| Define sequence | **Cataloged** |
-| Recalculate total / change total type | **Cataloged** |
-| Insert a new column | **Cataloged** |
+| Indicator calculation | **Web / partial** — explicit numerator/denominator percentage is available; legacy indicator dialog defaults still need an oracle. |
+| Add two or more columns | **Web / modern policy** — pairwise addition can be chained and is persisted in recipes. |
+| Subtract, multiply or divide two columns | **Web / modern policy** — division-by-zero behavior is explicit (`error` or `zero`). |
+| Minimum and maximum | **Web / modern policy** |
+| Multiply by a factor | **Web / modern policy** |
+| Percentage | **Web / modern policy** — computes `A / B × 100` with explicit zero policy. |
+| Accumulate a column | **Web / modern policy** — current result row order is authoritative. |
+| Absolute value and integer values | **Web / modern policy** — UI integer conversion uses truncation toward zero; kernel also represents round/floor/ceil. |
+| Define sequence | **Web / modern policy** — UI exposes start value and unit step. |
+| Recalculate total / change total type | **Web / modern policy** — none, sum, product, mean, initial, final, min and max are explicit per derived column. |
+| Insert a new column | **Web / modern policy** — constant numeric columns are supported. |
+
+All implemented transforms are immutable, replayable and shown in the Audit
+view. They sit after `TabulationResult`; none silently rewrites the source
+`AnalysisSpec` or `QueryPlan`. The operation family is not marked golden until
+focused TabWin 4.15 reference cases establish defaults, rounding and edge cases.
 
 ## 4. Table presentation
 

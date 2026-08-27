@@ -1,12 +1,30 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.0-g001-exact-golden-equivalence
+**Revision:** R04.1-auditable-table-operations
 **Date:** 2026-08-27
-**Status:** Browser workbench implemented; first real TabWin 4.15 golden G001 passes with exact structural and numeric equality
+**Status:** G001 exact golden passed; auditable post-tabulation operation workbench implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.1 table-operation update
+
+R04.1 begins closing the complete TabWin 4.15 feature inventory after G001.
+The browser now appends immutable derived columns for addition, subtraction,
+multiplication, division, minimum, maximum, percentage, factor, accumulation,
+absolute value, integer conversion, sequence and constants. Derived columns
+carry explicit total policies: none, sum, product, mean, initial, final,
+minimum or maximum. Division by zero is never implicit.
+
+Operations execute after `TabulationResult`, never rewrite the source plan,
+appear in the Audit view, support undo/reset, and persist in `.twrecipe` files
+for ordered replay. The UI labels these as modern explicit policies until
+focused 4.15 goldens establish dialog defaults, rounding and edge semantics.
+Portable verification is 51/51 plus browser typecheck and production build.
+Real-DBC browser inspection verified factor application, total recalculation,
+history, undo and the 390 px responsive layout. Full evidence is in
+`docs/handoffs/R04_1_AUDITABLE_TABLE_OPERATIONS_REPORT.md`.
 
 ## 2026-08-27 R04.0 golden-equivalence update
 

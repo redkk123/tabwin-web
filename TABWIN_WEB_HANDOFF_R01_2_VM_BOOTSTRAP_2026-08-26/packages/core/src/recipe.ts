@@ -1,4 +1,4 @@
-import type { QueryPlan, SourceFingerprint, TabulationSpec } from './model.js';
+import type { QueryPlan, SourceFingerprint, TableOperation, TabulationSpec } from './model.js';
 import { compileQueryPlan } from './plan.js';
 
 export interface ConversionFingerprint {
@@ -15,6 +15,8 @@ export interface AnalysisRecipeV1 {
   spec: TabulationSpec;
   conversions: ConversionFingerprint[];
   sourceHints: Array<Pick<SourceFingerprint, 'name' | 'sha256' | 'size'>>;
+  /** Deterministic post-tabulation transforms, replayed in array order. */
+  resultOperations?: TableOperation[];
   view?: {
     chartType?: 'horizontal-bar' | 'vertical-bar' | 'line' | 'area' | 'pie' | 'points' | 'bubbles' | 'arrows';
     mapClassification?: 'continuous' | 'equal-interval' | 'quantile';
@@ -87,6 +89,10 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
       throw new Error('invalid source fingerprint in TabWin Web recipe');
     }
   }
+  if (parsed.resultOperations !== undefined) {
+    if (!Array.isArray(parsed.resultOperations)) throw new Error('invalid result operations in TabWin Web recipe');
+    for (const operation of parsed.resultOperations) validateTableOperation(operation);
+  }
   const allowedChartTypes = new Set(['horizontal-bar', 'vertical-bar', 'line', 'area', 'pie', 'points', 'bubbles', 'arrows']);
   if (parsed.view?.chartType && !allowedChartTypes.has(parsed.view.chartType)) {
     throw new Error('invalid chart type in TabWin Web recipe');
@@ -112,4 +118,37 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
     throw new Error('invalid histogram bin count in TabWin Web recipe');
   }
   return parsed as AnalysisRecipeV1;
+}
+
+function validateTableOperation(value: unknown): asserts value is TableOperation {
+  if (!value || typeof value !== 'object') throw new Error('invalid table operation in TabWin Web recipe');
+  const operation = value as Partial<TableOperation> & Record<string, unknown> & { output?: Record<string, unknown> };
+  const allowedKinds = new Set(['binary', 'factor', 'cumulative', 'absolute', 'integer', 'sequence', 'constant']);
+  if (!operation.kind || !allowedKinds.has(operation.kind) || !operation.output
+    || typeof operation.output.key !== 'string' || !operation.output.key.trim()
+    || typeof operation.output.label !== 'string' || !operation.output.label.trim()
+    || !new Set(['none', 'sum', 'product', 'mean', 'initial', 'final', 'min', 'max']).has(String(operation.output.totalPolicy))) {
+    throw new Error('invalid table operation in TabWin Web recipe');
+  }
+  const stringField = (key: string): boolean => typeof operation[key] === 'string' && String(operation[key]).length > 0;
+  const finiteField = (key: string): boolean => typeof operation[key] === 'number' && Number.isFinite(operation[key]);
+  if (operation.kind === 'binary') {
+    if (!new Set(['add', 'subtract', 'multiply', 'divide', 'minimum', 'maximum', 'percentage']).has(String(operation.operator))
+      || !stringField('leftColumnKey') || !stringField('rightColumnKey')
+      || !new Set(['error', 'zero']).has(String(operation.divisionByZero))) {
+      throw new Error('invalid binary table operation in TabWin Web recipe');
+    }
+  } else if (operation.kind === 'factor') {
+    if (!stringField('sourceColumnKey') || !finiteField('factor')) throw new Error('invalid factor operation in TabWin Web recipe');
+  } else if (operation.kind === 'cumulative' || operation.kind === 'absolute') {
+    if (!stringField('sourceColumnKey')) throw new Error('invalid unary table operation in TabWin Web recipe');
+  } else if (operation.kind === 'integer') {
+    if (!stringField('sourceColumnKey') || !new Set(['truncate', 'round', 'floor', 'ceil']).has(String(operation.rounding))) {
+      throw new Error('invalid integer operation in TabWin Web recipe');
+    }
+  } else if (operation.kind === 'sequence') {
+    if (!finiteField('start') || !finiteField('step')) throw new Error('invalid sequence operation in TabWin Web recipe');
+  } else if (!finiteField('value')) {
+    throw new Error('invalid constant operation in TabWin Web recipe');
+  }
 }

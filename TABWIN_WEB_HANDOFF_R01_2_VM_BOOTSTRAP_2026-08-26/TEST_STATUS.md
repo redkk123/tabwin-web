@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.0 G001 exact-golden milestone.
+Verified on 2026-08-27 through the R04.1 auditable-table-operations milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 46 tests;
-- 46 passed;
+- 51 tests;
+- 51 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -23,6 +23,13 @@ The inherited 22-test baseline remains intact. Nine tests now additionally
 cover real DATASUS request/response contracts, rejection of non-official
 download domains, catalog coverage, CSV/XML export and the three R02.0
 DEF/MAP cases.
+
+R04.1 adds five pure table-operation tests covering immutable binary columns,
+explicit division-by-zero behavior, deterministic multi-step replay, every
+documented total policy and invalid column references. Recipe parsing now
+validates persisted operation payloads. A local browser run against the real
+G001 DBC verified factor application, totals, history, undo and a 390 px mobile
+layout without horizontal document overflow.
 
 ## Live official-source verification
 

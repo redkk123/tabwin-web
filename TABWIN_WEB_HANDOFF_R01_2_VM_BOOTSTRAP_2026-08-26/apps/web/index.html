@@ -150,6 +150,39 @@
               <h3>Solte um DBC e deixe o resto com a gente</h3>
               <p>A primeira frequência é calculada automaticamente. Depois você pode trocar linhas, colunas e conversões.</p>
             </div>
+            <section class="table-operations" id="table-operations" hidden aria-label="Operações sobre a tabela">
+              <div class="table-operation-heading">
+                <div><strong>Calcular nova coluna</strong><small>Operações reproduzíveis sobre o resultado atual</small></div>
+                <div class="table-operation-actions">
+                  <button class="secondary-button" id="table-operation-undo" type="button" disabled>Desfazer</button>
+                  <button class="secondary-button" id="table-operation-reset" type="button" disabled>Restaurar</button>
+                </div>
+              </div>
+              <div class="table-operation-grid">
+                <label>Operação<select id="table-operation-kind">
+                  <option value="add">Somar colunas</option><option value="subtract">Subtrair colunas</option>
+                  <option value="multiply">Multiplicar colunas</option><option value="divide">Dividir colunas</option>
+                  <option value="minimum">Mínimo entre colunas</option><option value="maximum">Máximo entre colunas</option>
+                  <option value="percentage">Percentual A ÷ B</option><option value="factor">Multiplicar por fator</option>
+                  <option value="cumulative">Acumulado</option><option value="absolute">Valor absoluto</option>
+                  <option value="integer">Converter para inteiro</option><option value="sequence">Sequência</option>
+                  <option value="constant">Nova coluna constante</option>
+                </select></label>
+                <label id="table-operation-left-label">Coluna A<select id="table-operation-left"></select></label>
+                <label id="table-operation-right-label">Coluna B<select id="table-operation-right"></select></label>
+                <label id="table-operation-number-label" hidden>Fator/valor<input id="table-operation-number" type="number" step="any" value="1"></label>
+                <label id="table-operation-zero-label" hidden>Divisão por zero<select id="table-operation-zero"><option value="error">Interromper</option><option value="zero">Usar zero</option></select></label>
+                <label>Nome da coluna<input id="table-operation-label" type="text" maxlength="80" placeholder="Gerado automaticamente"></label>
+                <label>Política do total<select id="table-operation-total">
+                  <option value="sum">Soma</option><option value="none">Sem total</option><option value="mean">Média</option>
+                  <option value="product">Produto</option><option value="initial">Inicial</option><option value="final">Final</option>
+                  <option value="min">Mínimo</option><option value="max">Máximo</option>
+                </select></label>
+                <button class="primary-button table-operation-apply" id="table-operation-apply" type="button"><span>Aplicar</span><b>＋</b></button>
+              </div>
+              <ol class="table-operation-history" id="table-operation-history" hidden></ol>
+              <p class="compatibility-note">Políticas modernas explícitas. A equivalência dessas transformações com o TabWin 4.15 será promovida operação por operação após casos-oráculo.</p>
+            </section>
             <div class="table-wrap" id="table-wrap" hidden>
               <table id="result-table">
                 <thead></thead>

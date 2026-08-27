@@ -1,10 +1,10 @@
 {
-  "revision": "R04.0-g001-exact-golden-equivalence",
+  "revision": "R04.1-auditable-table-operations",
   "date": "2026-08-27",
-  "phase": "first-real-golden-passed-feature-inventory-closure",
+  "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 46,
-    "passed": 46,
+    "total": 51,
+    "passed": 51,
     "failed": 0,
     "command": "npm run check"
   },
@@ -45,6 +45,12 @@
     "real-g001-zero-tolerance-golden-equivalence",
     "lossless-six-field-def-metadata-preservation",
     "profile-scoped-tabwin-frequency-header"
+    ,"immutable-post-tabulation-result-operations"
+    ,"table-add-subtract-multiply-divide-min-max-percentage"
+    ,"table-factor-cumulative-absolute-integer-sequence-constant"
+    ,"explicit-derived-column-total-policies"
+    ,"recipe-persisted-table-operation-replay"
+    ,"table-operation-undo-reset-and-audit-ui"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -69,6 +75,8 @@
     "legacy-map-manual-breaks-label-layers-and-selection-bridge",
     "xlsx-parquet-svg-geojson-kml-exports",
     "golden-cases-beyond-g001"
+    ,"golden-equivalence-for-post-tabulation-operations"
+    ,"advanced-table-expression-parser-normalization-sort-and-presentation"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",

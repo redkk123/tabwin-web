@@ -61,9 +61,11 @@ export interface QueryPlan {
 export interface ResultAxisItem {
   key: string;
   label: string;
-  source: 'raw' | 'conversion';
+  source: 'raw' | 'conversion' | 'derived';
   subtotalTargetKey?: string;
   excludeFromTotal?: boolean;
+  /** Explicit display policy for a post-tabulation derived column. */
+  totalPolicy?: TotalPolicy;
 }
 
 export interface TabulationResult {
@@ -74,5 +76,54 @@ export interface TabulationResult {
   recordsSeen: number;
   recordsAccepted: number;
 }
+
+export interface DerivedColumnSpec {
+  key: string;
+  label: string;
+  totalPolicy: Exclude<TotalPolicy, 'precalculated'>;
+}
+
+export type TableOperation =
+  | {
+      kind: 'binary';
+      operator: 'add' | 'subtract' | 'multiply' | 'divide' | 'minimum' | 'maximum' | 'percentage';
+      leftColumnKey: string;
+      rightColumnKey: string;
+      output: DerivedColumnSpec;
+      divisionByZero: 'error' | 'zero';
+    }
+  | {
+      kind: 'factor';
+      sourceColumnKey: string;
+      factor: number;
+      output: DerivedColumnSpec;
+    }
+  | {
+      kind: 'cumulative';
+      sourceColumnKey: string;
+      output: DerivedColumnSpec;
+    }
+  | {
+      kind: 'absolute';
+      sourceColumnKey: string;
+      output: DerivedColumnSpec;
+    }
+  | {
+      kind: 'integer';
+      sourceColumnKey: string;
+      rounding: 'truncate' | 'round' | 'floor' | 'ceil';
+      output: DerivedColumnSpec;
+    }
+  | {
+      kind: 'sequence';
+      start: number;
+      step: number;
+      output: DerivedColumnSpec;
+    }
+  | {
+      kind: 'constant';
+      value: number;
+      output: DerivedColumnSpec;
+    };
 
 export type DataRecord = Record<string, unknown>;

@@ -63,6 +63,10 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
     },
     conversions: [],
     sourceHints: [{ name: 'fixture.dbc', sha256: 'abc', size: 123 }],
+    resultOperations: [{
+      kind: 'factor', sourceColumnKey: '__single__', factor: 100,
+      output: { key: '__derived_1', label: 'Índice', totalPolicy: 'mean' },
+    }],
   };
   const a = serializeRecipe(recipe);
   const b = serializeRecipe({ ...recipe });
@@ -116,6 +120,14 @@ test('analysis recipe parsing rejects structurally invalid plans and fingerprint
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
     conversions: [], sourceHints: [], view: { statisticsOperation: 'anova', histogramBins: 100 },
   })), /invalid statistics operation/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], resultOperations: [{
+      kind: 'factor', sourceColumnKey: 'x', factor: 'cem',
+      output: { key: 'bad', label: 'Inválida', totalPolicy: 'sum' },
+    }],
+  })), /invalid factor operation/);
 });
 
 test('DEF-style startPosition slices a composite DBF field before CNV conversion', () => {

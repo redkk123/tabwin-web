@@ -14,7 +14,9 @@ import {
   type AnalysisRecipeV1,
   type FilterSpec,
   type QueryPlan,
+  type TableOperation,
   type TabulationResult,
+  type TotalPolicy,
 } from '../../../packages/core/src/index.ts';
 import {
   optionsForRole,
@@ -59,6 +61,11 @@ import {
   pearsonCorrelation,
   simpleLinearRegression,
 } from '../../../packages/analysis/src/statistics.ts';
+import {
+  applyTableOperation,
+  calculateColumnTotal,
+  replayTableOperations,
+} from '../../../packages/analysis/src/table-operations.ts';
 import './styles.css';
 
 type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'audit';
@@ -122,6 +129,22 @@ const datasetStats = element<HTMLElement>('#dataset-stats');
 const emptyState = element<HTMLElement>('#empty-state');
 const tableWrap = element<HTMLElement>('#table-wrap');
 const resultTable = element<HTMLTableElement>('#result-table');
+const tableOperationsPanel = element<HTMLElement>('#table-operations');
+const tableOperationKind = element<HTMLSelectElement>('#table-operation-kind');
+const tableOperationLeft = element<HTMLSelectElement>('#table-operation-left');
+const tableOperationRight = element<HTMLSelectElement>('#table-operation-right');
+const tableOperationLeftLabel = element<HTMLElement>('#table-operation-left-label');
+const tableOperationRightLabel = element<HTMLElement>('#table-operation-right-label');
+const tableOperationNumberLabel = element<HTMLElement>('#table-operation-number-label');
+const tableOperationNumber = element<HTMLInputElement>('#table-operation-number');
+const tableOperationZeroLabel = element<HTMLElement>('#table-operation-zero-label');
+const tableOperationZero = element<HTMLSelectElement>('#table-operation-zero');
+const tableOperationLabel = element<HTMLInputElement>('#table-operation-label');
+const tableOperationTotal = element<HTMLSelectElement>('#table-operation-total');
+const tableOperationApply = element<HTMLButtonElement>('#table-operation-apply');
+const tableOperationUndo = element<HTMLButtonElement>('#table-operation-undo');
+const tableOperationReset = element<HTMLButtonElement>('#table-operation-reset');
+const tableOperationHistory = element<HTMLOListElement>('#table-operation-history');
 const chart = element<HTMLElement>('#chart');
 const auditOutput = element<HTMLElement>('#audit-output');
 const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
@@ -159,7 +182,9 @@ let activeDef: DefDefinition | null = null;
 let activeMap: TabwinMapDefinition | null = null;
 let activeMapSource = '';
 let currentPlan: QueryPlan | null = null;
+let baseResult: TabulationResult | null = null;
 let currentResult: TabulationResult | null = null;
+let tableOperations: TableOperation[] = [];
 let currentView: ViewName = 'table';
 let toastTimer = 0;
 const cnvByName = new Map<string, CnvDefinition>();
@@ -585,7 +610,9 @@ async function runAnalysis(): Promise<void> {
     }
     const result = executeInMemory(records, plan, conversions);
     currentPlan = plan;
+    baseResult = result;
     currentResult = result;
+    tableOperations = [];
     resultKicker.textContent = measureKind.value === 'sum'
       ? `${datasetName} · soma de ${measureField.value}`
       : `${datasetName} · frequência`;
@@ -615,12 +642,114 @@ function renderResult(): void {
   if (!currentResult || !currentPlan) return;
   emptyState.hidden = true;
   tableWrap.hidden = false;
+  tableOperationsPanel.hidden = false;
   renderTable(currentResult);
+  updateTableOperationControls();
   renderChart(currentResult);
   populateStatisticsColumns(currentResult);
   renderStatistics();
   renderAudit();
   if (activeMap) renderMap();
+}
+
+function operationLabel(operation: TableOperation): string {
+  const names: Record<string, string> = {
+    add: 'soma', subtract: 'subtração', multiply: 'produto', divide: 'divisão',
+    minimum: 'mínimo', maximum: 'máximo', percentage: 'percentual', factor: 'fator',
+    cumulative: 'acumulado', absolute: 'absoluto', integer: 'inteiro', sequence: 'sequência', constant: 'constante',
+  };
+  return `${operation.output.label} · ${names[operation.kind === 'binary' ? operation.operator : operation.kind] ?? operation.kind}`;
+}
+
+function updateTableOperationControls(): void {
+  const previousLeft = tableOperationLeft.value;
+  const previousRight = tableOperationRight.value;
+  tableOperationLeft.replaceChildren();
+  tableOperationRight.replaceChildren();
+  for (const column of currentResult?.columns ?? []) {
+    const option = document.createElement('option');
+    option.value = column.key;
+    option.textContent = column.label;
+    tableOperationLeft.append(option);
+    tableOperationRight.append(option.cloneNode(true));
+  }
+  if ([...tableOperationLeft.options].some((option) => option.value === previousLeft)) tableOperationLeft.value = previousLeft;
+  if ([...tableOperationRight.options].some((option) => option.value === previousRight)) tableOperationRight.value = previousRight;
+  else if (tableOperationRight.options.length > 1) tableOperationRight.selectedIndex = 1;
+
+  const kind = tableOperationKind.value;
+  const binary = ['add', 'subtract', 'multiply', 'divide', 'minimum', 'maximum', 'percentage'].includes(kind);
+  const sourceFree = kind === 'sequence' || kind === 'constant';
+  tableOperationLeftLabel.hidden = sourceFree;
+  tableOperationRightLabel.hidden = !binary;
+  tableOperationNumberLabel.hidden = kind !== 'factor' && kind !== 'sequence' && kind !== 'constant';
+  tableOperationZeroLabel.hidden = kind !== 'divide' && kind !== 'percentage';
+  tableOperationUndo.disabled = tableOperations.length === 0;
+  tableOperationReset.disabled = tableOperations.length === 0;
+  tableOperationApply.disabled = !currentResult?.columns.length && !sourceFree;
+  tableOperationHistory.hidden = tableOperations.length === 0;
+  tableOperationHistory.replaceChildren(...tableOperations.map((operation) => {
+    const item = document.createElement('li');
+    item.textContent = operationLabel(operation);
+    return item;
+  }));
+}
+
+function suggestedOperationLabel(kind: string): string {
+  const left = currentResult?.columns.find((column) => column.key === tableOperationLeft.value)?.label ?? 'A';
+  const right = currentResult?.columns.find((column) => column.key === tableOperationRight.value)?.label ?? 'B';
+  const labels: Record<string, string> = {
+    add: `${left} + ${right}`, subtract: `${left} − ${right}`, multiply: `${left} × ${right}`,
+    divide: `${left} ÷ ${right}`, minimum: `Mínimo (${left}, ${right})`, maximum: `Máximo (${left}, ${right})`,
+    percentage: `% ${left} / ${right}`, factor: `${left} × ${tableOperationNumber.value || '1'}`,
+    cumulative: `Acumulado: ${left}`, absolute: `Absoluto: ${left}`, integer: `Inteiro: ${left}`,
+    sequence: 'Sequência', constant: 'Nova coluna',
+  };
+  return labels[kind] ?? 'Nova coluna';
+}
+
+function applySelectedTableOperation(): void {
+  if (!currentResult) return;
+  const kind = tableOperationKind.value;
+  const numeric = Number(tableOperationNumber.value);
+  if (['factor', 'sequence', 'constant'].includes(kind) && !Number.isFinite(numeric)) {
+    throw new Error('Informe um fator ou valor numérico válido');
+  }
+  const output = {
+    key: `__derived_${tableOperations.length + 1}`,
+    label: tableOperationLabel.value.trim() || suggestedOperationLabel(kind),
+    totalPolicy: tableOperationTotal.value as Exclude<TotalPolicy, 'precalculated'>,
+  };
+  let operation: TableOperation;
+  if (['add', 'subtract', 'multiply', 'divide', 'minimum', 'maximum', 'percentage'].includes(kind)) {
+    operation = {
+      kind: 'binary', operator: kind as 'add' | 'subtract' | 'multiply' | 'divide' | 'minimum' | 'maximum' | 'percentage',
+      leftColumnKey: tableOperationLeft.value, rightColumnKey: tableOperationRight.value,
+      divisionByZero: tableOperationZero.value as 'error' | 'zero', output,
+    };
+  } else if (kind === 'factor') {
+    operation = { kind, sourceColumnKey: tableOperationLeft.value, factor: numeric, output };
+  } else if (kind === 'cumulative' || kind === 'absolute') {
+    operation = { kind, sourceColumnKey: tableOperationLeft.value, output };
+  } else if (kind === 'integer') {
+    operation = { kind, sourceColumnKey: tableOperationLeft.value, rounding: 'truncate', output };
+  } else if (kind === 'sequence') {
+    operation = { kind, start: numeric, step: 1, output };
+  } else {
+    operation = { kind: 'constant', value: numeric, output };
+  }
+  currentResult = applyTableOperation(currentResult, operation).result;
+  tableOperations.push(operation);
+  tableOperationLabel.value = '';
+  renderResult();
+  showToast(`${operation.output.label}: coluna calculada`);
+}
+
+function restoreTableOperations(count: number): void {
+  if (!baseResult) return;
+  tableOperations = tableOperations.slice(0, Math.max(0, count));
+  currentResult = replayTableOperations(baseResult, tableOperations);
+  renderResult();
 }
 
 function renderTable(result: TabulationResult): void {
@@ -667,6 +796,19 @@ function renderTable(result: TabulationResult): void {
     tr.append(td);
     body.append(tr);
   }
+  const totalRow = document.createElement('tr');
+  const totalLabel = document.createElement('th');
+  totalLabel.scope = 'row';
+  totalLabel.textContent = 'Total';
+  totalRow.append(totalLabel);
+  for (const column of result.columns) {
+    const cell = document.createElement('td');
+    const policy = column.totalPolicy ?? 'sum';
+    const total = policy === 'precalculated' ? undefined : calculateColumnTotal(result, column.key, policy);
+    cell.textContent = total === undefined ? '—' : numberFormat.format(total);
+    totalRow.append(cell);
+  }
+  foot.append(totalRow);
 }
 
 function renderChart(result: TabulationResult): void {
@@ -807,6 +949,7 @@ function renderAudit(): void {
       palette: mapPalette.value,
     } : null,
     queryPlan: currentPlan,
+    resultOperations: tableOperations,
     result: currentResult ? {
       recordsSeen: currentResult.recordsSeen,
       recordsAccepted: currentResult.recordsAccepted,
@@ -1251,6 +1394,7 @@ function saveRecipe(): void {
       sha256: datasetFingerprint.sha256,
       size: datasetFingerprint.size,
     }],
+    ...(tableOperations.length ? { resultOperations: tableOperations } : {}),
     view: {
       chartType: chartType.value as ChartType,
       mapClassification: mapClassification.value as MapClassification,
@@ -1313,6 +1457,11 @@ async function openRecipe(file: File): Promise<void> {
   renderConfiguredFilters();
   updateMeasureControls();
   await runAnalysis();
+  if (recipe.resultOperations?.length && baseResult) {
+    tableOperations = recipe.resultOperations.map((operation) => structuredClone(operation));
+    currentResult = replayTableOperations(baseResult, tableOperations);
+    renderResult();
+  }
   if (currentResult) {
     const xIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsXColumnKey);
     const yIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsYColumnKey);
@@ -1479,6 +1628,16 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')
 }
 exportCsvButton.addEventListener('click', exportCsv);
 exportXmlButton.addEventListener('click', exportXml);
+tableOperationKind.addEventListener('change', updateTableOperationControls);
+tableOperationApply.addEventListener('click', () => {
+  try {
+    applySelectedTableOperation();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+});
+tableOperationUndo.addEventListener('click', () => restoreTableOperations(tableOperations.length - 1));
+tableOperationReset.addEventListener('click', () => restoreTableOperations(0));
 chartType.addEventListener('change', () => {
   if (currentResult) renderChart(currentResult);
 });
