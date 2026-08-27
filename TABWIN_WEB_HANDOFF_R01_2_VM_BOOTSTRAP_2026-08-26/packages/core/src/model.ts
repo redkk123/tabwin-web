@@ -13,16 +13,35 @@ export interface DimensionSpec {
   conversionId?: string;
   /** 1-based initial character position inside the source field, as in DEF Campo D. */
   startPosition?: number;
+  /** Explicit handling when a raw value is empty or has no CNV match. */
+  unclassifiedPolicy?: 'omit' | 'discriminate';
 }
 
-export interface FilterSpec {
+interface FilterSpecBase {
   field: string;
-  /** Category sequence ids as strings when conversionId is present; otherwise raw values. */
-  acceptedCategories: string[];
+  /** Include matches by default; exclude inverts the predicate. */
+  mode?: 'include' | 'exclude';
   conversionId?: string;
   /** 1-based initial character position inside the source field, as in DEF Campo D. */
   startPosition?: number;
 }
+
+export type FilterSpec = FilterSpecBase & (
+  | {
+      kind?: 'categories';
+      /** Category sequence ids when conversionId is present; otherwise raw values. */
+      acceptedCategories: string[];
+      /** Treat a missing CNV match as another selected category. */
+      includeUnclassified?: boolean;
+    }
+  | {
+      kind: 'numeric-range';
+      minimum?: number;
+      maximum?: number;
+      includeMinimum?: boolean;
+      includeMaximum?: boolean;
+    }
+);
 
 export type TotalPolicy =
   | 'none'

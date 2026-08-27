@@ -98,6 +98,50 @@ test('multiple filters are intersected deterministically', () => {
   assert.deepEqual(result.cells, [[1], [1]]);
 });
 
+test('exclusion filters invert raw category membership explicitly', () => {
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' },
+    filters: [{ field: 'SEXO', mode: 'exclude', acceptedCategories: ['2'] }],
+  });
+  const result = executeInMemory([
+    { UF: 'AC', SEXO: '1' }, { UF: 'AC', SEXO: '2' }, { UF: 'DF', SEXO: '3' },
+  ], plan);
+  assert.equal(result.recordsAccepted, 2);
+  assert.deepEqual(result.cells, [[1], [1]]);
+  assert.match(result.warnings.join('\n'), /exclusion policy/);
+});
+
+test('numeric range filters honor inclusive and exclusive boundaries', () => {
+  const records = [{ UF: 'AC', IDADE: 19 }, { UF: 'AC', IDADE: 20 }, { UF: 'AC', IDADE: 39 }, { UF: 'AC', IDADE: 40 }];
+  const inclusive = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' },
+    filters: [{ field: 'IDADE', kind: 'numeric-range', minimum: 20, maximum: 39 }],
+  });
+  const exclusive = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' },
+    filters: [{ field: 'IDADE', kind: 'numeric-range', minimum: 20, maximum: 40, includeMinimum: false, includeMaximum: false }],
+  });
+  assert.equal(executeInMemory(records, inclusive).recordsAccepted, 2);
+  assert.equal(executeInMemory(records, exclusive).recordsAccepted, 1);
+});
+
+test('unclassified CNV values can be selected or discriminated as an explicit axis', () => {
+  const records = [{ MES: '01' }, { MES: '77' }, { MES: 'AA' }];
+  const selected = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'MES' }, measure: { kind: 'count' },
+    filters: [{ field: 'MES', conversionId: 'mes', acceptedCategories: [], includeUnclassified: true }],
+  });
+  assert.equal(executeInMemory(records, selected, { mes: monthCnv }).recordsAccepted, 1);
+
+  const discriminated = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'MES', conversionId: 'mes', unclassifiedPolicy: 'discriminate' },
+    measure: { kind: 'count' }, filters: [],
+  });
+  const result = executeInMemory(records, discriminated, { mes: monthCnv });
+  assert.equal(result.rows.at(-1).label, 'Não classificados');
+  assert.equal(result.cells.at(-1)[0], 1);
+});
+
 test('analysis recipe parsing rejects structurally invalid plans and fingerprints', () => {
   assert.throws(() => parseRecipe(JSON.stringify({
     schema: 'tabwin-web.recipe', version: 1,

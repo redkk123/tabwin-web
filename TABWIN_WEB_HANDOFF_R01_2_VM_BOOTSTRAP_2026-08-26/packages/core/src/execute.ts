@@ -16,6 +16,9 @@ interface ResolvedDimension {
   label?: string;
 }
 
+const UNCLASSIFIED_KEY = '__tabwin_web_unclassified__';
+const UNCLASSIFIED_LABEL = 'Não classificados';
+
 function singleColumnLabel(plan: QueryPlan): string {
   // G001's lossless TabWin 4.15 export establishes the count header exactly.
   // Sum headers remain "Valor" until a focused increment golden captures them.
@@ -65,13 +68,19 @@ function resolveDimension(
     definition,
   );
   if (!definition) {
-    if (raw === null || raw === undefined || raw === '') return {};
+    if (raw === null || raw === undefined || raw === '') {
+      return dimension.unclassifiedPolicy === 'discriminate'
+        ? { key: UNCLASSIFIED_KEY, label: UNCLASSIFIED_LABEL } : {};
+    }
     const value = String(raw);
     return { key: value, label: value };
   }
 
   const match = classifyCnv(definition, raw);
-  if (!match) return {};
+  if (!match) {
+    return dimension.unclassifiedPolicy === 'discriminate'
+      ? { key: UNCLASSIFIED_KEY, label: UNCLASSIFIED_LABEL } : {};
+  }
   return { key: String(match.sequence), label: match.label };
 }
 
@@ -84,11 +93,26 @@ function acceptsFilter(
     ? getConversion(conversions, filter.conversionId)
     : undefined;
   const raw = extractSourceValue(record, filter.field, filter.startPosition, definition);
-  if (!definition) {
-    return filter.acceptedCategories.includes(String(raw ?? ''));
+  let matches: boolean;
+  if (filter.kind === 'numeric-range') {
+    const value = typeof raw === 'number' ? raw : Number(String(raw ?? '').replace(',', '.'));
+    if (!Number.isFinite(value)) matches = false;
+    else {
+      const aboveMinimum = filter.minimum === undefined
+        || (filter.includeMinimum === false ? value > filter.minimum : value >= filter.minimum);
+      const belowMaximum = filter.maximum === undefined
+        || (filter.includeMaximum === false ? value < filter.maximum : value <= filter.maximum);
+      matches = aboveMinimum && belowMaximum;
+    }
+  } else if (!definition) {
+    matches = filter.acceptedCategories.includes(String(raw ?? ''));
+  } else {
+    const match = classifyCnv(definition, raw);
+    matches = match
+      ? filter.acceptedCategories.includes(String(match.sequence))
+      : filter.includeUnclassified === true;
   }
-  const match = classifyCnv(definition, raw);
-  return match ? filter.acceptedCategories.includes(String(match.sequence)) : false;
+  return filter.mode === 'exclude' ? !matches : matches;
 }
 
 function axisFromDimension(
@@ -98,7 +122,7 @@ function axisFromDimension(
 ): ResultAxisItem[] {
   if (dimension.conversionId) {
     const definition = getConversion(conversions, dimension.conversionId);
-    return definition.categories.map((category) => ({
+    const items: ResultAxisItem[] = definition.categories.map((category) => ({
       key: String(category.sequence),
       label: category.label || String(category.sequence),
       source: 'conversion',
@@ -107,6 +131,10 @@ function axisFromDimension(
         : {}),
       ...(category.excludeFromTotal ? { excludeFromTotal: true } : {}),
     }));
+    if (dimension.unclassifiedPolicy === 'discriminate') {
+      items.push({ key: UNCLASSIFIED_KEY, label: UNCLASSIFIED_LABEL, source: 'conversion' });
+    }
+    return items;
   }
   return [...observed.entries()]
     .sort(([a], [b]) => a.localeCompare(b, 'en', { numeric: true }))

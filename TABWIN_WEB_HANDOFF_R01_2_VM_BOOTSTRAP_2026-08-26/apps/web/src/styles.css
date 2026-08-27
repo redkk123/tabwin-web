@@ -74,6 +74,10 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .filter-builder summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #38555d; font-size: 11px; font-weight: 800; cursor: pointer; }
 .filter-builder summary span { color: #6f8383; font-size: 9px; font-weight: 700; }
 .filter-builder[open] summary { margin-bottom: 12px; }
+.filter-rule-row,.filter-range { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
+.filter-rule-row label,.filter-range label { min-width: 0; }
+.filter-range { padding: 8px; border-radius: 9px; background: #eef6f3; }
+.filter-range .check-label { min-height: 31px; font-size: 9px; }
 .filter-info { margin: 9px 1px 7px; color: #74878a; font-size: 9px; line-height: 1.45; }
 .filter-values { max-height: 180px; display: grid; gap: 5px; overflow: auto; }
 .filter-option { display: flex; align-items: flex-start; gap: 7px; padding: 5px 6px; border-radius: 7px; color: #405c63; background: white; font-size: 10px; line-height: 1.35; }
@@ -82,6 +86,7 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .text-button { margin-top: 8px; padding: 0; border: 0; color: var(--mint-dark); background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; }
 .text-button:disabled { color: #98a5a3; cursor: not-allowed; }
 .filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.filter-actions > div { display: flex; gap: 10px; }
 .filter-actions .secondary-button { min-height: 32px; }
 .active-filter-list { display: grid; gap: 6px; margin-top: 9px; }
 .active-filter { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; color: #36545c; background: #eaf6f2; font-size: 9px; }
@@ -258,6 +263,7 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .app-shell { grid-template-rows: 64px auto 1fr; }
   .analysis-form { grid-template-columns: 1fr; }
   .analysis-form .form-row, .analysis-form .primary-button { grid-column: auto; }
+  .filter-rule-row,.filter-range { grid-template-columns: 1fr; }
   .hero { display: block; }
   .hero h2 { font-size: 39px; }
   .hero-metric { display: none; }

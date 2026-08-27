@@ -18,6 +18,10 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
     if (dimension?.startPosition !== undefined && (!Number.isInteger(dimension.startPosition) || dimension.startPosition <= 0)) {
       throw new QueryPlanError(`${label} startPosition must be a positive integer`);
     }
+    if (dimension?.unclassifiedPolicy !== undefined
+      && dimension.unclassifiedPolicy !== 'omit' && dimension.unclassifiedPolicy !== 'discriminate') {
+      throw new QueryPlanError(`${label} unclassifiedPolicy is invalid`);
+    }
   }
   if (spec.measure.kind === 'sum' && !spec.measure.field?.trim()) {
     throw new QueryPlanError('sum measure requires a field');
@@ -33,9 +37,25 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
     if (filter.startPosition !== undefined && (!Number.isInteger(filter.startPosition) || filter.startPosition <= 0)) {
       throw new QueryPlanError(`filter ${index + 1} startPosition must be a positive integer`);
     }
-    if (filter.acceptedCategories.length === 0) {
+    if (filter.mode !== undefined && filter.mode !== 'include' && filter.mode !== 'exclude') {
+      throw new QueryPlanError(`filter ${index + 1} mode is invalid`);
+    }
+    if (filter.kind === 'numeric-range') {
+      if (filter.conversionId) throw new QueryPlanError(`filter ${index + 1} numeric range cannot use a conversion`);
+      if (filter.minimum === undefined && filter.maximum === undefined) {
+        throw new QueryPlanError(`filter ${index + 1} numeric range has no bounds`);
+      }
+      for (const [bound, value] of [['minimum', filter.minimum], ['maximum', filter.maximum]] as const) {
+        if (value !== undefined && !Number.isFinite(value)) throw new QueryPlanError(`filter ${index + 1} ${bound} is invalid`);
+      }
+      if (filter.minimum !== undefined && filter.maximum !== undefined && filter.minimum > filter.maximum) {
+        throw new QueryPlanError(`filter ${index + 1} minimum exceeds maximum`);
+      }
+    } else if (filter.acceptedCategories.length === 0 && !filter.includeUnclassified) {
       throw new QueryPlanError(`filter ${index + 1} has no selected categories`);
     }
+    if (filter.mode === 'exclude') warnings.push(`filter ${index + 1} uses explicit exclusion policy; TabWin default equivalence is pending`);
+    if (filter.kind === 'numeric-range') warnings.push(`filter ${index + 1} uses an explicit numeric range policy`);
   }
 
   if (spec.measure.kind === 'count' && spec.measure.totalPolicy) {

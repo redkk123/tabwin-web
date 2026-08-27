@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R04.2 — G001 exact golden passed; auditable table operations and presentation tools are usable in the browser.
+> **Status:** R04.3 — G001 exact golden passed; table operations, presentation and advanced filters are usable in the browser.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 

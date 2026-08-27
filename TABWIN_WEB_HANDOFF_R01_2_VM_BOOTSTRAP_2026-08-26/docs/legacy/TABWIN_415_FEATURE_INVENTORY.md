@@ -35,13 +35,13 @@ Status vocabulary:
 | Frequency | **Web** | Ordinary and `G` weighted frequency in kernel. |
 | G001: one CNV-backed row, frequency | **Golden** | Exact TabWin 4.15 BIFF comparison passed with tolerance zero. |
 | Increment / sum | **Web / Kernel** | Numeric and DEF increment labels surfaced; compiled as explicit sum measure. Total policies remain pending. |
-| Selections / filters | **Web / Kernel** | Multiple simultaneous raw or DEF/CNV-backed inclusion filters; exclusion and range-dialog UX remain pending. |
+| Selections / filters | **Web / Kernel** | Multiple simultaneous raw or DEF/CNV-backed inclusion/exclusion filters, explicit numeric intervals and selection-all/clear controls. Exact 4.15 dialog defaults remain golden-pending. |
 | Suppress zero rows | **Web** | Applied after materializing CNV categories. |
 | Row subtotals | **Kernel** | CNV subtotal propagation tested. |
 | Tabulate list of files | **Cataloged** | Multi-period ingestion/merge semantics pending oracle cases. |
-| Value ranges | **Parsed / Kernel** | Numeric-range CNV supported; full dialog behavior pending. |
+| Value ranges | **Web / Kernel** | Numeric-range CNV plus explicit open/closed filter bounds in the browser. |
 | Top `n` categories | **Cataloged** | Must define tie/order semantics from the oracle. |
-| Unclassified data | **Cataloged** | No guessed fallback category. |
+| Unclassified data | **Web / explicit policy** | Omit remains the default; users may select unmatched CNV values in filters or materialize a `Não classificados` axis row. Exact 4.15 label/default remains golden-pending. |
 | Log file | **Replaced** | Audit JSON exists; legacy log import/export pending. |
 
 ## 2. Tables, saved work and exports

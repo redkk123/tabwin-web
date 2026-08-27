@@ -1,10 +1,10 @@
 {
-  "revision": "R04.2-table-presentation-and-clipboard",
+  "revision": "R04.3-advanced-filters-and-unclassified",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 54,
-    "passed": 54,
+    "total": 57,
+    "passed": 57,
     "failed": 0,
     "command": "npm run check"
   },
@@ -57,6 +57,11 @@
     ,"spreadsheet-ready-table-tsv-clipboard"
     ,"browser-table-print-stylesheet"
     ,"recipe-persisted-table-presentation"
+    ,"raw-and-cnv-backed-exclusion-filters"
+    ,"inclusive-or-exclusive-numeric-range-filters"
+    ,"filter-select-all-and-clear-controls"
+    ,"explicit-unclassified-filter-selection"
+    ,"explicit-unclassified-axis-discrimination"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -73,7 +78,6 @@
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
     "public-datasus-proxy-deployment",
-    "filter-exclusion-and-range-dialogs",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",

@@ -1,12 +1,27 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.2-table-presentation-and-clipboard
+**Revision:** R04.3-advanced-filters-and-unclassified
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; table operations and first presentation workbench implemented
+**Status:** G001 exact golden passed; table operations, presentation and advanced selection workbench implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.3 advanced-selection update
+
+Filters now have explicit include/exclude mode, category or numeric-range kind,
+open/closed numeric boundaries, select-all/clear controls and unmatched-CNV
+selection. Row dimensions may explicitly discriminate unmatched or empty
+values as `Não classificados`; omission remains the default, preserving G001.
+All policies compile into the QueryPlan and persist in recipes rather than
+being applied as hidden UI filtering.
+
+Portable verification is 57/57 plus browser typecheck and production build.
+Real SIH-RD browser testing verified `SEXO=3` exclusion, `IDADE=20–39`
+inclusion and zero-valued unclassified materialization for `COMPLEX2.CNV`.
+Exact TabWin dialog defaults and labels remain golden-pending. Evidence is in
+`docs/handoffs/R04_3_ADVANCED_FILTERS_REPORT.md`.
 
 ## 2026-08-27 R04.2 table-presentation update
 

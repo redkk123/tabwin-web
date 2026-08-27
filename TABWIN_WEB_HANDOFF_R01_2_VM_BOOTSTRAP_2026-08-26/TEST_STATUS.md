@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.2 table-presentation milestone.
+Verified on 2026-08-27 through the R04.3 advanced-filter milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 54 tests;
-- 54 passed;
+- 57 tests;
+- 57 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -36,6 +36,12 @@ without source mutation, accent-insensitive key/label location and exact TSV
 clipboard output in presented order. Browser verification over the real G001
 DBC checked descending frequency order, locating municipality `120040`, key
 visibility, Audit state and clipboard content.
+
+R04.3 adds three executor tests covering exclusion inversion, inclusive and
+exclusive numeric bounds, unmatched CNV selection and explicit unclassified
+axis materialization. Browser verification over the real G001 assets checked
+`SEXO=3` exclusion (1,761 accepted), `IDADE=20–39` inclusion (1,663 accepted)
+and a zero-valued `Não classificados` row for `COMPLEX2.CNV`.
 
 ## Live official-source verification
 

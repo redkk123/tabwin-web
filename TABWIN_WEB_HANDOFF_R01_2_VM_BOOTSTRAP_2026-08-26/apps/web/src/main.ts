@@ -100,10 +100,18 @@ const measureKind = element<HTMLSelectElement>('#measure-kind');
 const measureField = element<HTMLSelectElement>('#measure-field');
 const measureFieldLabel = element<HTMLElement>('#measure-field-label');
 const filterField = element<HTMLSelectElement>('#filter-field');
+const filterMode = element<HTMLSelectElement>('#filter-mode');
+const filterKind = element<HTMLSelectElement>('#filter-kind');
 const filterValues = element<HTMLElement>('#filter-values');
+const filterRange = element<HTMLElement>('#filter-range');
+const filterMinimum = element<HTMLInputElement>('#filter-minimum');
+const filterMaximum = element<HTMLInputElement>('#filter-maximum');
+const filterIncludeMinimum = element<HTMLInputElement>('#filter-include-minimum');
+const filterIncludeMaximum = element<HTMLInputElement>('#filter-include-maximum');
 const filterInfo = element<HTMLElement>('#filter-info');
 const filterCount = element<HTMLElement>('#filter-count');
 const clearFilterButton = element<HTMLButtonElement>('#clear-filter-button');
+const selectAllFilterButton = element<HTMLButtonElement>('#select-all-filter-button');
 const addFilterButton = element<HTMLButtonElement>('#add-filter-button');
 const activeFilterList = element<HTMLElement>('#active-filter-list');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
@@ -111,6 +119,7 @@ const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
 const recipeInput = element<HTMLInputElement>('#recipe-input');
 const startPosition = element<HTMLInputElement>('#start-position');
 const suppressZero = element<HTMLInputElement>('#suppress-zero');
+const discriminateUnclassified = element<HTMLInputElement>('#discriminate-unclassified');
 const runButton = element<HTMLButtonElement>('#run-button');
 const exportCsvButton = element<HTMLButtonElement>('#export-csv-button');
 const exportXmlButton = element<HTMLButtonElement>('#export-xml-button');
@@ -271,11 +280,14 @@ function setBusy(message: string): void {
 }
 
 function setControlsEnabled(enabled: boolean): void {
-  for (const control of [rowField, columnField, rowConversion, measureKind, measureField, filterField, startPosition, suppressZero, runButton]) {
+  for (const control of [rowField, columnField, rowConversion, measureKind, measureField, filterField, filterMode,
+    filterKind, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition,
+    suppressZero, discriminateUnclassified, runButton]) {
     control.disabled = !enabled;
   }
   if (enabled) updateMeasureControls();
   clearFilterButton.disabled = !enabled || !filterField.value;
+  selectAllFilterButton.disabled = !enabled || !filterField.value || filterKind.value === 'numeric-range';
   if (!enabled) addFilterButton.disabled = true;
 }
 
@@ -363,9 +375,19 @@ function populateFilterValues(): void {
   addFilterButton.disabled = true;
   updateFilterCount();
   const field = filterField.value;
+  const rangeMode = filterKind.value === 'numeric-range';
+  filterRange.hidden = !rangeMode;
+  filterValues.hidden = rangeMode;
   clearFilterButton.disabled = !field;
+  selectAllFilterButton.disabled = !field || rangeMode;
   if (!field) {
     filterInfo.textContent = 'Escolha um campo para selecionar valores.';
+    return;
+  }
+
+  if (rangeMode) {
+    filterInfo.textContent = 'Informe pelo menos um limite. Os limites marcados são inclusivos.';
+    updateFilterCount();
     return;
   }
 
@@ -381,6 +403,7 @@ function populateFilterValues(): void {
       for (const category of definition.categories.slice(0, 500)) {
         addFilterOption(String(category.sequence), category.label || String(category.sequence));
       }
+      addFilterOption('', 'Não classificados (sem correspondência CNV)', true);
       filterInfo.textContent = `${definition.categories.length} categorias de ${loadedName}. Marque os valores que deseja incluir.`;
       return;
     }
@@ -397,12 +420,13 @@ function populateFilterValues(): void {
   filterInfo.textContent = `${sorted.length}${values.size >= 500 ? '+' : ''} valores encontrados. Marque os valores que deseja incluir.`;
 }
 
-function addFilterOption(value: string, label: string): void {
+function addFilterOption(value: string, label: string, unclassified = false): void {
   const wrapper = document.createElement('label');
   wrapper.className = 'filter-option';
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.dataset.filterValue = value;
+  if (unclassified) input.dataset.filterUnclassified = 'true';
   input.addEventListener('change', updateFilterCount);
   const caption = document.createElement('span');
   caption.textContent = label;
@@ -412,25 +436,46 @@ function addFilterOption(value: string, label: string): void {
 
 function updateFilterCount(): void {
   const selectedCount = filterValues.querySelectorAll<HTMLInputElement>('input:checked').length;
-  addFilterButton.disabled = !filterField.value || selectedCount === 0;
+  const rangeReady = filterKind.value === 'numeric-range'
+    && (filterMinimum.value.trim() !== '' || filterMaximum.value.trim() !== '');
+  addFilterButton.disabled = !filterField.value
+    || (filterKind.value === 'numeric-range' ? !rangeReady : selectedCount === 0);
   filterCount.textContent = configuredFilters.length
     ? `${integerFormat.format(configuredFilters.length)} ativo(s)`
     : 'nenhum';
 }
 
 function addConfiguredFilter(): void {
-  const acceptedCategories = [...filterValues.querySelectorAll<HTMLInputElement>('input:checked')]
-    .map((input) => input.dataset.filterValue ?? '');
-  if (!filterField.value || !acceptedCategories.length) return;
-  const next: FilterSpec = {
-    field: filterField.value,
-    acceptedCategories,
-    ...(activeFilterConversion ? { conversionId: activeFilterConversion } : {}),
-    ...(activeFilterStartPosition !== undefined ? { startPosition: activeFilterStartPosition } : {}),
-  };
+  if (!filterField.value) return;
+  let next: FilterSpec;
+  if (filterKind.value === 'numeric-range') {
+    const minimum = filterMinimum.value.trim() === '' ? undefined : Number(filterMinimum.value);
+    const maximum = filterMaximum.value.trim() === '' ? undefined : Number(filterMaximum.value);
+    if (minimum === undefined && maximum === undefined) return;
+    next = {
+      field: filterField.value, kind: 'numeric-range', mode: filterMode.value as 'include' | 'exclude',
+      ...(minimum !== undefined ? { minimum } : {}), ...(maximum !== undefined ? { maximum } : {}),
+      includeMinimum: filterIncludeMinimum.checked, includeMaximum: filterIncludeMaximum.checked,
+    };
+  } else {
+    const checked = [...filterValues.querySelectorAll<HTMLInputElement>('input:checked')];
+    const acceptedCategories = checked
+      .filter((input) => input.dataset.filterUnclassified !== 'true')
+      .map((input) => input.dataset.filterValue ?? '');
+    const includeUnclassified = checked.some((input) => input.dataset.filterUnclassified === 'true');
+    if (!acceptedCategories.length && !includeUnclassified) return;
+    next = {
+      field: filterField.value, mode: filterMode.value as 'include' | 'exclude', acceptedCategories,
+      ...(includeUnclassified ? { includeUnclassified: true } : {}),
+      ...(activeFilterConversion ? { conversionId: activeFilterConversion } : {}),
+      ...(activeFilterStartPosition !== undefined ? { startPosition: activeFilterStartPosition } : {}),
+    };
+  }
   configuredFilters.push(next);
   renderConfiguredFilters();
   for (const input of filterValues.querySelectorAll<HTMLInputElement>('input:checked')) input.checked = false;
+  filterMinimum.value = '';
+  filterMaximum.value = '';
   updateFilterCount();
   void runAnalysis();
 }
@@ -441,7 +486,10 @@ function renderConfiguredFilters(): void {
     const item = document.createElement('div');
     item.className = 'active-filter';
     const label = document.createElement('span');
-    label.textContent = `${selectionLabel(filter.field)} · ${filter.acceptedCategories.length} valor(es)`;
+    const prefix = filter.mode === 'exclude' ? 'Excluir' : 'Incluir';
+    label.textContent = filter.kind === 'numeric-range'
+      ? `${prefix} ${selectionLabel(filter.field)} · ${filter.minimum ?? '−∞'} a ${filter.maximum ?? '+∞'}`
+      : `${prefix} ${selectionLabel(filter.field)} · ${filter.acceptedCategories.length + (filter.includeUnclassified ? 1 : 0)} valor(es)`;
     const remove = document.createElement('button');
     remove.type = 'button';
     remove.setAttribute('aria-label', `Remover filtro ${selectionLabel(filter.field)}`);
@@ -456,6 +504,12 @@ function renderConfiguredFilters(): void {
     activeFilterList.append(item);
   });
   updateFilterCount();
+}
+
+function cloneFilter(filter: FilterSpec): FilterSpec {
+  return filter.kind === 'numeric-range'
+    ? { ...filter }
+    : { ...filter, acceptedCategories: [...filter.acceptedCategories] };
 }
 
 function populateConversions(): void {
@@ -591,6 +645,7 @@ function buildPlan(): QueryPlan {
   const row = {
     field: rowField.value,
     ...(conversionName ? { conversionId: conversionName, startPosition: Number(startPosition.value) } : {}),
+    ...(discriminateUnclassified.checked ? { unclassifiedPolicy: 'discriminate' as const } : {}),
   };
   const measure = measureKind.value === 'sum'
     ? { kind: 'sum' as const, field: measureField.value }
@@ -600,7 +655,7 @@ function buildPlan(): QueryPlan {
     rows: row,
     ...(columnField.value ? { columns: { field: columnField.value } } : {}),
     measure,
-    filters: configuredFilters.map((filter) => ({ ...filter, acceptedCategories: [...filter.acceptedCategories] })),
+    filters: configuredFilters.map(cloneFilter),
     suppressZeroRows: suppressZero.checked,
   };
   return compileQueryPlan(spec);
@@ -1503,6 +1558,7 @@ async function openRecipe(file: File): Promise<void> {
   measureKind.value = recipe.spec.measure.kind;
   if (recipe.spec.measure.field) measureField.value = recipe.spec.measure.field;
   suppressZero.checked = recipe.spec.suppressZeroRows ?? false;
+  discriminateUnclassified.checked = recipe.spec.rows.unclassifiedPolicy === 'discriminate';
   if (recipe.view?.chartType) chartType.value = recipe.view.chartType;
   if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
@@ -1521,7 +1577,8 @@ async function openRecipe(file: File): Promise<void> {
     startPosition.value = String(recipe.spec.rows.startPosition ?? 1);
   }
   configuredFilters = recipe.spec.filters.map((filter) => {
-    if (!filter.conversionId) return { ...filter, acceptedCategories: [...filter.acceptedCategories] };
+    if (filter.kind === 'numeric-range') return { ...filter };
+    if (!filter.conversionId) return cloneFilter(filter);
     const loaded = conversionNameInRegistry(filter.conversionId);
     if (!loaded) throw new Error(`Carregue a conversão ${displayBaseName(filter.conversionId)} antes de abrir esta análise`);
     return { ...filter, conversionId: loaded, acceptedCategories: [...filter.acceptedCategories] };
@@ -1689,7 +1746,17 @@ measureKind.addEventListener('change', () => {
 });
 measureField.addEventListener('change', () => void runAnalysis());
 filterField.addEventListener('change', populateFilterValues);
+filterKind.addEventListener('change', populateFilterValues);
+filterMode.addEventListener('change', updateFilterCount);
+for (const control of [filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum]) {
+  control.addEventListener('input', updateFilterCount);
+  control.addEventListener('change', updateFilterCount);
+}
 addFilterButton.addEventListener('click', addConfiguredFilter);
+selectAllFilterButton.addEventListener('click', () => {
+  for (const input of filterValues.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) input.checked = true;
+  updateFilterCount();
+});
 clearFilterButton.addEventListener('click', () => {
   for (const input of filterValues.querySelectorAll<HTMLInputElement>('input:checked')) input.checked = false;
   updateFilterCount();
@@ -1710,6 +1777,7 @@ recipeInput.addEventListener('change', () => {
   recipeInput.value = '';
 });
 suppressZero.addEventListener('change', () => void runAnalysis());
+discriminateUnclassified.addEventListener('change', () => void runAnalysis());
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
   button.addEventListener('click', () => showView(button.dataset.view as ViewName));
 }
