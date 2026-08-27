@@ -26,7 +26,7 @@ O código ativo e toda a documentação de compatibilidade estão em
 A busca oficial do DATASUS funciona no site publicado por meio de um Worker
 Cloudflare estritamente limitado às rotas oficiais. Downloads recentes ficam
 somente no navegador, podem ser removidos pelo usuário e serão reabertos
-offline pela entrega R05.3-A após sua próxima publicação.
+offline pela entrega R05.3-A já publicada.
 
 O projeto ainda não declara equivalência completa com o TabWin 4.15. Casos
 golden só são aceitos após captura pareada no programa de referência.

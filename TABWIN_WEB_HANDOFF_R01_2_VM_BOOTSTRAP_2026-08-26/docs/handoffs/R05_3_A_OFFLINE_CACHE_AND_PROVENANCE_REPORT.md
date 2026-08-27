@@ -1,7 +1,7 @@
 # R05.3-A — Offline cache, recent downloads and acquisition provenance
 
 **Date:** 2026-08-27  
-**Status:** COMPLETE LOCALLY — PUBLIC CACHE REOPEN SMOKE PENDING DEPLOYMENT
+**Status:** COMPLETE — PUBLIC CACHE REOPEN VERIFIED
 
 ## 1. Outcome
 
@@ -90,10 +90,27 @@ The local browser case verified:
 - the browser console contains no error.
 
 The production Worker intentionally accepts only the public Pages origin, so a
-localhost browser cannot create a real official cache entry through it. A real
-**download -> reload -> open offline** smoke is therefore pending the next
-Pages deployment. This limitation is recorded rather than bypassing production
-CORS or claiming unobserved evidence.
+localhost browser cannot create a real official cache entry through it. The
+validated build was therefore published directly through the isolated
+`gh-pages` branch, without depending on the blocked Actions runner:
+
+- main feature commit: `7923f6b`;
+- Pages deployment commit: `a902224`;
+- served JavaScript: `assets/index-BchEJmMJ.js`.
+
+The public browser already contained the previously acquired SIH data and
+auxiliary envelopes. The new code migrated and displayed them as:
+
+- `RDAC2401.dbc`, data, 280.6 KB;
+- `TAB_SIH.zip`, auxiliaries, 5.5 MB;
+- one data archive, two total envelopes, 5.8 MB.
+
+**Abrir offline** reopened `RDAC2401.dbc` through IndexedDB without a catalog or
+archive request. The ordinary ingestion path reported 4,315 records, 113
+fields and source SHA-256 prefix `41b7ad5893`. Audit additionally exposed the
+official FTP URL, the original retrieval time and archive SHA-256
+`d2eec38afc81f5997a6e038bcc058de2a9dc176143435d8ebfb935407e9fbe3a`.
+No browser console error was observed.
 
 ## 6. External CI observation
 
@@ -109,10 +126,8 @@ evidence against the locally passing release gate.
 
 ## 7. Remaining R05.3 work
 
-1. deploy and run the public offline-reopen smoke;
-2. add explicit retry/cancel/progress controls for slow acquisition;
-3. expose safe manual auxiliary-package contents whenever no rule is verified;
-4. build the system-by-system auxiliary rule evidence matrix;
-5. proceed to multi-file/multi-period acquisition only through the R06.0
+1. add explicit retry/cancel/progress controls for slow acquisition;
+2. expose safe manual auxiliary-package contents whenever no rule is verified;
+3. build the system-by-system auxiliary rule evidence matrix;
+4. proceed to multi-file/multi-period acquisition only through the R06.0
    schema/order/fingerprint contract.
-

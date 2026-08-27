@@ -30,9 +30,10 @@ or analytical semantics.
 
 Portable verification remains 86/86 plus browser typecheck and production
 build. A local 390 x 844 browser case verified accessible empty-cache controls,
-no horizontal overflow and no console errors. A real cached-envelope reopen
-smoke requires the next public deployment because the production Worker
-correctly rejects localhost origins. Full evidence is in
+no horizontal overflow and no console errors. Pages deployment `a902224` then
+migrated the browser's earlier SIH cache, listed 5.8 MB across the data and
+auxiliary envelopes, and reopened `RDAC2401.dbc` offline with 4,315 records and
+complete source/archive provenance. Full evidence is in
 `docs/handoffs/R05_3_A_OFFLINE_CACHE_AND_PROVENANCE_REPORT.md`.
 
 GitHub Actions run `33120550257` was retried manually. GitHub created the job

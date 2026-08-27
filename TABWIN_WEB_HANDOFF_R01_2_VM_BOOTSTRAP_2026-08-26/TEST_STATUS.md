@@ -27,9 +27,9 @@ R05.3-A extends recipe round-trip validation with optional official source URL,
 retrieval time and archive SHA-256 provenance. Browser typecheck and production
 build cover recent-download listing, aggregate cache size, individual/all-entry
 removal and offline data-envelope reopen. A local 390 x 844 browser case found
-no horizontal overflow or console errors. The real cached-envelope reopen smoke
-is deliberately pending the next Pages deployment because production CORS does
-not allow localhost.
+no horizontal overflow or console errors. Pages deployment `a902224` migrated
+the existing public-browser SIH cache and reopened `RDAC2401.dbc` offline with
+4,315 records, 113 fields and separate DBC/archive SHA-256 provenance.
 
 R05.2 replaces the two proxy-envelope tests with eleven focused tests covering
 fixed routes, exact archive URLs, origin canonicalization, unconfigured and
