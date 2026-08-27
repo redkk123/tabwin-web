@@ -35,6 +35,12 @@ the existing QueryPlan model and are visible in audit output. Multiple filters,
 exclusion/range dialogs and legacy total policies remain pending. Evidence is
 in `docs/handoffs/R02_2_MEASURE_AND_SELECTION_UI_REPORT.md`.
 
+R02.3 added deterministic `.twrecipe` save/open with source and CNV
+fingerprints, safe plan validation, different-source warnings and simultaneous
+filter cards. This is a modern reproducibility surface and not a claim of
+legacy `.TAB` parsing. Evidence is in
+`docs/handoffs/R02_3_RECIPES_AND_MULTI_FILTER_REPORT.md`.
+
 ---
 
 # 0. Executive summary

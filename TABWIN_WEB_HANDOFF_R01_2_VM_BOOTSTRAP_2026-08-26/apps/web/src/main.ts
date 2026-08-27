@@ -9,6 +9,10 @@ import {
 import {
   compileQueryPlan,
   executeInMemory,
+  parseRecipe,
+  serializeRecipe,
+  type AnalysisRecipeV1,
+  type FilterSpec,
   type QueryPlan,
   type TabulationResult,
 } from '../../../packages/core/src/index.ts';
@@ -77,6 +81,11 @@ const filterValues = element<HTMLElement>('#filter-values');
 const filterInfo = element<HTMLElement>('#filter-info');
 const filterCount = element<HTMLElement>('#filter-count');
 const clearFilterButton = element<HTMLButtonElement>('#clear-filter-button');
+const addFilterButton = element<HTMLButtonElement>('#add-filter-button');
+const activeFilterList = element<HTMLElement>('#active-filter-list');
+const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
+const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
+const recipeInput = element<HTMLInputElement>('#recipe-input');
 const startPosition = element<HTMLInputElement>('#start-position');
 const suppressZero = element<HTMLInputElement>('#suppress-zero');
 const runButton = element<HTMLButtonElement>('#run-button');
@@ -126,6 +135,7 @@ const cnvByName = new Map<string, CnvDefinition>();
 const loadedSources: LoadedSource[] = [];
 let activeFilterConversion = '';
 let activeFilterStartPosition: number | undefined;
+let configuredFilters: FilterSpec[] = [];
 
 function showToast(message: string, isError = false): void {
   window.clearTimeout(toastTimer);
@@ -195,6 +205,7 @@ function setControlsEnabled(enabled: boolean): void {
   }
   if (enabled) updateMeasureControls();
   clearFilterButton.disabled = !enabled || !filterField.value;
+  if (!enabled) addFilterButton.disabled = true;
 }
 
 function fieldLabel(fieldName: string): string {
@@ -278,7 +289,8 @@ function populateFilterValues(): void {
   filterValues.replaceChildren();
   activeFilterConversion = '';
   activeFilterStartPosition = undefined;
-  filterCount.textContent = 'nenhum';
+  addFilterButton.disabled = true;
+  updateFilterCount();
   const field = filterField.value;
   clearFilterButton.disabled = !field;
   if (!field) {
@@ -328,8 +340,51 @@ function addFilterOption(value: string, label: string): void {
 }
 
 function updateFilterCount(): void {
-  const count = filterValues.querySelectorAll<HTMLInputElement>('input:checked').length;
-  filterCount.textContent = count ? `${integerFormat.format(count)} selecionado(s)` : 'nenhum';
+  const selectedCount = filterValues.querySelectorAll<HTMLInputElement>('input:checked').length;
+  addFilterButton.disabled = !filterField.value || selectedCount === 0;
+  filterCount.textContent = configuredFilters.length
+    ? `${integerFormat.format(configuredFilters.length)} ativo(s)`
+    : 'nenhum';
+}
+
+function addConfiguredFilter(): void {
+  const acceptedCategories = [...filterValues.querySelectorAll<HTMLInputElement>('input:checked')]
+    .map((input) => input.dataset.filterValue ?? '');
+  if (!filterField.value || !acceptedCategories.length) return;
+  const next: FilterSpec = {
+    field: filterField.value,
+    acceptedCategories,
+    ...(activeFilterConversion ? { conversionId: activeFilterConversion } : {}),
+    ...(activeFilterStartPosition !== undefined ? { startPosition: activeFilterStartPosition } : {}),
+  };
+  configuredFilters.push(next);
+  renderConfiguredFilters();
+  for (const input of filterValues.querySelectorAll<HTMLInputElement>('input:checked')) input.checked = false;
+  updateFilterCount();
+  void runAnalysis();
+}
+
+function renderConfiguredFilters(): void {
+  activeFilterList.replaceChildren();
+  configuredFilters.forEach((filter, index) => {
+    const item = document.createElement('div');
+    item.className = 'active-filter';
+    const label = document.createElement('span');
+    label.textContent = `${selectionLabel(filter.field)} · ${filter.acceptedCategories.length} valor(es)`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Remover filtro ${selectionLabel(filter.field)}`);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      configuredFilters.splice(index, 1);
+      renderConfiguredFilters();
+      updateFilterCount();
+      void runAnalysis();
+    });
+    item.append(label, remove);
+    activeFilterList.append(item);
+  });
+  updateFilterCount();
 }
 
 function populateConversions(): void {
@@ -392,6 +447,8 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean): Promise
 
   records = nextRecords;
   dbfHeader = header;
+  configuredFilters = [];
+  renderConfiguredFilters();
   datasetName = file.name;
   datasetFingerprint = loadedSources.find((source) => source.name === file.name) ?? null;
   populateControls(chooseDefaultField(header.fields));
@@ -464,14 +521,6 @@ function buildPlan(): QueryPlan {
     field: rowField.value,
     ...(conversionName ? { conversionId: conversionName, startPosition: Number(startPosition.value) } : {}),
   };
-  const acceptedCategories = [...filterValues.querySelectorAll<HTMLInputElement>('input:checked')]
-    .map((input) => input.dataset.filterValue ?? '');
-  const filters = filterField.value && acceptedCategories.length ? [{
-    field: filterField.value,
-    acceptedCategories,
-    ...(activeFilterConversion ? { conversionId: activeFilterConversion } : {}),
-    ...(activeFilterStartPosition !== undefined ? { startPosition: activeFilterStartPosition } : {}),
-  }] : [];
   const measure = measureKind.value === 'sum'
     ? { kind: 'sum' as const, field: measureField.value }
     : { kind: 'count' as const };
@@ -480,7 +529,7 @@ function buildPlan(): QueryPlan {
     rows: row,
     ...(columnField.value ? { columns: { field: columnField.value } } : {}),
     measure,
-    filters,
+    filters: configuredFilters.map((filter) => ({ ...filter, acceptedCategories: [...filter.acceptedCategories] })),
     suppressZeroRows: suppressZero.checked,
   };
   return compileQueryPlan(spec);
@@ -494,7 +543,9 @@ async function runAnalysis(): Promise<void> {
     const plan = buildPlan();
     const conversions: Record<string, CnvDefinition> = {};
     if (rowConversion.value) conversions[rowConversion.value] = cnvByName.get(rowConversion.value)!;
-    if (activeFilterConversion) conversions[activeFilterConversion] = cnvByName.get(activeFilterConversion)!;
+    for (const filter of configuredFilters) {
+      if (filter.conversionId) conversions[filter.conversionId] = cnvByName.get(filter.conversionId)!;
+    }
     const result = executeInMemory(records, plan, conversions);
     currentPlan = plan;
     currentResult = result;
@@ -506,6 +557,7 @@ async function runAnalysis(): Promise<void> {
     exportCsvButton.disabled = false;
     exportXmlButton.disabled = false;
     chartPngButton.disabled = false;
+    saveRecipeButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map') await ensureMap();
   } catch (error) {
@@ -607,7 +659,7 @@ function renderChart(result: TabulationResult): void {
 
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.4.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.5.0-dev', compatibilityProfile: 'tabwin-4.15' },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -974,6 +1026,79 @@ function downloadBlob(blob: Blob, filename: string): void {
   window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
 }
 
+function conversionNameInRegistry(id: string): string | null {
+  return [...cnvByName.keys()].find((name) => baseName(name) === baseName(id)) ?? null;
+}
+
+function saveRecipe(): void {
+  if (!currentPlan || !datasetFingerprint) return;
+  const conversionIds = new Set<string>();
+  if (currentPlan.spec.rows.conversionId) conversionIds.add(currentPlan.spec.rows.conversionId);
+  if (currentPlan.spec.columns?.conversionId) conversionIds.add(currentPlan.spec.columns.conversionId);
+  for (const filter of currentPlan.spec.filters) if (filter.conversionId) conversionIds.add(filter.conversionId);
+  const conversions = [...conversionIds].map((id) => {
+    const source = loadedSources.find((item) => baseName(item.name) === baseName(id));
+    if (!source) throw new Error(`Não foi possível localizar a impressão digital de ${id}`);
+    return { id, name: source.name, sha256: source.sha256, size: source.size };
+  });
+  const recipe: AnalysisRecipeV1 = {
+    schema: 'tabwin-web.recipe',
+    version: 1,
+    name: resultTitle.textContent ?? `Análise ${rowField.value}`,
+    spec: currentPlan.spec,
+    conversions,
+    sourceHints: [{
+      name: datasetFingerprint.name,
+      sha256: datasetFingerprint.sha256,
+      size: datasetFingerprint.size,
+    }],
+  };
+  downloadBlob(
+    new Blob([serializeRecipe(recipe)], { type: 'application/json;charset=utf-8' }),
+    `${exportBaseName()}.twrecipe`,
+  );
+}
+
+async function openRecipe(file: File): Promise<void> {
+  if (!dbfHeader || !datasetFingerprint) throw new Error('Abra um DBC ou DBF antes de aplicar a análise');
+  const recipe = parseRecipe(await file.text());
+  const fields = new Set(dbfHeader.fields.map((field) => field.name));
+  const requiredFields = [
+    recipe.spec.rows.field,
+    recipe.spec.columns?.field,
+    recipe.spec.measure.field,
+    ...recipe.spec.filters.map((filter) => filter.field),
+  ].filter((field): field is string => Boolean(field));
+  const missing = requiredFields.filter((field) => !fields.has(field));
+  if (missing.length) throw new Error(`O arquivo atual não possui: ${[...new Set(missing)].join(', ')}`);
+
+  rowField.value = recipe.spec.rows.field;
+  columnField.value = recipe.spec.columns?.field ?? '';
+  measureKind.value = recipe.spec.measure.kind;
+  if (recipe.spec.measure.field) measureField.value = recipe.spec.measure.field;
+  suppressZero.checked = recipe.spec.suppressZeroRows ?? false;
+  rowConversion.value = '';
+  if (recipe.spec.rows.conversionId) {
+    const loaded = conversionNameInRegistry(recipe.spec.rows.conversionId);
+    if (!loaded) throw new Error(`Carregue a conversão ${displayBaseName(recipe.spec.rows.conversionId)} antes de abrir esta análise`);
+    rowConversion.value = loaded;
+    startPosition.value = String(recipe.spec.rows.startPosition ?? 1);
+  }
+  configuredFilters = recipe.spec.filters.map((filter) => {
+    if (!filter.conversionId) return { ...filter, acceptedCategories: [...filter.acceptedCategories] };
+    const loaded = conversionNameInRegistry(filter.conversionId);
+    if (!loaded) throw new Error(`Carregue a conversão ${displayBaseName(filter.conversionId)} antes de abrir esta análise`);
+    return { ...filter, conversionId: loaded, acceptedCategories: [...filter.acceptedCategories] };
+  });
+  renderConfiguredFilters();
+  updateMeasureControls();
+  await runAnalysis();
+  const sameSource = recipe.sourceHints.some((hint) => hint.sha256 === datasetFingerprint?.sha256);
+  showToast(sameSource
+    ? `${file.name}: análise reproduzida`
+    : `${file.name}: análise aplicada a uma fonte diferente da original`);
+}
+
 function exportCsv(): void {
   if (!currentResult) return;
   const csv = tabulationToCsv(currentResult, {
@@ -1076,10 +1201,25 @@ measureKind.addEventListener('change', () => {
 });
 measureField.addEventListener('change', () => void runAnalysis());
 filterField.addEventListener('change', populateFilterValues);
+addFilterButton.addEventListener('click', addConfiguredFilter);
 clearFilterButton.addEventListener('click', () => {
   for (const input of filterValues.querySelectorAll<HTMLInputElement>('input:checked')) input.checked = false;
   updateFilterCount();
   void runAnalysis();
+});
+openRecipeButton.addEventListener('click', () => recipeInput.click());
+saveRecipeButton.addEventListener('click', () => {
+  try {
+    saveRecipe();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+});
+recipeInput.addEventListener('change', () => {
+  const file = recipeInput.files?.[0];
+  if (!file) return;
+  void openRecipe(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
+  recipeInput.value = '';
 });
 suppressZero.addEventListener('change', () => void runAnalysis());
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {

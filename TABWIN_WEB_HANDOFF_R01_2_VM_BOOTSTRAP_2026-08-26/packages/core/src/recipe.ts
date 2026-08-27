@@ -1,4 +1,5 @@
 import type { QueryPlan, SourceFingerprint, TabulationSpec } from './model.js';
+import { compileQueryPlan } from './plan.js';
 
 export interface ConversionFingerprint {
   id: string;
@@ -59,8 +60,22 @@ export function serializeRecipe(recipe: AnalysisRecipeV1): string {
 
 export function parseRecipe(json: string): AnalysisRecipeV1 {
   const parsed = JSON.parse(json) as Partial<AnalysisRecipeV1>;
-  if (parsed.schema !== 'tabwin-web.recipe' || parsed.version !== 1 || !parsed.spec) {
+  if (parsed.schema !== 'tabwin-web.recipe' || parsed.version !== 1 || !parsed.spec ||
+      !Array.isArray(parsed.conversions) || !Array.isArray(parsed.sourceHints)) {
     throw new Error('unsupported or invalid TabWin Web recipe');
+  }
+  compileQueryPlan(parsed.spec);
+  for (const conversion of parsed.conversions) {
+    if (!conversion || typeof conversion.id !== 'string' || typeof conversion.name !== 'string' ||
+        typeof conversion.sha256 !== 'string' || typeof conversion.size !== 'number') {
+      throw new Error('invalid conversion fingerprint in TabWin Web recipe');
+    }
+  }
+  for (const source of parsed.sourceHints) {
+    if (!source || typeof source.name !== 'string' || typeof source.sha256 !== 'string' ||
+        typeof source.size !== 'number') {
+      throw new Error('invalid source fingerprint in TabWin Web recipe');
+    }
   }
   return parsed as AnalysisRecipeV1;
 }

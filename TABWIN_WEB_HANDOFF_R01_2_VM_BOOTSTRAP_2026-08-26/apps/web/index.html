@@ -44,6 +44,12 @@
 
         <div class="file-list" id="file-list" aria-live="polite"></div>
 
+        <div class="recipe-actions" aria-label="Análise reproduzível">
+          <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>
+          <button class="secondary-button" id="save-recipe-button" type="button" disabled>Salvar análise</button>
+          <input id="recipe-input" type="file" accept=".json,.twrecipe" hidden />
+        </div>
+
         <form id="analysis-form" class="analysis-form">
           <label>
             <span>Linhas</span>
@@ -76,7 +82,11 @@
             </label>
             <div class="filter-info" id="filter-info">Escolha um campo para selecionar valores.</div>
             <div class="filter-values" id="filter-values"></div>
-            <button class="text-button" id="clear-filter-button" type="button" disabled>Limpar seleção</button>
+            <div class="filter-actions">
+              <button class="text-button" id="clear-filter-button" type="button" disabled>Limpar seleção</button>
+              <button class="secondary-button" id="add-filter-button" type="button" disabled>Adicionar filtro</button>
+            </div>
+            <div class="active-filter-list" id="active-filter-list"></div>
           </details>
           <div class="form-row">
             <label>

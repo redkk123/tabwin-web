@@ -69,6 +69,39 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
   assert.deepEqual(parseRecipe(a), recipe);
 });
 
+test('multiple filters are intersected deterministically', () => {
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15',
+    rows: { field: 'UF' },
+    measure: { kind: 'count' },
+    filters: [
+      { field: 'ANO', acceptedCategories: ['2024'] },
+      { field: 'SEXO', acceptedCategories: ['1', '3'] },
+    ],
+  });
+  const result = executeInMemory([
+    { UF: 'AC', ANO: '2024', SEXO: '1' },
+    { UF: 'AC', ANO: '2025', SEXO: '1' },
+    { UF: 'DF', ANO: '2024', SEXO: '2' },
+    { UF: 'DF', ANO: '2024', SEXO: '3' },
+  ], plan);
+  assert.equal(result.recordsAccepted, 2);
+  assert.deepEqual(result.cells, [[1], [1]]);
+});
+
+test('analysis recipe parsing rejects structurally invalid plans and fingerprints', () => {
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: '' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [],
+  })), /row field is required/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [{ id: 'x' }], sourceHints: [],
+  })), /invalid conversion fingerprint/);
+});
+
 test('DEF-style startPosition slices a composite DBF field before CNV conversion', () => {
   const defMonths = parseCnv(['3 2', row(3, 'Ignorado', '00-99'), row(1, 'Janeiro', '01'), row(2, 'Fevereiro', '02')].join('\n'));
   const plan = compileQueryPlan({

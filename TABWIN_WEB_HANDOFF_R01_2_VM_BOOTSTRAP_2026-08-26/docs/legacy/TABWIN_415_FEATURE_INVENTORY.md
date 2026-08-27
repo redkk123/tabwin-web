@@ -34,7 +34,7 @@ Status vocabulary:
 | Row and column dimensions | **Web** | Raw rows/columns; row CNV in the current UI. |
 | Frequency | **Web** | Ordinary and `G` weighted frequency in kernel. |
 | Increment / sum | **Web / Kernel** | Numeric and DEF increment labels surfaced; compiled as explicit sum measure. Total policies remain pending. |
-| Selections / filters | **Web / Kernel** | One active raw or DEF/CNV-backed inclusion filter is available; multiple simultaneous selections remain pending. |
+| Selections / filters | **Web / Kernel** | Multiple simultaneous raw or DEF/CNV-backed inclusion filters; exclusion and range-dialog UX remain pending. |
 | Suppress zero rows | **Web** | Applied after materializing CNV categories. |
 | Row subtotals | **Kernel** | CNV subtotal propagation tested. |
 | Tabulate list of files | **Cataloged** | Multi-period ingestion/merge semantics pending oracle cases. |
@@ -47,12 +47,12 @@ Status vocabulary:
 
 | Capability family | Web status | Named 4.15 topics |
 | --- | --- | --- |
-| Open/save table | **Cataloged** | Open table, save table, associate `.TAB`, recover selections. |
+| Open/save table | **Web recipe / Cataloged `.TAB`** | Portable `.twrecipe` save/open is usable; legacy `.TAB` parsing and exact table-state recovery remain pending. |
 | Print | **Cataloged** | Print table. Browser print stylesheet pending. |
 | Export | **Web (CSV/XML)** | Complete result matrix and provenance-aware XML; XLSX, DBF, Parquet and legacy formats pending. |
 | Copy/paste/include table | **Cataloged** | Clipboard and table inclusion semantics pending. |
 | Save selected records as DBF | **Cataloged** | Local download adapter pending. |
-| Audit/recipe | **Web / Kernel** | QueryPlan and hashes visible; deterministic recipe serializer exists in kernel. |
+| Audit/recipe | **Web / Kernel** | QueryPlan and hashes visible; deterministic recipe save/open validates plans and fingerprints. |
 
 ## 3. Table calculations
 
@@ -155,7 +155,7 @@ writing and utility operations are **Cataloged**.
 1. Capture the real G001 oracle export/log in TabWin 4.15.
 2. Move DBC decoding to a cancellable Web Worker and benchmark mobile memory.
 3. Surface DEF-driven rows, columns, increments and selections in the UI.
-4. Add portable recipe save/open and explicit result transforms.
+4. Continue `.TAB` archaeology and add explicit result transforms; portable recipe save/open is now Web.
 5. Add remaining chart families, then legacy map classes and area selection.
 6. Establish focused goldens for statistics, saved `.TAB`, DBF subsets and
    origin–destination flow.

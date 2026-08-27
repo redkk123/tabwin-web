@@ -20,7 +20,7 @@ A user can open official DATASUS microdata locally, reproduce a familiar TabWin 
 - row;
 - column;
 - increment/measure (**frequency and sum Web slice complete**);
-- selections (**single inclusion filter Web slice complete; multi-filter pending**);
+- selections (**multiple inclusion filters Web slice complete; exclusion/ranges pending**);
 - search inside category lists;
 - zero suppression;
 - compatibility/modern mode indicator;
@@ -51,6 +51,9 @@ Every result should expose:
 ### 5. Recipes
 
 Portable JSON recipes are a first-class product object.
+
+Initial deterministic save/open is implemented in the Web workbench with
+source/conversion fingerprints and safe plan validation.
 
 Long-term operations:
 

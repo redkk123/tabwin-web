@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R02.2 measure/selection UI milestone.
+Verified on 2026-08-27 through the R02.3 recipe/multiple-filter milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 31 tests;
-- 31 passed;
+- 33 tests;
+- 33 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -49,3 +49,7 @@ is still pending and no golden expected output was changed.
 R02.2 reuses the already tested sum, raw/CNV filter, DEF start-position and
 DEF bridge behavior. Browser typechecking and the production build cover its
 new controls; dedicated interaction tests remain future browser-test work.
+
+R02.3 adds tests for invalid recipe plans/fingerprints and deterministic
+intersection of simultaneous filters. Portable recipe round-trip coverage
+remains passing.

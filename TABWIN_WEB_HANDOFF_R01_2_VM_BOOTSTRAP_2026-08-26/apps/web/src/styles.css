@@ -60,6 +60,7 @@ h1, h2, h3, p { margin-top: 0; }
 .file-chip b { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .file-chip span { color: #688079; font-weight: 800; }
 .file-chip.ok::before { content: "✓"; color: var(--mint-dark); font-weight: 900; }
+.recipe-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
 
 .analysis-form { display: grid; gap: 13px; margin-top: 21px; }
 .analysis-form label > span:first-child { display: block; margin: 0 0 6px 2px; color: #425c65; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 850; }
@@ -80,6 +81,12 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .filter-option input { width: 15px; height: 15px; flex: 0 0 auto; accent-color: #17866e; }
 .text-button { margin-top: 8px; padding: 0; border: 0; color: var(--mint-dark); background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; }
 .text-button:disabled { color: #98a5a3; cursor: not-allowed; }
+.filter-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.filter-actions .secondary-button { min-height: 32px; }
+.active-filter-list { display: grid; gap: 6px; margin-top: 9px; }
+.active-filter { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; color: #36545c; background: #eaf6f2; font-size: 9px; }
+.active-filter span { flex: 1; min-width: 0; }
+.active-filter button { width: 23px; height: 23px; flex: 0 0 auto; padding: 0; border: 0; border-radius: 50%; color: #75534e; background: #f8dfdb; cursor: pointer; }
 .primary-button, .secondary-button { border: 0; border-radius: 11px; font-weight: 820; cursor: pointer; }
 .primary-button { min-height: 48px; margin-top: 2px; padding: 0 17px; display: flex; align-items: center; justify-content: space-between; color: #06251c; background: var(--mint); box-shadow: 0 9px 24px rgba(45, 171, 139, .20); }
 .primary-button:hover:not(:disabled) { background: #85e9c9; transform: translateY(-1px); }
