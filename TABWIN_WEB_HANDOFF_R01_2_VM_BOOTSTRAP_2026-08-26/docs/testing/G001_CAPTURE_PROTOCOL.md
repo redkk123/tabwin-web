@@ -59,10 +59,15 @@ Every file included in `manifest.json` must have SHA-256 and byte size.
 
 ## 4. First analysis choice
 
-Preferred G001 target after inspecting the real `RD2008.DEF`:
+R01.2-A inspection of the real `RD2008.DEF` found that `Sexo` is exposed only
+through the unresolved `X` directive (`XSexo,SEXO,1,CNV\\SEXO.CNV`). It is
+therefore not safe to assign a row role to `Sexo` by assumption.
+
+Selected G001 target:
 
 ```text
-Row:       Sexo (CNV-backed)
+Row:       Complexidade do Procedimento
+DEF:       LComplexidade do Procedimento,COMPLEX,1,CNV\COMPLEX2.CNV
 Column:    Não ativa
 Increment: Frequência
 Selections: none
@@ -80,7 +85,10 @@ Why this is preferred:
 - validates ordinary frequency;
 - minimizes unrelated semantics.
 
-If the exact contemporary DEF does not expose this option, choose the simplest CNV-backed dimension actually present and record the deviation in this file before capture.
+This is the simplest low-cardinality ordinary `L` option confirmed in both the
+real DEF and DBC schema without requiring `X`, related DBF lookup or new-format
+`N` semantics. Full acquisition evidence and hashes are recorded in
+`docs/handoffs/R01_2_A_G001_ASSET_ACQUISITION_REPORT.md`.
 
 ## 5. Reference capture discipline
 

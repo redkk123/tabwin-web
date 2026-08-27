@@ -3,6 +3,7 @@ import type {
   DefDbfLookupOption,
   DefDefinition,
   DefDirective,
+  DefExternalLookupOption,
   DefIncrement,
   DefOption,
   DefRole,
@@ -106,22 +107,34 @@ function parseOption(
     };
   }
 
-  const option: DefDbfLookupOption = {
-    kind: 'dbf-lookup',
+  if (/\.dbf$/i.test(fourth)) {
+    const option: DefDbfLookupOption = {
+      kind: 'dbf-lookup',
+      directive,
+      label,
+      field,
+      roles,
+      lookupLabelField: third,
+      lookupFile: fourth,
+      sourceLine,
+    };
+    return option;
+  }
+
+  // Contemporary real-world DEF files also pair a textual third field with a
+  // CNV resource (for example DS_TPFIN + TP_FINAN.CNV). That is observably not
+  // the documented DBF lookup form. Preserve it as unsupported executable
+  // metadata instead of rejecting it or guessing that it is an ordinary CNV.
+  const option: DefExternalLookupOption = {
+    kind: 'external-lookup',
     directive,
     label,
     field,
     roles,
     lookupLabelField: third,
-    lookupFile: fourth,
+    resourceFile: fourth,
     sourceLine,
   };
-  if (strict && !/\.dbf$/i.test(option.lookupFile)) {
-    throw new DefParseError(
-      `non-numeric third field denotes a DBF lookup, but lookup file is not .DBF: ${option.lookupFile}`,
-      sourceLine,
-    );
-  }
   return option;
 }
 

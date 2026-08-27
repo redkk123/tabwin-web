@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071a28" />
+    <meta name="description" content="Tabule microdados DATASUS localmente, direto no navegador." />
+    <meta property="og:title" content="TabWin Web" />
+    <meta property="og:description" content="Análise local, moderna e auditável de microdados DATASUS." />
+    <title>TabWin Web — análise DATASUS local</title>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="TabWin Web — início">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span><strong>TabWin</strong><em>Web</em></span>
+        </a>
+        <div class="privacy-pill"><span aria-hidden="true">●</span> Seus dados ficam neste aparelho</div>
+        <button class="icon-button" id="about-button" type="button" aria-label="Sobre o projeto">?</button>
+      </header>
+
+      <aside class="workspace" aria-label="Configuração da análise">
+        <div class="workspace-heading">
+          <div>
+            <span class="eyebrow">Área de trabalho</span>
+            <h1>Nova análise</h1>
+          </div>
+          <span class="compatibility-badge">TabWin 4.15</span>
+        </div>
+
+        <label class="drop-zone" id="drop-zone" for="file-input">
+          <span class="upload-icon" aria-hidden="true">＋</span>
+          <strong>Abra seu arquivo DBC</strong>
+          <span>Toque para escolher ou arraste aqui</span>
+          <small>DBC, DBF, DEF, CNV e MAP</small>
+          <input id="file-input" type="file" accept=".dbc,.dbf,.def,.cnv,.map" multiple />
+        </label>
+
+        <div class="file-list" id="file-list" aria-live="polite"></div>
+
+        <form id="analysis-form" class="analysis-form">
+          <label>
+            <span>Linhas</span>
+            <select id="row-field" disabled><option>Abra um DBC primeiro</option></select>
+          </label>
+          <label>
+            <span>Colunas</span>
+            <select id="column-field" disabled><option value="">Sem colunas</option></select>
+          </label>
+          <label>
+            <span>Conversão da linha</span>
+            <select id="row-conversion" disabled><option value="">Valores originais</option></select>
+          </label>
+          <div class="form-row">
+            <label>
+              <span>Posição inicial</span>
+              <input id="start-position" type="number" min="1" step="1" value="1" disabled />
+            </label>
+            <label class="check-label">
+              <input id="suppress-zero" type="checkbox" checked disabled />
+              <span>Ocultar zerados</span>
+            </label>
+          </div>
+          <button class="primary-button" id="run-button" type="submit" disabled>
+            <span>Tabular agora</span><span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <div class="local-note">
+          <span aria-hidden="true">⌁</span>
+          <p><strong>Processamento local</strong><br />Nenhum microdado é enviado pela internet.</p>
+        </div>
+      </aside>
+
+      <main class="results">
+        <section class="hero" id="hero">
+          <div>
+            <span class="eyebrow">Compatibilidade com transparência</span>
+            <h2>Microdados públicos.<br /><em>Leitura simples.</em></h2>
+            <p>Abra um DBC do DATASUS e obtenha uma tabela imediatamente. Adicione DEF, CNV ou MAP para reproduzir classificações e mapas legados.</p>
+          </div>
+          <div class="hero-metric">
+            <span id="hero-metric-value">100%</span>
+            <small>no seu dispositivo</small>
+          </div>
+        </section>
+
+        <section class="result-card" id="result-card">
+          <div class="result-toolbar">
+            <div>
+              <span class="eyebrow" id="result-kicker">Pronto para começar</span>
+              <h2 id="result-title">Abra um arquivo para explorar</h2>
+            </div>
+            <button class="secondary-button" id="export-button" type="button" disabled>Exportar CSV</button>
+          </div>
+
+          <div class="dataset-stats" id="dataset-stats" hidden></div>
+
+          <nav class="view-tabs" aria-label="Visualização do resultado">
+            <button class="active" data-view="table" type="button">Tabela</button>
+            <button data-view="chart" type="button">Gráfico</button>
+            <button data-view="map" type="button">Mapa</button>
+            <button data-view="audit" type="button">Auditoria</button>
+          </nav>
+
+          <div class="view-panel active" id="table-view" data-panel="table">
+            <div class="empty-state" id="empty-state">
+              <span class="empty-orbit" aria-hidden="true"><i></i></span>
+              <h3>Solte um DBC e deixe o resto com a gente</h3>
+              <p>A primeira frequência é calculada automaticamente. Depois você pode trocar linhas, colunas e conversões.</p>
+            </div>
+            <div class="table-wrap" id="table-wrap" hidden>
+              <table id="result-table">
+                <thead></thead>
+                <tbody></tbody>
+                <tfoot></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="view-panel" id="chart-view" data-panel="chart" hidden>
+            <div class="chart" id="chart"></div>
+          </div>
+
+          <div class="view-panel map-panel" id="map-view" data-panel="map" hidden>
+            <div class="map-stage">
+              <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
+              <div class="map-message" id="map-message">Escolha uma variável geográfica para criar o mapa.</div>
+              <div class="map-legend" id="map-legend" hidden></div>
+            </div>
+          </div>
+
+          <div class="view-panel" id="audit-view" data-panel="audit" hidden>
+            <div class="audit-intro">
+              <div><span class="audit-dot"></span><strong>Trilha reproduzível</strong></div>
+              <p>O plano abaixo registra exatamente como este resultado foi produzido.</p>
+            </div>
+            <pre id="audit-output">Nenhuma análise executada.</pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="about-dialog">
+      <button class="dialog-close" id="dialog-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Sobre</span>
+      <h2>TabWin Web</h2>
+      <p>Uma reimplementação moderna, local e auditável dos fluxos analíticos do TabWin. Projeto independente; os resultados de compatibilidade são validados contra o TabWin 4.15.</p>
+      <p class="dialog-note">Esta versão inicial já lê DBC/DBF reais, tabula campos, aplica CNV legada e abre mapas MAP no navegador.</p>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

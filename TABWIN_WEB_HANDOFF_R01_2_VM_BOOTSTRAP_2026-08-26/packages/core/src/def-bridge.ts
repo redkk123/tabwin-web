@@ -21,8 +21,11 @@ export function conversionIdForDefOption(option: DefConversionOption): string {
 
 function requireConversion(option: DefOption): DefConversionOption {
   if (option.kind !== 'conversion') {
+    const detail = option.kind === 'dbf-lookup'
+      ? `DBF lookup ${option.lookupFile}`
+      : `external lookup ${option.resourceFile}`;
     throw new UnsupportedDefFeatureError(
-      `DEF option "${option.label}" uses DBF lookup ${option.lookupFile}; DBF lookup execution is not implemented in R01`,
+      `DEF option "${option.label}" uses ${detail}; lookup execution is not implemented in R01`,
     );
   }
   return option;

@@ -60,3 +60,11 @@ test('does not guess X directive semantics', () => {
   assert.equal(def.unknownLines[0]?.directive, 'X');
   assert.match(def.warnings.join('\n'), /X directive detected/);
 });
+
+test('retains contemporary textual-field CNV lookups without pretending they are DBF lookups', () => {
+  const def = parseDef(`; contemporary\nA*.DBC\nLSubTp FAEC,FAEC_TP,DS_TPFIN,CNV\\TP_FINAN.CNV`);
+  const option = def.options[0];
+  assert.equal(option?.kind, 'external-lookup');
+  assert.equal(option?.lookupLabelField, 'DS_TPFIN');
+  assert.equal(option?.resourceFile, 'CNV\\TP_FINAN.CNV');
+});

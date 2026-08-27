@@ -39,7 +39,19 @@ export interface DefDbfLookupOption extends DefOptionBase {
   lookupFile: string;
 }
 
-export type DefOption = DefConversionOption | DefDbfLookupOption;
+/**
+ * A related-resource lookup whose execution semantics are not documented well
+ * enough to activate. Real 4.15 DEF files use this shape with both CNV and
+ * other resource extensions. Keeping it distinct from DBF lookup prevents the
+ * parser from lying about the resource type while retaining all source data.
+ */
+export interface DefExternalLookupOption extends DefOptionBase {
+  kind: 'external-lookup';
+  lookupLabelField: string;
+  resourceFile: string;
+}
+
+export type DefOption = DefConversionOption | DefDbfLookupOption | DefExternalLookupOption;
 
 export interface DefIncrement {
   label: string;
