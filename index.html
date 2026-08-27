@@ -1,0 +1,273 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#071a28" />
+    <meta name="description" content="Tabule microdados DATASUS localmente, direto no navegador." />
+    <meta property="og:title" content="TabWin Web" />
+    <meta property="og:description" content="Análise local, moderna e auditável de microdados DATASUS." />
+    <title>TabWin Web — análise DATASUS local</title>
+    <script type="module" crossorigin src="./assets/index-DaYSLOBe.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-CribJ3tb.css">
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="./" aria-label="TabWin Web — início">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span><strong>TabWin</strong><em>Web</em></span>
+        </a>
+        <div class="privacy-pill"><span aria-hidden="true">●</span> Seus dados ficam neste aparelho</div>
+        <button class="icon-button" id="about-button" type="button" aria-label="Sobre o projeto">?</button>
+      </header>
+
+      <aside class="workspace" aria-label="Configuração da análise">
+        <div class="workspace-heading">
+          <div>
+            <span class="eyebrow">Área de trabalho</span>
+            <h1>Nova análise</h1>
+          </div>
+          <span class="compatibility-badge">TabWin 4.15</span>
+        </div>
+
+        <label class="drop-zone" id="drop-zone" for="file-input">
+          <span class="upload-icon" aria-hidden="true">＋</span>
+          <strong>Abra seu arquivo DBC</strong>
+          <span>Toque para escolher ou arraste aqui</span>
+          <small>DBC, DBF, DEF, CNV e MAP</small>
+          <input id="file-input" type="file" accept=".dbc,.dbf,.def,.cnv,.map" multiple />
+        </label>
+
+        <button class="catalog-button" id="catalog-button" type="button">
+          <span><b>Buscar no DATASUS</b><small>Encontre DBC por sistema e período</small></span>
+          <span aria-hidden="true">⌕</span>
+        </button>
+
+        <div class="file-list" id="file-list" aria-live="polite"></div>
+
+        <div class="recipe-actions" aria-label="Análise reproduzível">
+          <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>
+          <button class="secondary-button" id="save-recipe-button" type="button" disabled>Salvar análise</button>
+          <input id="recipe-input" type="file" accept=".json,.twrecipe" hidden />
+        </div>
+
+        <form id="analysis-form" class="analysis-form">
+          <label>
+            <span>Linhas</span>
+            <select id="row-field" disabled><option>Abra um DBC primeiro</option></select>
+          </label>
+          <label>
+            <span>Colunas</span>
+            <select id="column-field" disabled><option value="">Sem colunas</option></select>
+          </label>
+          <label>
+            <span>Conversão da linha</span>
+            <select id="row-conversion" disabled><option value="">Valores originais</option></select>
+          </label>
+          <label>
+            <span>Medida</span>
+            <select id="measure-kind" disabled>
+              <option value="count">Frequência</option>
+              <option value="sum">Somar um campo</option>
+            </select>
+          </label>
+          <label id="measure-field-label" hidden>
+            <span>Campo para somar</span>
+            <select id="measure-field" disabled></select>
+          </label>
+          <details class="filter-builder">
+            <summary>Filtros e seleções <span id="filter-count">nenhum</span></summary>
+            <label>
+              <span>Campo do filtro</span>
+              <select id="filter-field" disabled><option value="">Sem filtro</option></select>
+            </label>
+            <div class="filter-info" id="filter-info">Escolha um campo para selecionar valores.</div>
+            <div class="filter-values" id="filter-values"></div>
+            <div class="filter-actions">
+              <button class="text-button" id="clear-filter-button" type="button" disabled>Limpar seleção</button>
+              <button class="secondary-button" id="add-filter-button" type="button" disabled>Adicionar filtro</button>
+            </div>
+            <div class="active-filter-list" id="active-filter-list"></div>
+          </details>
+          <div class="form-row">
+            <label>
+              <span>Posição inicial</span>
+              <input id="start-position" type="number" min="1" step="1" value="1" disabled />
+            </label>
+            <label class="check-label">
+              <input id="suppress-zero" type="checkbox" checked disabled />
+              <span>Ocultar zerados</span>
+            </label>
+          </div>
+          <button class="primary-button" id="run-button" type="submit" disabled>
+            <span>Tabular agora</span><span aria-hidden="true">→</span>
+          </button>
+        </form>
+
+        <div class="local-note">
+          <span aria-hidden="true">⌁</span>
+          <p><strong>Processamento local</strong><br />Nenhum microdado é enviado pela internet.</p>
+        </div>
+      </aside>
+
+      <main class="results">
+        <section class="hero" id="hero">
+          <div>
+            <span class="eyebrow">Compatibilidade com transparência</span>
+            <h2>Microdados públicos.<br /><em>Leitura simples.</em></h2>
+            <p>Abra um DBC do DATASUS e obtenha uma tabela imediatamente. Adicione DEF, CNV ou MAP para reproduzir classificações e mapas legados.</p>
+          </div>
+          <div class="hero-metric">
+            <span id="hero-metric-value">100%</span>
+            <small>no seu dispositivo</small>
+          </div>
+        </section>
+
+        <section class="result-card" id="result-card">
+          <div class="result-toolbar">
+            <div>
+              <span class="eyebrow" id="result-kicker">Pronto para começar</span>
+              <h2 id="result-title">Abra um arquivo para explorar</h2>
+            </div>
+            <div class="export-actions" aria-label="Exportar resultado">
+              <button class="secondary-button" id="export-csv-button" type="button" disabled>CSV</button>
+              <button class="secondary-button" id="export-xml-button" type="button" disabled>XML</button>
+            </div>
+          </div>
+
+          <div class="dataset-stats" id="dataset-stats" hidden></div>
+
+          <nav class="view-tabs" aria-label="Visualização do resultado">
+            <button class="active" data-view="table" type="button">Tabela</button>
+            <button data-view="chart" type="button">Gráfico</button>
+            <button data-view="map" type="button">Mapa</button>
+            <button data-view="statistics" type="button">Estatística</button>
+            <button data-view="audit" type="button">Auditoria</button>
+          </nav>
+
+          <div class="view-panel active" id="table-view" data-panel="table">
+            <div class="empty-state" id="empty-state">
+              <span class="empty-orbit" aria-hidden="true"><i></i></span>
+              <h3>Solte um DBC e deixe o resto com a gente</h3>
+              <p>A primeira frequência é calculada automaticamente. Depois você pode trocar linhas, colunas e conversões.</p>
+            </div>
+            <div class="table-wrap" id="table-wrap" hidden>
+              <table id="result-table">
+                <thead></thead>
+                <tbody></tbody>
+                <tfoot></tfoot>
+              </table>
+            </div>
+          </div>
+
+          <div class="view-panel" id="chart-view" data-panel="chart" hidden>
+            <div class="chart-toolbar">
+              <label><span>Tipo de gráfico</span><select id="chart-type">
+                <option value="horizontal-bar">Barras horizontais</option>
+                <option value="vertical-bar">Barras verticais</option>
+                <option value="line">Linhas</option>
+                <option value="area">Áreas</option>
+                <option value="pie">Setores</option>
+                <option value="points">Pontos</option>
+                <option value="bubbles">Bolhas</option>
+                <option value="arrows">Setas</option>
+              </select></label>
+              <div class="panel-actions">
+                <button class="secondary-button" id="chart-svg-button" type="button" disabled>SVG</button>
+                <button class="secondary-button" id="chart-png-button" type="button" disabled>PNG</button>
+              </div>
+            </div>
+            <div class="chart" id="chart"></div>
+          </div>
+
+          <div class="view-panel map-panel" id="map-view" data-panel="map" hidden>
+            <div class="map-toolbar">
+              <label>Método<select id="map-classification">
+                <option value="continuous">Contínuo</option>
+                <option value="equal-interval">Intervalos iguais</option>
+                <option value="quantile">Quantis</option>
+              </select></label>
+              <label>Classes<select id="map-class-count">
+                <option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option>
+              </select></label>
+              <label>Paleta<select id="map-palette">
+                <option value="green">Verde</option><option value="blue">Azul</option>
+                <option value="orange">Laranja</option><option value="purple">Roxo</option>
+              </select></label>
+              <div class="panel-actions map-zoom-actions">
+                <button class="secondary-button" id="map-zoom-out" type="button" title="Afastar">−</button>
+                <button class="secondary-button" id="map-zoom-reset" type="button">Ajustar</button>
+                <button class="secondary-button" id="map-zoom-in" type="button" title="Aproximar">+</button>
+                <button class="secondary-button" id="map-png-button" type="button" disabled>PNG</button>
+              </div>
+            </div>
+            <div class="map-stage">
+              <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
+              <div class="map-message" id="map-message">Escolha uma variável geográfica para criar o mapa.</div>
+              <div class="map-legend" id="map-legend" hidden></div>
+              <output class="map-tooltip" id="map-tooltip" hidden></output>
+            </div>
+          </div>
+
+          <div class="view-panel" id="statistics-view" data-panel="statistics" hidden>
+            <div class="statistics-toolbar">
+              <label>Operação<select id="statistics-operation">
+                <option value="descriptive">Estatística descritiva</option>
+                <option value="correlation">Correlação de Pearson</option>
+                <option value="regression">Regressão linear simples</option>
+                <option value="histogram">Histograma</option>
+              </select></label>
+              <label>Coluna X<select id="statistics-x" disabled><option>Execute uma análise</option></select></label>
+              <label id="statistics-y-label" hidden>Coluna Y<select id="statistics-y" disabled><option>Execute uma análise</option></select></label>
+              <label id="histogram-bins-label" hidden>Classes<input id="histogram-bins" type="number" min="1" max="50" value="8"></label>
+            </div>
+            <div class="statistics-result" id="statistics-result">
+              <p>Execute uma análise para calcular estatísticas sobre as colunas do resultado.</p>
+            </div>
+            <p class="compatibility-note">Cálculo moderno e auditável sobre a tabela atual. A equivalência numérica com o TabWin 4.15 ainda depende de casos-oráculo.</p>
+          </div>
+
+          <div class="view-panel" id="audit-view" data-panel="audit" hidden>
+            <div class="audit-intro">
+              <div><span class="audit-dot"></span><strong>Trilha reproduzível</strong></div>
+              <p>O plano abaixo registra exatamente como este resultado foi produzido.</p>
+            </div>
+            <pre id="audit-output">Nenhuma análise executada.</pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <dialog id="about-dialog">
+      <button class="dialog-close" id="dialog-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Sobre</span>
+      <h2>TabWin Web</h2>
+      <p>Uma reimplementação moderna, local e auditável dos fluxos analíticos do TabWin. Projeto independente; os resultados de compatibilidade são validados contra o TabWin 4.15.</p>
+      <p class="dialog-note">Esta versão inicial já lê DBC/DBF reais, tabula campos, aplica CNV legada e abre mapas MAP no navegador.</p>
+    </dialog>
+
+    <dialog id="catalog-dialog" class="catalog-dialog">
+      <button class="dialog-close" id="catalog-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Fonte oficial</span>
+      <h2>Buscar dados no DATASUS</h2>
+      <p>Escolha o conjunto e o período. O portal oficial prepara o arquivo e o TabWin Web abre o DBC diretamente neste aparelho, com cache local para evitar downloads repetidos.</p>
+      <form id="catalog-form" class="catalog-form">
+        <label><span>Sistema</span><select id="catalog-system"></select></label>
+        <label><span>Tipo de dados</span><select id="catalog-file-type"></select></label>
+        <div class="catalog-grid">
+          <label><span>Ano</span><select id="catalog-year"></select></label>
+          <label id="catalog-month-label"><span>Mês</span><select id="catalog-month"></select></label>
+          <label id="catalog-uf-label"><span>UF</span><select id="catalog-uf"></select></label>
+        </div>
+        <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar DEF e CNV automaticamente quando houver regra verificada</span></label>
+        <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
+      </form>
+      <div class="catalog-status" id="catalog-status" aria-live="polite"></div>
+      <div class="catalog-results" id="catalog-results"></div>
+      <p class="catalog-source">Catálogo e downloads fornecidos por <a href="https://datasus.saude.gov.br/transferencia-de-arquivos/" target="_blank" rel="noreferrer">DATASUS · Ministério da Saúde</a>.</p>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  </body>
+</html>
