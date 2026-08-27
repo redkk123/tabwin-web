@@ -13,6 +13,7 @@ test('executes deterministic count tabulation with CNV categories', () => {
   const plan = compileQueryPlan({ compatibilityProfile: 'tabwin-4.15', rows: { field: 'MES', conversionId: 'mes' }, measure: { kind: 'count' }, filters: [] });
   const result = executeInMemory([{ MES: '01' }, { MES: '01' }, { MES: '02' }, { MES: '88' }], plan, { mes: monthCnv });
   assert.deepEqual(result.rows.map((r) => r.label), ['Janeiro', 'Fevereiro', 'Ignorado']);
+  assert.deepEqual(result.columns.map((column) => column.label), ['Freqüência']);
   assert.deepEqual(result.cells, [[2], [1], [1]]);
   assert.equal(result.recordsSeen, 4);
   assert.equal(result.recordsAccepted, 4);
@@ -198,7 +199,7 @@ test('golden comparator requires exact labels, shape and cells by default', () =
   const golden = {
     schema: 'tabwin-web.golden-table', version: 1, id: 'SYNTH-001',
     source: { referenceEngine: 'TabWin 4.15 synthetic capture' },
-    rows: [{ label: 'AC' }, { label: 'DF' }], columns: [{ label: 'Valor' }],
+    rows: [{ label: 'AC' }, { label: 'DF' }], columns: [{ label: 'Freqüência' }],
     cells: [[1], [2]],
   };
   assert.equal(compareWithGolden(result, golden).pass, true);

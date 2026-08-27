@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R03.2 — functional browser workbench; first real golden capture pending.
+> **Status:** R04.0 — functional browser workbench; G001 exact TabWin 4.15 golden passed.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -13,7 +13,7 @@ The canonical external memory is [`CHECKPOINT_MASTER.md`](./CHECKPOINT_MASTER.md
 Immutable/working snapshots currently include:
 
 - `CHECKPOINT_MASTER_R00.md` — initial architecture baseline;
-- `CHECKPOINT_MASTER.md` — current R01.1-dev state.
+- `CHECKPOINT_MASTER.md` — current live project state.
 
 ## What already runs
 
@@ -47,7 +47,8 @@ Run:
 npm test
 ```
 
-Current checkpoint: **44 passing tests**, browser typecheck and production build.
+Current checkpoint: **46 passing tests**, browser typecheck, production build
+and G001 zero-tolerance equivalence.
 
 ## Repository layout
 
@@ -80,10 +81,12 @@ Every capability should be classified as:
 2. **UX** — modernizes how an existing workflow is performed;
 3. **INNOVATION** — adds capability without changing compatibility semantics.
 
-No generic “TabWin compatible” claim should be made until the corresponding real golden cases pass.
+Compatibility claims are scoped to passing real golden cases. G001 now proves
+ordinary frequency by one CNV-backed row dimension; it is not a blanket claim
+for every TabWin operation.
 
 ## Handoff / current plan
 
 For the complete current project memory and roadmap, read `CHECKPOINT_MASTER.md`
-first. The compatibility claim still depends on G001 and subsequent exact
-Windows TabWin 4.15 golden captures.
+first. The next compatibility claims depend on subsequent exact Windows
+TabWin 4.15 golden captures and closure of the feature inventory.

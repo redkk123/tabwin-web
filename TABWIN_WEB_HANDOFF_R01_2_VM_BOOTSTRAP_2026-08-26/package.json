@@ -13,6 +13,7 @@
     "web:preview": "vite preview --config vite.config.ts",
     "verify:datasus-live": "npm run build && node scripts/verify-datasus-live.mjs",
     "materialize:g001": "npm run build && node scripts/materialize-g001.mjs",
+    "verify:g001": "npm run build && node scripts/verify-g001-local.mjs",
     "check": "npm run test && npm run typecheck:web && npm run web:build"
   },
   "dependencies": {

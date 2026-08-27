@@ -1,0 +1,13 @@
+Reference engine: TabWin 4.15
+Definition: RD2008.DEF
+Source file: RDAC2401.dbc
+Row: Complexidade do Procedimento
+Column: Não ativa
+Increment: Frequência
+Selections: none
+Zero-row suppression: disabled
+Non-classified handling: unchanged from the clean TabWin 4.15 run
+
+The isolated working directory contained the exact input hashes recorded in
+manifest.json. The exported workbook reports a total of 4,315, equal to the
+DBC declared and decoded record count.

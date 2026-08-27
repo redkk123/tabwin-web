@@ -1,0 +1,24 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G001",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the lossless BIFF export reference-tabwin415/result.xls; no rows were reordered or edited."
+  },
+  "rows": [
+    { "label": "Atenção Básica" },
+    { "label": "Média complexidade" },
+    { "label": "Alta complexidade" },
+    { "label": "Não se aplica" }
+  ],
+  "columns": [
+    { "label": "Freqüência" }
+  ],
+  "cells": [
+    [0],
+    [4153],
+    [162],
+    [0]
+  ]
+}

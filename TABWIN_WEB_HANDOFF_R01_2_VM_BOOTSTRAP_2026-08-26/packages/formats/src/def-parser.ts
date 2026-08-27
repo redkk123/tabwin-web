@@ -76,14 +76,15 @@ function parseOption(
   strict: boolean,
 ): DefOption {
   const fields = splitCommaFields(rest);
-  if (strict && fields.length !== 4) {
+  if (strict && fields.length < 4) {
     throw new DefParseError(
-      `${directive} directive expects 4 comma-separated fields after the directive; got ${fields.length}`,
+      `${directive} directive expects at least 4 comma-separated fields after the directive; got ${fields.length}`,
       sourceLine,
     );
   }
 
-  const [label = '', field = '', third = '', fourth = ''] = fields;
+  const [label = '', field = '', third = '', fourth = '', ...trailingFields] = fields;
+  const retainedTrailingFields = trailingFields.length ? { trailingFields } : {};
   if (strict && !label) throw new DefParseError(`${directive} directive has no display label`, sourceLine);
   if (strict && !field) throw new DefParseError(`${directive} directive has no DBF field`, sourceLine);
   if (strict && !third) throw new DefParseError(`${directive} directive has an empty third field`, sourceLine);
@@ -104,6 +105,7 @@ function parseOption(
       startPosition,
       conversionFile: fourth,
       sourceLine,
+      ...retainedTrailingFields,
     };
   }
 
@@ -117,6 +119,7 @@ function parseOption(
       lookupLabelField: third,
       lookupFile: fourth,
       sourceLine,
+      ...retainedTrailingFields,
     };
     return option;
   }
@@ -134,6 +137,7 @@ function parseOption(
     lookupLabelField: third,
     resourceFile: fourth,
     sourceLine,
+    ...retainedTrailingFields,
   };
   return option;
 }
@@ -192,9 +196,13 @@ export function parseDef(text: string, options: ParseDefOptions = {}): DefDefini
       continue;
     }
     if (OPTION_DIRECTIVES.has(directive)) {
-      defOptions.push(
-        parseOption(directive as DefOption['directive'], rest, sourceLine, strict),
-      );
+      const option = parseOption(directive as DefOption['directive'], rest, sourceLine, strict);
+      defOptions.push(option);
+      if (option.trailingFields?.length) {
+        warnings.push(
+          `${directive} directive at line ${sourceLine} contains ${option.trailingFields.length} retained trailing field(s) with unresolved semantics`,
+        );
+      }
       continue;
     }
     if (directive === 'I') {

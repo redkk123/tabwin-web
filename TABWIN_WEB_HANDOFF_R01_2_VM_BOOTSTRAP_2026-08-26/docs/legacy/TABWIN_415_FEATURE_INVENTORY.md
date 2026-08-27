@@ -33,6 +33,7 @@ Status vocabulary:
 | Apply `.CNV` | **Web / Kernel** | Legacy short, literal and numeric-range forms; source-order precedence retained. New `N` layout remains guarded. |
 | Row and column dimensions | **Web** | Raw rows/columns; row CNV in the current UI. |
 | Frequency | **Web** | Ordinary and `G` weighted frequency in kernel. |
+| G001: one CNV-backed row, frequency | **Golden** | Exact TabWin 4.15 BIFF comparison passed with tolerance zero. |
 | Increment / sum | **Web / Kernel** | Numeric and DEF increment labels surfaced; compiled as explicit sum measure. Total policies remain pending. |
 | Selections / filters | **Web / Kernel** | Multiple simultaneous raw or DEF/CNV-backed inclusion filters; exclusion and range-dialog UX remain pending. |
 | Suppress zero rows | **Web** | Applied after materializing CNV categories. |
@@ -154,10 +155,9 @@ writing and utility operations are **Cataloged**.
 
 ## Next compatibility slices
 
-1. Capture the real G001 oracle export/log in TabWin 4.15.
-2. Move DBC decoding to a cancellable Web Worker and benchmark mobile memory.
-3. Surface DEF-driven rows, columns, increments and selections in the UI.
-4. Continue `.TAB` archaeology and add explicit result transforms; portable recipe save/open is now Web.
-5. Add remaining chart families, then legacy map classes and area selection.
-6. Establish focused goldens for statistics, saved `.TAB`, DBF subsets and
+1. Move DBC decoding to a cancellable Web Worker and benchmark mobile memory.
+2. Surface remaining DEF-driven columns, increments and selection modes in the UI.
+3. Continue `.TAB` archaeology and add explicit result transforms; portable recipe save/open is now Web.
+4. Complete legacy map classes, labels, layers and selection bridging.
+5. Establish focused goldens for statistics, saved `.TAB`, DBF subsets and
    origin–destination flow.

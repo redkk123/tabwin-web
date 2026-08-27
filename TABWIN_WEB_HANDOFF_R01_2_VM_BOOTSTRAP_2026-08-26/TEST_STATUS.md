@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R03.3 public-release/oracle-ready milestone.
+Verified on 2026-08-27 through the R04.0 G001 exact-golden milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 44 tests;
-- 44 passed;
+- 46 tests;
+- 46 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -42,9 +42,33 @@ Observed against the public DATASUS service:
 - nested auxiliary archive contained 886 entries;
 - `RD2008.DEF` and `COMPLEX2.CNV` were present.
 
-This verifies acquisition and format envelopes. It does **not** constitute
-TabWin 4.15 golden equivalence; the exact Windows reference capture for G001
-is still pending and no golden expected output was changed.
+This verifies acquisition and format envelopes. G001 separately establishes
+exact TabWin 4.15 equivalence for its narrowly defined frequency workflow.
+
+## G001 real TabWin 4.15 golden
+
+Commands:
+
+```bash
+npm run verify:g001 -- <asset-directory> <reference-export.xls>
+npm test
+```
+
+Observed result:
+
+- lossless TabWin BIFF export SHA-256:
+  `2ECF97628F3658C98A7F366A3419C1388E024F2FAE94F81A66C10A77EB019D16`;
+- DBC records declared/decoded/seen/accepted: `4315/4315/4315/4315`;
+- row labels and order: exact;
+- column label and order: exact (`Freqüência`);
+- matrix shape: exact;
+- numeric tolerance: zero;
+- differing cells: zero;
+- result: PASS.
+
+The two new portable tests cover real six-field DEF metadata preservation and
+the committed TabWin BIFF reference export. Raw DBC/DEF/CNV assets remain
+external and are verified by hash during the local end-to-end run.
 
 R02.2 reuses the already tested sum, raw/CNV filter, DEF start-position and
 DEF bridge behavior. Browser typechecking and the production build cover its

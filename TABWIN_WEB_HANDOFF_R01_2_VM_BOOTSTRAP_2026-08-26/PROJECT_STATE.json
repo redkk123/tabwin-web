@@ -1,10 +1,10 @@
 {
-  "revision": "R03.3-public-release-and-g001-oracle-ready",
+  "revision": "R04.0-g001-exact-golden-equivalence",
   "date": "2026-08-27",
-  "phase": "reproducible-workbench-visualization-maps-and-statistical-analysis-implemented",
+  "phase": "first-real-golden-passed-feature-inventory-closure",
   "tests": {
-    "total": 44,
-    "passed": 44,
+    "total": 46,
+    "passed": 46,
     "failed": 0,
     "command": "npm run check"
   },
@@ -40,7 +40,11 @@
     "recipe-statistics-view-persistence",
     "public-github-pages-static-release",
     "allowlisted-datasus-proxy-contract",
-    "reproducible-g001-asset-materializer"
+    "reproducible-g001-asset-materializer",
+    "tabwin-biff-reference-export-parser",
+    "real-g001-zero-tolerance-golden-equivalence",
+    "lossless-six-field-def-metadata-preservation",
+    "profile-scoped-tabwin-frequency-header"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -64,7 +68,7 @@
     "advanced-chart-editing-axes-zoom-and-print",
     "legacy-map-manual-breaks-label-layers-and-selection-bridge",
     "xlsx-parquet-svg-geojson-kml-exports",
-    "golden-equivalence-claim"
+    "golden-cases-beyond-g001"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -73,13 +77,17 @@
     "vite": "8.2.2"
   },
   "g001": {
-    "status": "assets-and-tabwin415-oracle-prepared-reference-ui-capture-pending",
+    "status": "pass-exact-structural-and-numeric-equality",
     "row": "Complexidade do Procedimento / COMPLEX / COMPLEX2.CNV",
     "comparison_tolerance": 0,
-    "golden_modified": false
+    "reference_export_sha256": "2ECF97628F3658C98A7F366A3419C1388E024F2FAE94F81A66C10A77EB019D16",
+    "records_declared_decoded_seen_accepted": [4315, 4315, 4315, 4315],
+    "cell_differences": 0,
+    "golden_created_from_reference_export": true,
+    "golden_modified_to_pass": false
   },
   "next": [
-    "capture-G001-in-original-TabWin-4.15",
+    "close-cataloged-tabwin-415-feature-families",
     "move-DBC-processing-to-cancellable-Web-Worker",
     "add-offline-recent-files-screen-and-cache-controls",
     "surface-DEF-driven-increments-and-selections",

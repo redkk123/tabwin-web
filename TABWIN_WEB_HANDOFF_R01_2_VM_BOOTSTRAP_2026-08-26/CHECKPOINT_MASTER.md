@@ -1,12 +1,32 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R03.3-public-release-and-g001-oracle-ready
+**Revision:** R04.0-g001-exact-golden-equivalence
 **Date:** 2026-08-27
-**Status:** Browser workbench, official acquisition, recipes, visualizations, interactive maps and four statistical operations implemented; G001 Windows golden capture still pending
+**Status:** Browser workbench implemented; first real TabWin 4.15 golden G001 passes with exact structural and numeric equality
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.0 golden-equivalence update
+
+The user-provided TabWin 4.15 lossless BIFF export closed G001. The committed
+reference has SHA-256
+`2ECF97628F3658C98A7F366A3419C1388E024F2FAE94F81A66C10A77EB019D16`.
+The local verifier checked the exact DBC/DEF/CNV hashes, decoded all 4,315
+records and compared row labels, order, column label, shape and cells with
+tolerance zero. Result: PASS, zero differences.
+
+The oracle exposed two real implementation defects before passing: complete
+`RD2008.DEF` parsing had to preserve unresolved six-field lookup tails, and
+the TabWin 4.15 count header had to retain its exact legacy spelling
+`Freqüência`. Both were fixed behind existing format/compatibility boundaries;
+no golden value was altered. Evidence is in
+`docs/handoffs/R04_0_G001_EXACT_GOLDEN_EQUIVALENCE_REPORT.md`.
+
+Current portable verification is 46/46 tests plus web typecheck and production
+build. Development now proceeds through the complete named-feature inventory
+and additional focused golden cases.
 
 ## 2026-08-27 implementation update
 
@@ -23,11 +43,11 @@ official HTTPS ZIP, expand it locally and open its DBC. The live verifier
 confirmed `RDAC2401.dbc` (313,213 bytes; 4,315 records) and current
 `TAB_SIH.zip` (886 entries including `RD2008.DEF` and `COMPLEX2.CNV`).
 
-Current portable verification is 44/44 tests plus web typecheck and production
+At R03.3, portable verification was 44/44 tests plus web typecheck and production
 build. Full evidence and limitations are in
 `docs/handoffs/R02_1_OFFICIAL_DATASUS_ACQUISITION_AND_EXPORT_REPORT.md`.
-No compatibility golden was changed. The Windows TabWin 4.15 G001 capture
-remains the next external-oracle requirement.
+No compatibility golden had yet been captured at R03.3. R04.0 closes that
+external-oracle requirement as recorded above.
 
 R02.2 subsequently surfaced tested frequency/sum measures and one raw or
 DEF/CNV-backed inclusion filter in the browser UI. These controls compile to
@@ -2427,19 +2447,19 @@ Feature                                      Evidence             Status
 QueryPlan validation                         unit/synthetic       ✓ implemented
 Frequency                                    unit/synthetic       ✓ implemented
 Numeric increment sum                        unit/synthetic       ✓ implemented
-DEF parser A/S/L/C/Q/D/T/I/G/R              docs + synthetic    △ no real corpus golden
-DEF start-position semantics                 docs + synthetic    △ no real golden
+DEF parser A/S/L/C/Q/D/T/I/G/R              docs + G001 golden  △ covered slice
+DEF start-position semantics                 docs + G001 golden  ✓ G001 ordinary L
 DEF G grouped frequency                      docs + synthetic    △ no real golden
 DEF DBF lookup parsing                       docs + synthetic    △ parse only
 DEF DBF lookup execution                     none                 ✗
 DEF X directive                              partial 4.15 docs    ✗ semantics unknown
-Legacy short CNV                             docs + synthetic    △ no real golden
+Legacy short CNV                             docs + G001 golden  ✓ G001 later-match case
 Legacy literal CNV                           docs + synthetic    △ no real golden
 CNV F/Faixas                                 docs + synthetic    △ no real golden
 CNV subtotals                                docs + synthetic    △ no real golden
 New N-format CNV                             detection only       ✗
-DBC ingestion                                upstream selected    ✗ local integration pending
-G001 real TabWin 4.15 equivalence            none yet             ✗
+DBC ingestion                                G001 real pipeline    ✓ 4,315/4,315 records
+G001 real TabWin 4.15 equivalence            lossless BIFF golden ✓ exact, tolerance 0
 TAB replay                                   none yet             ✗
 ```
 

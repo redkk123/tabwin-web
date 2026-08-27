@@ -68,3 +68,11 @@ test('retains contemporary textual-field CNV lookups without pretending they are
   assert.equal(option?.lookupLabelField, 'DS_TPFIN');
   assert.equal(option?.resourceFile, 'CNV\\TP_FINAN.CNV');
 });
+
+test('retains unresolved trailing lookup fields from contemporary real DEF records', () => {
+  const def = parseDef('LCID Secundário 1,DIAGSEC1,CD_DESCR,DBF\\CID10.DBF,CD_DESCR,DBF\\CID10.DBF');
+  const option = def.options[0];
+  assert.equal(option?.kind, 'dbf-lookup');
+  assert.deepEqual(option?.trailingFields, ['CD_DESCR', 'DBF\\CID10.DBF']);
+  assert.match(def.warnings.join('\n'), /2 retained trailing field/);
+});

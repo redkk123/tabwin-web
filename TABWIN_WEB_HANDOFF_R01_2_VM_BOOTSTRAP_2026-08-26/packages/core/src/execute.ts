@@ -16,6 +16,13 @@ interface ResolvedDimension {
   label?: string;
 }
 
+function singleColumnLabel(plan: QueryPlan): string {
+  // G001's lossless TabWin 4.15 export establishes the count header exactly.
+  // Sum headers remain "Valor" until a focused increment golden captures them.
+  if (plan.spec.measure.kind !== 'count') return 'Valor';
+  return plan.spec.compatibilityProfile === 'tabwin-4.15' ? 'Freqüência' : 'Frequência';
+}
+
 function getConversion(registry: ConversionRegistry, id: string): CnvDefinition {
   const definition = registry[id];
   if (!definition) throw new Error(`missing conversion: ${id}`);
@@ -186,7 +193,7 @@ export function executeInMemory(
     if (!row.key || row.label === undefined) continue;
     const column = plan.spec.columns
       ? resolveDimension(record, plan.spec.columns, conversions)
-      : { key: '__single__', label: 'Valor' };
+      : { key: '__single__', label: singleColumnLabel(plan) };
     if (!column.key || column.label === undefined) continue;
 
     observedRows.set(row.key, row.label);
@@ -198,7 +205,7 @@ export function executeInMemory(
   let rows = axisFromDimension(plan.spec.rows, conversions, observedRows);
   let columns = plan.spec.columns
     ? axisFromDimension(plan.spec.columns, conversions, observedColumns)
-    : [{ key: '__single__', label: 'Valor', source: 'raw' as const }];
+    : [{ key: '__single__', label: singleColumnLabel(plan), source: 'raw' as const }];
 
   const rowIndex = new Map(rows.map((row, index) => [row.key, index]));
   const columnIndex = new Map(columns.map((column, index) => [column.key, index]));

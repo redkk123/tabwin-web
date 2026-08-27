@@ -22,6 +22,12 @@ interface DefOptionBase {
   field: string;
   roles: DefRole[];
   sourceLine: number;
+  /**
+   * Additional comma-separated fields observed in contemporary real DEF files.
+   * They are retained losslessly but have no executable semantics until a
+   * documented rule or focused golden case establishes their meaning.
+   */
+  trailingFields?: string[];
 }
 
 /** Standard DEF option backed by a CNV conversion table. */
