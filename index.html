@@ -8,8 +8,8 @@
     <meta property="og:title" content="TabWin Web" />
     <meta property="og:description" content="Análise local, moderna e auditável de microdados DATASUS." />
     <title>TabWin Web — análise DATASUS local</title>
-    <script type="module" crossorigin src="./assets/index-BchEJmMJ.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-ZFHaz4H0.css">
+    <script type="module" crossorigin src="./assets/index-DI6DLs63.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Bd5Oasco.css">
   </head>
   <body>
     <div class="app-shell">
@@ -347,7 +347,10 @@
           <label id="catalog-uf-label"><span>UF</span><select id="catalog-uf"></select></label>
         </div>
         <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar DEF e CNV automaticamente quando houver regra verificada</span></label>
-        <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
+        <div class="catalog-request-actions">
+          <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
+          <button class="secondary-button danger-button" id="catalog-cancel-button" type="button" hidden>Cancelar</button>
+        </div>
       </form>
       <div class="catalog-status" id="catalog-status" aria-live="polite"></div>
       <div class="catalog-results" id="catalog-results"></div>
