@@ -90,6 +90,13 @@ origin parsing, health/configuration behavior, method/preflight rules, request
 limits, response-header filtering, redirect rejection, normalized upstream
 failure and streamed ZIP response validation.
 
+The workflow was moved from the recovered project subdirectory to the
+repository-root `.github/workflows`, making it discoverable by GitHub. The
+first run (`33119469943`) was stopped before runner allocation with the explicit
+annotation that the GitHub account is locked due to a billing issue. No CI step
+ran or failed. The root workflow remains ready to execute the already-passing
+local gates when the account-level lock is resolved.
+
 ## 5. Official-envelope probe
 
 A live probe contacted only the official public service and cancelled the ZIP

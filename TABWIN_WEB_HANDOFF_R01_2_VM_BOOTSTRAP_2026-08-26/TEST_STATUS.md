@@ -35,6 +35,11 @@ catalog/prepare 200 and a complete 287,299-byte ZIP stream. The published Pages
 build found `RDAC2401.dbc`, opened it and loaded the verified SIH auxiliaries;
 the file list included `COMPLEX2.CNV`.
 
+The root GitHub Actions workflow is now discoverable, but run `33119469943`
+was rejected before runner allocation with GitHub's annotation that the account
+is locked due to a billing issue. Therefore CI execution is externally blocked;
+it did not produce a failing test or build step.
+
 The inherited 22-test baseline remains intact. Nine tests now additionally
 cover real DATASUS request/response contracts, rejection of non-official
 download domains, catalog coverage, CSV/XML export and the three R02.0

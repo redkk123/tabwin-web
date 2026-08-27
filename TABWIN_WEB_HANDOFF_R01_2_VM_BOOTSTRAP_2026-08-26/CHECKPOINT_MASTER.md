@@ -39,6 +39,12 @@ commands are in
 `docs/handoffs/R05_2_DATASUS_PROXY_HARDENING_REPORT.md` and
 `apps/datasus-proxy/README.md`.
 
+The release workflow was moved to the repository-root `.github/workflows`,
+where GitHub recognizes it. Its first job did not reach a runner: GitHub marked
+the account locked for a billing issue. This is an external CI-account blocker,
+not a test failure; the same `npm run check` and `npm run proxy:check` gates pass
+locally.
+
 ## 2026-08-27 R05.1 CSV-import and selected-DBF update
 
 CSV and TSV files can now enter the normal records -> AnalysisSpec -> QueryPlan
