@@ -54,9 +54,9 @@ CORS path itself is now live and browser-verified.
 
 - verify auxiliary-bundle and DEF/CNV selection rules system by system;
 - expose archive contents when no automatic rule is verified;
-- recent downloads screen, cache size, retention and explicit removal;
-- offline reopening of cached official archives;
-- source URL, retrieval time and archive hashes in Audit/recipe;
+- recent downloads screen, cache size, retention and explicit removal (**R05.3-A complete locally**);
+- offline reopening of cached official archives (**R05.3-A complete locally; public smoke pending deployment**);
+- source URL, retrieval time and archive hashes in Audit/recipe (**R05.3-A complete**);
 - clear retry/cancel/progress states for slow DATASUS responses.
 
 Done when every cataloged system is either supported by a verified rule or

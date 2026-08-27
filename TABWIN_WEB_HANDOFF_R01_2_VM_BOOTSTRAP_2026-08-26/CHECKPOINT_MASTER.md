@@ -1,16 +1,44 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R05.2-public-datasus-proxy
+**Revision:** R05.3-A-offline-cache-provenance
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; DATASUS proxy deployed and public acquisition verified end to end
+**Status:** G001 exact golden passed; public acquisition live; offline cache controls complete locally
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
 
 The ordered backlog and completion criteria are maintained in
-`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. R05.2 is complete; the
-immediate next block is R05.3 acquisition-rule coverage and cache UX.
+`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. R05.2 is complete; R05.3-A
+closes recent downloads, offline reopen and source provenance. The remaining
+R05.3 work is manual auxiliary fallback plus retry/cancel/progress UX.
+
+## 2026-08-27 R05.3-A offline-cache and provenance update
+
+The IndexedDB acquisition cache is now visible and explicitly controllable.
+The official-source dialog lists recent data and auxiliary envelopes, total
+local size and retrieval dates; data envelopes can be reopened without network
+access, entries can be removed individually and clearing all entries requires
+confirmation. Legacy cache entries are interpreted conservatively from their
+existing deterministic keys.
+
+New entries retain official source metadata, retrieval time and the SHA-256 of
+the complete ZIP envelope. Audit exposes these separately from the extracted
+DBC/DBF fingerprint, and `.twrecipe` source hints optionally preserve the
+official URL, retrieval time and archive hash without changing recipe version
+or analytical semantics.
+
+Portable verification remains 86/86 plus browser typecheck and production
+build. A local 390 x 844 browser case verified accessible empty-cache controls,
+no horizontal overflow and no console errors. A real cached-envelope reopen
+smoke requires the next public deployment because the production Worker
+correctly rejects localhost origins. Full evidence is in
+`docs/handoffs/R05_3_A_OFFLINE_CACHE_AND_PROVENANCE_REPORT.md`.
+
+GitHub Actions run `33120550257` was retried manually. GitHub created the job
+but stopped it before checkout with the exact account-billing-lock annotation;
+no project command ran. Removing the spending budget did not clear that
+account-level lock.
 
 ## 2026-08-27 R05.2 DATASUS proxy-hardening update
 

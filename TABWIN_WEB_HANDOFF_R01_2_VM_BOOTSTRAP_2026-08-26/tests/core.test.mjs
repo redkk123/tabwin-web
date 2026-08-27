@@ -62,7 +62,12 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
       filters: [],
     },
     conversions: [],
-    sourceHints: [{ name: 'fixture.dbc', sha256: 'abc', size: 123 }],
+    sourceHints: [{
+      name: 'fixture.dbc', sha256: 'abc', size: 123,
+      sourceUrl: 'ftp://ftp.datasus.gov.br/fixture.dbc',
+      retrievedAt: '2026-08-27T12:00:00.000Z',
+      archiveSha256: 'a'.repeat(64),
+    }],
     resultOperations: [{
       kind: 'factor', sourceColumnKey: '__single__', factor: 100,
       output: { key: '__derived_1', label: 'Índice', totalPolicy: 'mean' },
@@ -153,6 +158,13 @@ test('analysis recipe parsing rejects structurally invalid plans and fingerprint
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
     conversions: [{ id: 'x' }], sourceHints: [],
   })), /invalid conversion fingerprint/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [{
+      name: 'x.dbc', sha256: 'abc', size: 1, retrievedAt: 'ontem', archiveSha256: 'curto',
+    }],
+  })), /invalid retrieval time/);
   assert.throws(() => parseRecipe(JSON.stringify({
     schema: 'tabwin-web.recipe', version: 1,
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },

@@ -1,5 +1,5 @@
 {
-  "revision": "R05.2-public-datasus-proxy",
+  "revision": "R05.3-A-offline-cache-provenance",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
@@ -19,6 +19,11 @@
     "official-datasus-https-download-preparation",
     "safe-nested-zip-extraction-with-limits",
     "indexeddb-official-archive-cache-with-retention",
+    "visible-recent-official-downloads-with-size-and-timestamps",
+    "offline-cached-data-archive-reopen",
+    "explicit-individual-and-confirmed-full-cache-removal",
+    "official-source-url-retrieval-time-and-archive-sha256-provenance",
+    "recipe-persisted-optional-official-acquisition-provenance",
     "verified-sih-rd-def-cnv-auxiliary-resolution",
     "csv-tabulation-export",
     "xml-tabulation-export-with-provenance",
@@ -99,6 +104,8 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
+    "public-r05-3-a-offline-cache-reopen-smoke-pending-deployment",
+    "acquisition-retry-cancel-and-progress-controls",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",
@@ -128,7 +135,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "finish-official-acquisition-rules-and-cache-ux",
+    "finish-official-acquisition-rules-manual-fallback-and-cancel-progress-ux",
     "close-cataloged-tabwin-415-feature-families",
     "move-DBC-processing-to-cancellable-Web-Worker",
     "add-offline-recent-files-screen-and-cache-controls",

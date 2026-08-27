@@ -21,12 +21,12 @@ O código ativo e toda a documentação de compatibilidade estão em
 - exportação CSV/XML e auditoria do plano;
 - leitura de mapas binários `.MAP` do TabWin;
 - mapas brasileiros de UF e município incluídos;
-- 44 testes automatizados, typecheck e build de produção verificados.
+- 86 testes automatizados, typecheck e build de produção verificados.
 
-A busca oficial do DATASUS foi validada do lado do servidor, mas o portal
-oficial devolve cabeçalhos CORS incompatíveis quando chamado diretamente pelo
-site estático. Até a implantação do pequeno proxy oficial/institucional já
-especificado no projeto, use o download manual e abra o DBC localmente.
+A busca oficial do DATASUS funciona no site publicado por meio de um Worker
+Cloudflare estritamente limitado às rotas oficiais. Downloads recentes ficam
+somente no navegador, podem ser removidos pelo usuário e serão reabertos
+offline pela entrega R05.3-A após sua próxima publicação.
 
 O projeto ainda não declara equivalência completa com o TabWin 4.15. Casos
 golden só são aceitos após captura pareada no programa de referência.

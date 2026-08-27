@@ -8,13 +8,22 @@ export interface ConversionFingerprint {
   size: number;
 }
 
+export interface RecipeSourceHint extends Pick<SourceFingerprint, 'name' | 'sha256' | 'size'> {
+  /** Official catalog address when the source was acquired from DATASUS. */
+  sourceUrl?: string;
+  /** ISO-8601 time at which the containing official archive was retrieved. */
+  retrievedAt?: string;
+  /** SHA-256 of the official ZIP envelope, distinct from the extracted source hash. */
+  archiveSha256?: string;
+}
+
 export interface AnalysisRecipeV1 {
   schema: 'tabwin-web.recipe';
   version: 1;
   name?: string;
   spec: TabulationSpec;
   conversions: ConversionFingerprint[];
-  sourceHints: Array<Pick<SourceFingerprint, 'name' | 'sha256' | 'size'>>;
+  sourceHints: RecipeSourceHint[];
   /** Deterministic post-tabulation transforms, replayed in array order. */
   resultOperations?: TableOperation[];
   view?: {
@@ -91,6 +100,17 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
     if (!source || typeof source.name !== 'string' || typeof source.sha256 !== 'string' ||
         typeof source.size !== 'number') {
       throw new Error('invalid source fingerprint in TabWin Web recipe');
+    }
+    if (source.sourceUrl !== undefined && typeof source.sourceUrl !== 'string') {
+      throw new Error('invalid source URL in TabWin Web recipe');
+    }
+    if (source.retrievedAt !== undefined
+      && (typeof source.retrievedAt !== 'string' || !Number.isFinite(Date.parse(source.retrievedAt)))) {
+      throw new Error('invalid retrieval time in TabWin Web recipe');
+    }
+    if (source.archiveSha256 !== undefined
+      && (typeof source.archiveSha256 !== 'string' || !/^[a-f\d]{64}$/i.test(source.archiveSha256))) {
+      throw new Error('invalid archive fingerprint in TabWin Web recipe');
     }
   }
   if (parsed.resultOperations !== undefined) {

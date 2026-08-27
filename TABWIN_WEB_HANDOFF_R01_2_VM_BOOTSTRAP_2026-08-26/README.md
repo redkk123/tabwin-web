@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R05.2 — G001 exact golden passed; the hardened DATASUS proxy is deployed and the public Pages app opens official DBC plus auxiliaries end to end.
+> **Status:** R05.3-A — G001 exact golden passed; public DATASUS acquisition is live; recent-download, offline-cache and provenance controls are complete locally.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -40,6 +40,8 @@ The current browser application and TypeScript packages provide:
 - validated local DBC-to-DBF expansion and download;
 - selected-record DBF writing through the executor's exact acceptance boundary;
 - official DATASUS catalog/acquisition adapter and deployed allowlisted Worker;
+- visible recent-download cache with explicit removal and offline data reopen;
+- official source URL, retrieval time and ZIP hash in Audit/recipes;
 - CSV/XML/XLSX, chart PNG/SVG and map PNG export;
 - eight chart families;
 - legacy `.MAP` parsing and interactive thematic maps;

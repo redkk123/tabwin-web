@@ -55,7 +55,15 @@ import {
   suggestedDefinitionName,
   type ExtractedArchiveFile,
 } from './datasus-client.ts';
-import { readCachedArchive, writeCachedArchive } from './archive-cache.ts';
+import {
+  clearCachedArchives,
+  deleteCachedArchive,
+  listCachedArchives,
+  readCachedArchive,
+  writeCachedArchive,
+  type CachedArchiveRole,
+  type CachedArchiveSummary,
+} from './archive-cache.ts';
 import { renderChartSvg } from './chart-renderer.ts';
 import type { ChartType } from '../../../packages/visualization/src/chart-model.ts';
 import {
@@ -85,6 +93,21 @@ interface LoadedSource {
   size: number;
   sha256: string;
   origin?: string;
+  retrievedAt?: string;
+  archiveSha256?: string;
+  cacheKey?: string;
+}
+
+interface OfficialArchiveProvenance {
+  cacheKey: string;
+  cacheHit: boolean;
+  retrievedAt: string;
+  archiveSha256: string;
+}
+
+interface DownloadedArchive {
+  files: ExtractedArchiveFile[];
+  provenance: OfficialArchiveProvenance;
 }
 
 const numberFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
@@ -218,6 +241,9 @@ const catalogAuxiliary = element<HTMLInputElement>('#catalog-auxiliary');
 const catalogSearchButton = element<HTMLButtonElement>('#catalog-search-button');
 const catalogStatus = element<HTMLElement>('#catalog-status');
 const catalogResults = element<HTMLElement>('#catalog-results');
+const catalogRecentSummary = element<HTMLElement>('#catalog-recent-summary');
+const catalogRecentList = element<HTMLElement>('#catalog-recent-list');
+const catalogCacheClear = element<HTMLButtonElement>('#catalog-cache-clear');
 
 let records: DbfRecord[] = [];
 let dbfHeader: DbfHeader | null = null;
@@ -1495,24 +1521,54 @@ async function downloadCatalogEntries(
   files: readonly DatasusRemoteFile[],
   signal?: AbortSignal,
   maxCacheAgeMs = 24 * 60 * 60 * 1000,
-): Promise<ExtractedArchiveFile[]> {
+  role: CachedArchiveRole = 'data',
+): Promise<DownloadedArchive> {
   const cacheKey = `official-v1:${files.map((file) => file.address).sort().join('|')}`;
   let archive: Uint8Array | null = null;
+  let summary: CachedArchiveSummary | null = null;
+  let cacheHit = false;
   try {
-    archive = await readCachedArchive(cacheKey, maxCacheAgeMs);
+    const cached = await readCachedArchive(cacheKey, maxCacheAgeMs);
+    if (cached) {
+      archive = cached.bytes;
+      summary = cached.summary;
+      cacheHit = true;
+    }
   } catch {
     // Private browsing or storage policies may disable IndexedDB; acquisition remains usable.
   }
   if (!archive) {
     const preparedUrl = await prepareOfficialDownload(files, signal);
     archive = await fetchOfficialArchive(preparedUrl, signal);
+    const archiveSha256 = await sha256(archive);
     try {
-      await writeCachedArchive(cacheKey, archive);
+      summary = await writeCachedArchive(cacheKey, archive, {
+        sha256: archiveSha256,
+        role,
+        sources: files.map(({ name, address, source, modality }) => ({ name, address, source, modality })),
+      });
     } catch {
       // Cache failure is non-fatal and must never block opening public data.
     }
+    summary ??= {
+      key: cacheKey,
+      savedAt: Date.now(),
+      size: archive.byteLength,
+      sha256: archiveSha256,
+      role,
+      sources: files.map(({ name, address, source, modality }) => ({ name, address, source, modality })),
+    };
   }
-  return extractSupportedArchiveFiles(archive);
+  const archiveSha256 = summary?.sha256 || await sha256(archive);
+  return {
+    files: extractSupportedArchiveFiles(archive),
+    provenance: {
+      cacheKey,
+      cacheHit,
+      retrievedAt: new Date(summary?.savedAt ?? Date.now()).toISOString(),
+      archiveSha256,
+    },
+  };
 }
 
 async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: AbortSignal): Promise<number> {
@@ -1522,8 +1578,8 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
   const remoteAuxiliaries = await searchOfficialAuxiliaries(query.system, signal);
   const bundle = chooseCurrentAuxiliaryBundle(remoteAuxiliaries, query.system);
   if (!bundle) throw new Error('O DATASUS não listou um pacote auxiliar atual para este sistema');
-  const extracted = await downloadCatalogEntries([bundle], signal, 7 * 24 * 60 * 60 * 1000);
-  const definitionEntry = extracted.find(
+  const downloaded = await downloadCatalogEntries([bundle], signal, 7 * 24 * 60 * 60 * 1000, 'auxiliary');
+  const definitionEntry = downloaded.files.find(
     (entry) => displayBaseName(entry.name).toUpperCase() === definitionName.toUpperCase(),
   );
   if (!definitionEntry) throw new Error(`${definitionName} não foi encontrado no pacote auxiliar oficial`);
@@ -1536,11 +1592,16 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
       : option.kind === 'external-lookup' ? option.resourceFile : '';
     if (extensionOf(resource) === 'CNV') wanted.add(displayBaseName(resource).toUpperCase());
   }
-  const selected = extracted.filter((entry) => wanted.has(displayBaseName(entry.name).toUpperCase()));
+  const selected = downloaded.files.filter((entry) => wanted.has(displayBaseName(entry.name).toUpperCase()));
   await loadFiles(selected.map(archiveFile));
   for (const entry of selected) {
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(entry.name).toLowerCase());
-    if (source) source.origin = bundle.address;
+    if (source) {
+      source.origin = bundle.address;
+      source.retrievedAt = downloaded.provenance.retrievedAt;
+      source.archiveSha256 = downloaded.provenance.archiveSha256;
+      source.cacheKey = downloaded.provenance.cacheKey;
+    }
   }
   return selected.length;
 }
@@ -1559,17 +1620,25 @@ async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQ
       }
     }
     setCatalogStatus(`Baixando ${remote.name} do DATASUS…`);
-    const extracted = await downloadCatalogEntries([remote], controller.signal);
-    const wanted = extracted.find((entry) => displayBaseName(entry.name).toLowerCase() === remote.name.toLowerCase())
-      ?? extracted.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
+    const downloaded = await downloadCatalogEntries([remote], controller.signal);
+    const wanted = downloaded.files.find((entry) => displayBaseName(entry.name).toLowerCase() === remote.name.toLowerCase())
+      ?? downloaded.files.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
     if (!wanted) throw new Error('O pacote oficial não contém um DBC ou DBF reconhecido');
     await loadFiles([archiveFile(wanted)]);
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
-    if (source) source.origin = remote.address;
+    if (source) {
+      source.origin = remote.address;
+      source.retrievedAt = downloaded.provenance.retrievedAt;
+      source.archiveSha256 = downloaded.provenance.archiveSha256;
+      source.cacheKey = downloaded.provenance.cacheKey;
+    }
     renderAudit();
     setCatalogStatus(`${remote.name} aberto${auxiliaryCount ? ` com ${integerFormat.format(auxiliaryCount)} auxiliares` : ''}.`);
     catalogDialog.close();
-    showToast(`${remote.name} carregado diretamente do DATASUS`);
+    showToast(downloaded.provenance.cacheHit
+      ? `${remote.name} reaberto do cache local`
+      : `${remote.name} carregado diretamente do DATASUS`);
+    void renderRecentArchives();
   } catch (error) {
     const message = error instanceof DOMException && error.name === 'AbortError'
       ? 'O DATASUS demorou mais de 2 minutos para responder'
@@ -1578,6 +1647,92 @@ async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQ
   } finally {
     window.clearTimeout(timer);
     setCatalogBusy(false);
+  }
+}
+
+async function openRecentArchive(summary: CachedArchiveSummary): Promise<void> {
+  setCatalogBusy(true);
+  setCatalogStatus('Abrindo o arquivo salvo neste aparelho…');
+  try {
+    const cached = await readCachedArchive(summary.key, Number.POSITIVE_INFINITY);
+    if (!cached) throw new Error('O arquivo não está mais disponível no cache local');
+    const extracted = extractSupportedArchiveFiles(cached.bytes);
+    const expectedNames = new Set(summary.sources.map((source) => source.name.toLowerCase()));
+    const wanted = extracted.find((entry) => expectedNames.has(displayBaseName(entry.name).toLowerCase()))
+      ?? extracted.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
+    if (!wanted) throw new Error('O pacote salvo não contém um DBC ou DBF reconhecido');
+    await loadFiles([archiveFile(wanted)]);
+    const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
+    if (source) {
+      const sourceUrl = summary.sources.find((item) => item.name.toLowerCase() === source.name.toLowerCase())?.address
+        ?? summary.sources[0]?.address;
+      if (sourceUrl) source.origin = sourceUrl;
+      source.retrievedAt = new Date(summary.savedAt).toISOString();
+      source.archiveSha256 = summary.sha256 || await sha256(cached.bytes);
+      source.cacheKey = summary.key;
+    }
+    renderAudit();
+    setCatalogStatus(`${displayBaseName(wanted.name)} aberto sem usar a internet.`);
+    catalogDialog.close();
+    showToast(`${displayBaseName(wanted.name)} reaberto do cache local`);
+  } catch (error) {
+    setCatalogStatus(error instanceof Error ? error.message : String(error), true);
+  } finally {
+    setCatalogBusy(false);
+  }
+}
+
+async function renderRecentArchives(): Promise<void> {
+  catalogRecentList.replaceChildren();
+  catalogRecentSummary.textContent = 'Verificando o armazenamento local…';
+  try {
+    const archives = await listCachedArchives();
+    const totalBytes = archives.reduce((sum, archive) => sum + archive.size, 0);
+    const dataCount = archives.filter((archive) => archive.role === 'data').length;
+    catalogRecentSummary.textContent = archives.length
+      ? `${integerFormat.format(dataCount)} arquivo(s) de dados · ${formatBytes(totalBytes)} em ${integerFormat.format(archives.length)} pacote(s)`
+      : 'Nenhum download oficial salvo neste aparelho.';
+    catalogCacheClear.disabled = archives.length === 0;
+
+    for (const archive of archives) {
+      const item = document.createElement('div');
+      item.className = 'catalog-result catalog-recent-item';
+      const details = document.createElement('div');
+      const name = document.createElement('b');
+      const meta = document.createElement('small');
+      const sourceNames = archive.sources.map((source) => source.name).join(', ');
+      name.textContent = sourceNames || (archive.role === 'auxiliary' ? 'Pacote auxiliar oficial' : 'Arquivo oficial salvo');
+      meta.textContent = `${archive.role === 'auxiliary' ? 'Auxiliares' : 'Dados'} · ${formatBytes(archive.size)} · ${new Date(archive.savedAt).toLocaleString('pt-BR')}`;
+      details.append(name, meta);
+
+      const actions = document.createElement('div');
+      actions.className = 'catalog-recent-actions';
+      if (archive.role === 'data') {
+        const open = document.createElement('button');
+        open.className = 'secondary-button';
+        open.type = 'button';
+        open.textContent = 'Abrir offline';
+        open.addEventListener('click', () => void openRecentArchive(archive));
+        actions.append(open);
+      }
+      const remove = document.createElement('button');
+      remove.className = 'text-button danger-text-button';
+      remove.type = 'button';
+      remove.textContent = 'Remover';
+      remove.addEventListener('click', () => {
+        remove.disabled = true;
+        void deleteCachedArchive(archive.key)
+          .then(() => renderRecentArchives())
+          .catch((error: unknown) => setCatalogStatus(error instanceof Error ? error.message : String(error), true));
+      });
+      actions.append(remove);
+      item.append(details, actions);
+      catalogRecentList.append(item);
+    }
+  } catch (error) {
+    catalogRecentSummary.textContent = 'O armazenamento local não está disponível neste navegador.';
+    catalogCacheClear.disabled = true;
+    setCatalogStatus(error instanceof Error ? error.message : String(error), true);
   }
 }
 
@@ -1682,6 +1837,9 @@ function saveRecipe(): void {
       name: datasetFingerprint.name,
       sha256: datasetFingerprint.sha256,
       size: datasetFingerprint.size,
+      ...(datasetFingerprint.origin ? { sourceUrl: datasetFingerprint.origin } : {}),
+      ...(datasetFingerprint.retrievedAt ? { retrievedAt: datasetFingerprint.retrievedAt } : {}),
+      ...(datasetFingerprint.archiveSha256 ? { archiveSha256: datasetFingerprint.archiveSha256 } : {}),
     }],
     ...(tableOperations.length ? { resultOperations: tableOperations } : {}),
     view: {
@@ -2203,7 +2361,10 @@ element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => abou
 aboutDialog.addEventListener('click', (event) => {
   if (event.target === aboutDialog) aboutDialog.close();
 });
-element<HTMLButtonElement>('#catalog-button').addEventListener('click', () => catalogDialog.showModal());
+element<HTMLButtonElement>('#catalog-button').addEventListener('click', () => {
+  catalogDialog.showModal();
+  void renderRecentArchives();
+});
 element<HTMLButtonElement>('#catalog-close').addEventListener('click', () => catalogDialog.close());
 catalogDialog.addEventListener('click', (event) => {
   if (event.target === catalogDialog) catalogDialog.close();
@@ -2213,6 +2374,16 @@ catalogFileType.addEventListener('change', updateCatalogGeography);
 catalogForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void searchCatalog();
+});
+catalogCacheClear.addEventListener('click', () => {
+  if (!window.confirm('Remover todos os downloads oficiais salvos neste aparelho?')) return;
+  catalogCacheClear.disabled = true;
+  void clearCachedArchives()
+    .then(() => {
+      setCatalogStatus('Cache local removido. Os arquivos poderão ser baixados novamente do DATASUS.');
+      return renderRecentArchives();
+    })
+    .catch((error: unknown) => setCatalogStatus(error instanceof Error ? error.message : String(error), true));
 });
 window.addEventListener('resize', () => {
   if (currentView === 'map' && activeMap) renderMap();

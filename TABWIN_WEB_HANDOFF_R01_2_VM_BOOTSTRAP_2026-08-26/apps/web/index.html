@@ -349,6 +349,18 @@
       </form>
       <div class="catalog-status" id="catalog-status" aria-live="polite"></div>
       <div class="catalog-results" id="catalog-results"></div>
+      <section class="catalog-recent" aria-labelledby="catalog-recent-title">
+        <div class="catalog-recent-heading">
+          <div>
+            <span class="eyebrow">Neste aparelho</span>
+            <h3 id="catalog-recent-title">Downloads recentes</h3>
+            <p id="catalog-recent-summary">Verificando o armazenamento local…</p>
+          </div>
+          <button class="text-button danger-text-button" id="catalog-cache-clear" type="button" disabled>Limpar cache</button>
+        </div>
+        <div class="catalog-results" id="catalog-recent-list"></div>
+        <p class="catalog-cache-note">Os pacotes ficam somente neste navegador e podem ser reabertos sem internet. Removê-los não apaga arquivos que você salvou fora do aplicativo.</p>
+      </section>
       <p class="catalog-source">Catálogo e downloads fornecidos por <a href="https://datasus.saude.gov.br/transferencia-de-arquivos/" target="_blank" rel="noreferrer">DATASUS · Ministério da Saúde</a>.</p>
     </dialog>
 

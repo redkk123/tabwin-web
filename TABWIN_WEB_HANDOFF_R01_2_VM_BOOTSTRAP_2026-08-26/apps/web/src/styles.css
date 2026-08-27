@@ -245,6 +245,16 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
 .catalog-result b { overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-size: 12px; }
 .catalog-result small { margin-top: 3px; color: #74878a; font-size: 9px; }
 .catalog-result button { flex: 0 0 auto; }
+.catalog-recent { margin-top: 20px; padding-top: 17px; border-top: 1px solid var(--line); }
+.catalog-recent-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.catalog-recent-heading h3 { margin: 0; color: var(--ink); font: 600 18px Georgia, serif; }
+.catalog-recent-heading p { margin: 4px 0 0; color: #74878a; font-size: 10px; }
+.catalog-recent-heading .text-button { flex: 0 0 auto; margin-top: 1px; }
+.catalog-recent-actions { display: flex; align-items: center; gap: 10px; }
+.catalog-recent-actions .text-button { margin: 0; }
+.danger-text-button { color: #9a463d; }
+.danger-text-button:disabled { color: #aab2b0; }
+.catalog-cache-note { margin: 9px 2px 0; color: #7a8b8e; font-size: 9px !important; line-height: 1.5 !important; }
 .catalog-source { margin: 18px 0 0; padding-top: 13px; border-top: 1px solid var(--line); font-size: 10px !important; }
 .catalog-source a { color: var(--mint-dark); }
 .toast { position: fixed; z-index: 30; left: 50%; bottom: 22px; max-width: calc(100% - 30px); padding: 11px 15px; border-radius: 10px; color: white; background: #092735; box-shadow: 0 12px 35px rgba(0,0,0,.2); font-size: 11px; opacity: 0; pointer-events: none; transform: translate(-50%, 15px); transition: .2s ease; }
@@ -283,6 +293,8 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .result-toolbar { align-items: flex-start; }
   .catalog-grid { grid-template-columns: 1fr 1fr; }
   #catalog-uf-label { grid-column: 1 / -1; }
+  .catalog-recent-item { align-items: flex-start; }
+  .catalog-recent-actions { align-items: flex-end; flex-direction: column; }
   .dataset-stats { grid-template-columns: 1fr 1fr; }
   .view-tabs { margin-left: -5px; margin-right: -5px; }
   .bar-row { grid-template-columns: 90px 1fr 62px; gap: 8px; }

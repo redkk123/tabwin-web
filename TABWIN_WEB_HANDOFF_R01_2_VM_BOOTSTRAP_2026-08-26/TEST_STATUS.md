@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the deployed R05.2 DATASUS proxy milestone.
+Verified on 2026-08-27 through the local R05.3-A offline-cache/provenance slice.
 
 ## Portable check
 
@@ -23,6 +23,14 @@ The separate `npm run proxy:check` Wrangler gate also passed: the production
 Worker configuration bundled to 18.43 KiB (4.81 KiB gzip) with the exact
 GitHub Pages origin and all seven limit/timeout bindings.
 
+R05.3-A extends recipe round-trip validation with optional official source URL,
+retrieval time and archive SHA-256 provenance. Browser typecheck and production
+build cover recent-download listing, aggregate cache size, individual/all-entry
+removal and offline data-envelope reopen. A local 390 x 844 browser case found
+no horizontal overflow or console errors. The real cached-envelope reopen smoke
+is deliberately pending the next Pages deployment because production CORS does
+not allow localhost.
+
 R05.2 replaces the two proxy-envelope tests with eleven focused tests covering
 fixed routes, exact archive URLs, origin canonicalization, unconfigured and
 hostile origins, per-route methods, constrained preflight, form media/size
@@ -35,10 +43,10 @@ catalog/prepare 200 and a complete 287,299-byte ZIP stream. The published Pages
 build found `RDAC2401.dbc`, opened it and loaded the verified SIH auxiliaries;
 the file list included `COMPLEX2.CNV`.
 
-The root GitHub Actions workflow is now discoverable, but run `33119469943`
-was rejected before runner allocation with GitHub's annotation that the account
-is locked due to a billing issue. Therefore CI execution is externally blocked;
-it did not produce a failing test or build step.
+The root GitHub Actions workflow is discoverable. Retried run `33120550257`
+created a build job, then GitHub rejected it before checkout with the annotation
+that the account is locked due to a billing issue. Therefore CI execution is
+externally blocked; it did not produce a failing test or build step.
 
 The inherited 22-test baseline remains intact. Nine tests now additionally
 cover real DATASUS request/response contracts, rejection of non-official
