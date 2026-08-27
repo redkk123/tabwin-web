@@ -36,7 +36,10 @@ catalog, auxiliary, preparation and archive stages. The local browser observed
 Cancel during an active SIH query, obtained `Consulta cancelada`, restored the
 search control, hid Cancel and emitted no console error. The portable gate
 remains 86/86 because this slice changes the browser transport surface, not a
-semantic-kernel case.
+semantic-kernel case. Pages deployment `72dab90` repeated public cancellation
+and completed a new `RDAC2402.dbc` acquisition/open through the Worker. Its
+small archive completed between 100 ms samples, so no intermediate percentage
+is claimed as visually observed.
 
 R05.2 replaces the two proxy-envelope tests with eleven focused tests covering
 fixed routes, exact archive URLs, origin canonicalization, unconfigured and

@@ -1,7 +1,7 @@
 # R05.3-B — Acquisition progress, cancellation and retry states
 
 **Date:** 2026-08-27
-**Status:** COMPLETE LOCALLY — PUBLIC DOWNLOAD SMOKE PENDING DEPLOYMENT
+**Status:** COMPLETE — PUBLIC CANCEL AND DOWNLOAD VERIFIED
 
 ## 1. Outcome
 
@@ -59,8 +59,28 @@ the cancel button during the active request, cancelled it and verified:
 - cancel hidden afterward;
 - no console errors.
 
-The production Worker rejects localhost by design. Public progress and cancel
-smokes are therefore deferred until this build is deployed to Pages.
+The production Worker rejects localhost by design, so the build was published
+through the isolated static branch:
+
+- main feature commit: `c61e903`;
+- Pages deployment commit: `72dab90`;
+- served JavaScript: `assets/index-DI6DLs63.js`.
+
+The public browser repeated the cancel case with the same restored controls and
+no console errors. It then searched SIH-RD / AC / 2024-02, found
+`RDAC2402.dbc`, prepared/downloaded the official archive and opened the source
+successfully. The final interface reported `RDAC2402.dbc aberto com 97
+auxiliares` and loaded the DEF-backed `Região de Residência` analysis.
+
+The small data envelope completed between 100 ms sampling intervals, so an
+intermediate percentage was not visually captured. The bounded streaming path
+was exercised, but this report does not claim an observed intermediate percent
+for that fast response.
+
+During auxiliary loading the existing guarded new-format CNV `N` diagnostic
+briefly appeared before the supported materials and data source completed.
+This is evidence for the remaining manual auxiliary-selection work, not a claim
+that the unsupported `N` layout has been implemented.
 
 ## 5. Remaining R05.3
 

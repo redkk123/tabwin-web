@@ -26,7 +26,10 @@ auxiliary lookup cannot accidentally continue into the data download.
 Portable verification remains 86/86 plus browser typecheck and production
 build. A local browser case observed Cancel during SIH-RD search, aborted it,
 received `Consulta cancelada`, regained the search button and found no console
-error. Public Worker-origin verification follows deployment. Evidence is in
+error. Pages deployment `72dab90` repeated cancellation publicly and then
+searched, downloaded and opened `RDAC2402.dbc` through the Worker. The small
+envelope completed too quickly to capture an intermediate percent at 100 ms
+sampling; that unobserved display state is not claimed. Evidence is in
 `docs/handoffs/R05_3_B_ACQUISITION_PROGRESS_AND_CANCEL_REPORT.md`.
 
 ## 2026-08-27 R05.3-A offline-cache and provenance update

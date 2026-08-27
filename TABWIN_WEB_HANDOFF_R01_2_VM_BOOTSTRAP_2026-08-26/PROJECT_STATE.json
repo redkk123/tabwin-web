@@ -28,6 +28,7 @@
     "bounded-streaming-official-archive-download-progress",
     "catalog-and-download-manual-cancellation",
     "distinct-manual-cancel-timeout-and-retry-ready-states",
+    "public-pages-r05-3-b-cancel-and-rdac2402-download-smoke",
     "verified-sih-rd-def-cnv-auxiliary-resolution",
     "csv-tabulation-export",
     "xml-tabulation-export-with-provenance",
@@ -108,7 +109,6 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
-    "public-r05-3-b-progress-and-cancel-smoke-pending-deployment",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",
