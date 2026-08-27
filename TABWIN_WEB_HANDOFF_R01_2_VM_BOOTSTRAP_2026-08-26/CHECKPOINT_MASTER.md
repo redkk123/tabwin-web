@@ -1,12 +1,26 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.4-safe-table-expression-columns
+**Revision:** R04.5-structural-table-editing
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; advanced selections and safe expression columns implemented
+**Status:** G001 exact golden passed; advanced selections and structural table editing implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.5 structural-table-editing update
+
+Column rename, move-left/right and delete plus row suppression and sum
+aggregation now execute as immutable ordered `TableOperation` variants. They
+share recipe replay, Audit history, Undo and Restore with calculated columns.
+The UI uses the locate query to define the row set explicitly and guards the
+last numeric column from deletion.
+
+Portable verification is 65/65 plus browser typecheck and production build.
+A real DBC workflow chained formula/rename/move, replaced 22 `1200*` municipality
+rows with a `4,113` aggregate (and `8,226` in its doubled column), suppressed
+`110012`, then restored it via Undo. Evidence is in
+`docs/handoffs/R04_5_STRUCTURAL_TABLE_EDITING_REPORT.md`.
 
 ## 2026-08-27 R04.4 expression-column update
 

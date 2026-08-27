@@ -82,3 +82,44 @@ test('operations reject missing and duplicate columns', () => {
     kind: 'constant', value: 1, output: output('x'),
   }), /already exists/);
 });
+
+test('column rename, movement and deletion are immutable replayable operations', () => {
+  const renamed = applyTableOperation(base, { kind: 'rename-column', columnKey: 'x', label: 'Casos' }).result;
+  assert.equal(renamed.columns[0].label, 'Casos');
+  const moved = applyTableOperation(renamed, { kind: 'move-column', columnKey: 'x', direction: 'right' }).result;
+  assert.deepEqual(moved.columns.map((column) => column.key), ['y', 'x']);
+  assert.deepEqual(moved.cells[0], [2, 10]);
+  const deleted = applyTableOperation(moved, { kind: 'delete-column', columnKey: 'y' }).result;
+  assert.deepEqual(deleted.columns.map((column) => column.key), ['x']);
+  assert.deepEqual(deleted.cells.map((row) => row[0]), [10, -5, 3]);
+  assert.equal(base.columns[0].label, 'X');
+});
+
+test('row suppression removes matched rows without changing source totals', () => {
+  const suppressed = applyTableOperation(base, { kind: 'suppress-rows', rowKeys: ['b'] }).result;
+  assert.deepEqual(suppressed.rows.map((row) => row.key), ['a', 'c']);
+  assert.deepEqual(suppressed.cells, [[10, 2], [3, 4]]);
+  assert.equal(base.rows.length, 3);
+});
+
+test('row aggregation can replace sources or append an excluded subtotal', () => {
+  const replaced = applyTableOperation(base, {
+    kind: 'aggregate-rows', rowKeys: ['a', 'c'],
+    outputRow: { key: 'ac', label: 'A + C', excludeFromTotal: false }, removeSources: true,
+  }).result;
+  assert.deepEqual(replaced.rows.map((row) => row.key), ['b', 'ac']);
+  assert.deepEqual(replaced.cells.at(-1), [13, 6]);
+  const appended = applyTableOperation(base, {
+    kind: 'aggregate-rows', rowKeys: ['a', 'c'],
+    outputRow: { key: 'subtotal', label: 'Subtotal', excludeFromTotal: true }, removeSources: false,
+  }).result;
+  assert.equal(appended.rows.at(-1).excludeFromTotal, true);
+  assert.equal(calculateColumnTotal(appended, 'x', 'sum'), 13);
+});
+
+test('structural operations reject destructive or ambiguous requests', () => {
+  assert.throws(() => applyTableOperation({ ...base, columns: [base.columns[0]], cells: base.cells.map((row) => [row[0]]) },
+    { kind: 'delete-column', columnKey: 'x' }), /retain at least one/);
+  assert.throws(() => applyTableOperation(base, { kind: 'move-column', columnKey: 'x', direction: 'left' }), /cannot move/);
+  assert.throws(() => applyTableOperation(base, { kind: 'suppress-rows', rowKeys: [] }), /at least one/);
+});

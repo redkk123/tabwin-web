@@ -149,6 +149,16 @@ export type TableOperation =
       expression: string;
       divisionByZero: 'error' | 'zero';
       output: DerivedColumnSpec;
+    }
+  | { kind: 'rename-column'; columnKey: string; label: string }
+  | { kind: 'move-column'; columnKey: string; direction: 'left' | 'right' }
+  | { kind: 'delete-column'; columnKey: string }
+  | { kind: 'suppress-rows'; rowKeys: string[] }
+  | {
+      kind: 'aggregate-rows';
+      rowKeys: string[];
+      outputRow: { key: string; label: string; excludeFromTotal: boolean };
+      removeSources: boolean;
     };
 
 export type DataRecord = Record<string, unknown>;

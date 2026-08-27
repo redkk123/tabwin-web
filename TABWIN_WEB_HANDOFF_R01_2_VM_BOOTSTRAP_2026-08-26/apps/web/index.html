@@ -206,6 +206,27 @@
               <label class="table-key-toggle"><input id="table-key-visible" type="checkbox" checked> Mostrar chave</label>
               <div class="table-presentation-actions"><button class="secondary-button" id="table-copy" type="button">Copiar</button><button class="secondary-button" id="table-print" type="button">Imprimir</button></div>
             </div>
+            <section class="table-editing" id="table-editing" hidden aria-label="Editar linhas e colunas">
+              <div class="table-column-edit">
+                <label>Coluna<select id="table-edit-column"></select></label>
+                <label>Novo título<input id="table-edit-column-label" type="text" maxlength="80" placeholder="Título da coluna"></label>
+                <div class="table-edit-actions">
+                  <button class="secondary-button" id="table-column-rename" type="button">Renomear</button>
+                  <button class="secondary-button" id="table-column-left" type="button" title="Mover à esquerda">←</button>
+                  <button class="secondary-button" id="table-column-right" type="button" title="Mover à direita">→</button>
+                  <button class="secondary-button danger-button" id="table-column-delete" type="button">Remover</button>
+                </div>
+              </div>
+              <div class="table-row-edit">
+                <label>Nome da agregação<input id="table-aggregate-label" type="text" maxlength="80" placeholder="Ex.: Demais categorias"></label>
+                <label class="table-key-toggle"><input id="table-aggregate-remove" type="checkbox" checked> Substituir linhas localizadas</label>
+                <div class="table-edit-actions">
+                  <button class="secondary-button" id="table-row-aggregate" type="button" disabled>Agregar localizadas</button>
+                  <button class="secondary-button danger-button" id="table-row-suppress" type="button" disabled>Suprimir localizadas</button>
+                </div>
+              </div>
+              <p class="compatibility-note">As ações de linha usam a busca “Localizar” acima e entram no mesmo histórico reversível das colunas calculadas.</p>
+            </section>
             <div class="table-wrap" id="table-wrap" hidden>
               <table id="result-table">
                 <thead></thead>

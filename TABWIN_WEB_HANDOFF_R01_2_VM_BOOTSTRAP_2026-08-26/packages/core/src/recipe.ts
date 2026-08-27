@@ -141,14 +141,45 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
 function validateTableOperation(value: unknown): asserts value is TableOperation {
   if (!value || typeof value !== 'object') throw new Error('invalid table operation in TabWin Web recipe');
   const operation = value as Partial<TableOperation> & Record<string, unknown> & { output?: Record<string, unknown> };
-  const allowedKinds = new Set(['binary', 'factor', 'cumulative', 'absolute', 'integer', 'sequence', 'constant', 'expression']);
-  if (!operation.kind || !allowedKinds.has(operation.kind) || !operation.output
+  const stringField = (key: string): boolean => typeof operation[key] === 'string' && String(operation[key]).length > 0;
+  const allowedKinds = new Set(['binary', 'factor', 'cumulative', 'absolute', 'integer', 'sequence', 'constant', 'expression',
+    'rename-column', 'move-column', 'delete-column', 'suppress-rows', 'aggregate-rows']);
+  if (!operation.kind || !allowedKinds.has(operation.kind)) {
+    throw new Error('invalid table operation in TabWin Web recipe');
+  }
+  if (operation.kind === 'rename-column') {
+    if (!stringField('columnKey') || !stringField('label')) throw new Error('invalid rename-column operation in TabWin Web recipe');
+    return;
+  }
+  if (operation.kind === 'move-column') {
+    if (!stringField('columnKey') || !new Set(['left', 'right']).has(String(operation.direction))) throw new Error('invalid move-column operation in TabWin Web recipe');
+    return;
+  }
+  if (operation.kind === 'delete-column') {
+    if (!stringField('columnKey')) throw new Error('invalid delete-column operation in TabWin Web recipe');
+    return;
+  }
+  if (operation.kind === 'suppress-rows') {
+    if (!Array.isArray(operation.rowKeys) || !operation.rowKeys.length || !operation.rowKeys.every((key) => typeof key === 'string')) {
+      throw new Error('invalid suppress-rows operation in TabWin Web recipe');
+    }
+    return;
+  }
+  if (operation.kind === 'aggregate-rows') {
+    const outputRow = operation.outputRow as Record<string, unknown> | undefined;
+    if (!Array.isArray(operation.rowKeys) || !operation.rowKeys.length || !operation.rowKeys.every((key) => typeof key === 'string')
+      || !outputRow || typeof outputRow.key !== 'string' || !outputRow.key || typeof outputRow.label !== 'string' || !outputRow.label
+      || typeof outputRow.excludeFromTotal !== 'boolean' || typeof operation.removeSources !== 'boolean') {
+      throw new Error('invalid aggregate-rows operation in TabWin Web recipe');
+    }
+    return;
+  }
+  if (!operation.output
     || typeof operation.output.key !== 'string' || !operation.output.key.trim()
     || typeof operation.output.label !== 'string' || !operation.output.label.trim()
     || !new Set(['none', 'sum', 'product', 'mean', 'initial', 'final', 'min', 'max']).has(String(operation.output.totalPolicy))) {
     throw new Error('invalid table operation in TabWin Web recipe');
   }
-  const stringField = (key: string): boolean => typeof operation[key] === 'string' && String(operation[key]).length > 0;
   const finiteField = (key: string): boolean => typeof operation[key] === 'number' && Number.isFinite(operation[key]);
   if (operation.kind === 'binary') {
     if (!new Set(['add', 'subtract', 'multiply', 'divide', 'minimum', 'maximum', 'percentage']).has(String(operation.operator))

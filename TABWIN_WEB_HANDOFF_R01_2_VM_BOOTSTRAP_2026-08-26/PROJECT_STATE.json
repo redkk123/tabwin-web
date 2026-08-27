@@ -1,10 +1,10 @@
 {
-  "revision": "R04.4-safe-table-expression-columns",
+  "revision": "R04.5-structural-table-editing",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 61,
-    "passed": 61,
+    "total": 65,
+    "passed": 65,
     "failed": 0,
     "command": "npm run check"
   },
@@ -66,6 +66,10 @@
     ,"expression-column-cnn-key-and-bracketed-title-references"
     ,"expression-parentheses-unary-precedence-and-powers"
     ,"recipe-persisted-expression-columns"
+    ,"recipe-persisted-column-rename-move-and-delete"
+    ,"reversible-row-suppression"
+    ,"reversible-row-sum-aggregation"
+    ,"table-editing-guards-against-final-column-deletion"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -90,7 +94,7 @@
     "xlsx-parquet-svg-geojson-kml-exports",
     "golden-cases-beyond-g001"
     ,"golden-equivalence-for-post-tabulation-operations"
-    ,"table-normalization-column-and-row-editing"
+    ,"table-normalization-and-advanced-header-footnote-editing"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",

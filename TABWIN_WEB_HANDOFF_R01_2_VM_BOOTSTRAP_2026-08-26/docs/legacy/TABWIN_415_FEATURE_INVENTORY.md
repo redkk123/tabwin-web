@@ -90,8 +90,8 @@ focused TabWin 4.15 reference cases establish defaults, rounding and edge cases.
 | Locate row/category | **Web / modern presentation** — accent-insensitive key and label search. |
 | Print table | **Web / modern presentation** — dedicated browser print stylesheet. |
 | Alter column header and width | **Cataloged** |
-| Delete and move columns | **Cataloged** |
-| Suppress/aggregate rows | **Cataloged** |
+| Delete and move columns | **Web / modern policy** — rename, move left/right and remove are immutable recipe operations; the final numeric column cannot be deleted. |
+| Suppress/aggregate rows | **Web / modern policy** — locate selects rows; suppression or sum aggregation is reversible and audited. |
 | Fix key length | **Cataloged** |
 | Edit two table headers / insert footnote | **Cataloged** |
 

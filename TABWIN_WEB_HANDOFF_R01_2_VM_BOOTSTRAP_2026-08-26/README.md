@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R04.4 — G001 exact golden passed; advanced filters and safe expression columns are usable in the browser.
+> **Status:** R04.5 — G001 exact golden passed; advanced filters and structural table editing are usable in the browser.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 

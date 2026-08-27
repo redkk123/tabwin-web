@@ -154,6 +154,15 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .table-presentation .table-key-toggle { min-height: 34px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .table-presentation .table-key-toggle input { min-height: 0; }
 .table-presentation-actions { display: flex; gap: 6px; }
+.table-editing { margin-bottom: 10px; padding: 10px; border: 1px solid #e0e9e6; border-radius: 10px; background: #fbfcfc; }
+.table-column-edit,.table-row-edit { display: grid; grid-template-columns: minmax(120px,1fr) minmax(170px,1.5fr) auto; gap: 8px; align-items: end; }
+.table-row-edit { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5ece9; }
+.table-editing label { display: grid; gap: 4px; color: #60757b; font-size: 9px; font-weight: 750; }
+.table-editing input,.table-editing select { min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #d5e0dd; border-radius: 8px; color: var(--ink); background: #fff; }
+.table-editing .table-key-toggle { min-height: 34px; display: flex; align-items: center; gap: 6px; }
+.table-editing .table-key-toggle input { min-height: 0; }
+.table-edit-actions { display: flex; gap: 5px; }
+.danger-button { color: #81463d; border-color: #e7c9c4; background: #fff9f8; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { padding: 10px 13px; border-bottom: 1px solid #e7eeeb; text-align: right; white-space: nowrap; }
 th:first-child, td:first-child { position: sticky; left: 0; text-align: left; background: inherit; }
@@ -254,6 +263,8 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .hero-metric { width: 112px; height: 112px; }
   .table-operation-grid { grid-template-columns: repeat(2,minmax(125px,1fr)); }
   .table-presentation { grid-template-columns: repeat(3,minmax(120px,1fr)); }
+  .table-column-edit,.table-row-edit { grid-template-columns: 1fr 1fr; }
+  .table-edit-actions { grid-column: 1 / -1; }
 }
 
 @media (max-width: 620px) {
@@ -280,6 +291,7 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .table-operation-heading { align-items: flex-start; }
   .table-operation-grid { grid-template-columns: 1fr; }
   .table-presentation { grid-template-columns: 1fr 1fr; }
+  .table-column-edit,.table-row-edit { grid-template-columns: 1fr; }
   #map-canvas { height: 420px; }
   .audit-intro { display: block; }
   .audit-intro p { margin-top: 8px; }

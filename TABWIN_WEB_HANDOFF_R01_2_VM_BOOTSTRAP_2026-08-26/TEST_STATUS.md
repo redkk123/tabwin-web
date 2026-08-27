@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.4 safe-expression milestone.
+Verified on 2026-08-27 through the R04.5 structural-table-editing milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 61 tests;
-- 61 passed;
+- 65 tests;
+- 65 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -48,6 +48,12 @@ right-associative power, unary signs, `Cnn`/key/bracketed-label references,
 explicit zero-division handling, non-finite results and rejection of executable
 syntax. Browser verification over the real G001 DBC checked `C01 * 2 + 1`
 and obtained `2 -> 5` with the exact expression recorded in Audit.
+
+R04.5 adds four structural-operation tests covering immutable rename/move/delete,
+row suppression, replacement or appended aggregation, total exclusion and
+guards against final-column deletion, boundary movement and empty row sets.
+Browser verification chained expression/rename/move, aggregated 22 matching
+municipalities and proved suppression undo restores the removed row.
 
 ## Live official-source verification
 

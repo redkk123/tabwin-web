@@ -34,6 +34,9 @@ export function applyTableOperation(
   source: TabulationResult,
   operation: TableOperation,
 ): { result: TabulationResult; audit: TableOperationAudit } {
+  const structural = applyStructuralOperation(source, operation);
+  if (structural) return withAudit(source, structural, operation);
+  if (!('output' in operation)) throw new Error(`unsupported structural operation: ${operation.kind}`);
   if (!operation.output.key.trim() || !operation.output.label.trim()) {
     throw new Error('derived columns require a non-empty key and label');
   }
@@ -100,16 +103,94 @@ export function applyTableOperation(
     cells: source.cells.map((cells, index) => [...cells, values[index] ?? 0]),
     warnings: [...source.warnings],
   };
+  return withAudit(source, result, operation);
+}
+
+function withAudit(source: TabulationResult, result: TabulationResult, operation: TableOperation) {
   return {
     result,
     audit: {
       operation,
-      compatibility: 'modern-explicit-policy',
+      compatibility: 'modern-explicit-policy' as const,
       inputColumnCount: source.columns.length,
       outputColumnCount: result.columns.length,
       rowCount: result.rows.length,
     },
   };
+}
+
+function cloneResult(source: TabulationResult): TabulationResult {
+  return {
+    ...source,
+    rows: source.rows.map((row) => ({ ...row })),
+    columns: source.columns.map((column) => ({ ...column })),
+    cells: source.cells.map((row) => [...row]),
+    warnings: [...source.warnings],
+  };
+}
+
+function applyStructuralOperation(source: TabulationResult, operation: TableOperation): TabulationResult | undefined {
+  if (operation.kind === 'rename-column') {
+    if (!operation.label.trim()) throw new Error('renamed column requires a non-empty label');
+    const index = columnIndex(source, operation.columnKey);
+    const result = cloneResult(source);
+    result.columns[index] = { ...result.columns[index]!, label: operation.label.trim() };
+    return result;
+  }
+  if (operation.kind === 'move-column') {
+    const index = columnIndex(source, operation.columnKey);
+    const target = operation.direction === 'left' ? index - 1 : index + 1;
+    if (target < 0 || target >= source.columns.length) throw new Error(`column cannot move ${operation.direction}`);
+    const order = source.columns.map((_, position) => position);
+    [order[index], order[target]] = [order[target]!, order[index]!];
+    const result = cloneResult(source);
+    result.columns = order.map((position) => ({ ...source.columns[position]! }));
+    result.cells = source.cells.map((cells) => order.map((position) => cells[position] ?? 0));
+    return result;
+  }
+  if (operation.kind === 'delete-column') {
+    const index = columnIndex(source, operation.columnKey);
+    if (source.columns.length <= 1) throw new Error('table must retain at least one numeric column');
+    const result = cloneResult(source);
+    result.columns.splice(index, 1);
+    result.cells.forEach((cells) => cells.splice(index, 1));
+    return result;
+  }
+  if (operation.kind === 'suppress-rows') {
+    const keys = new Set(operation.rowKeys);
+    if (!keys.size) throw new Error('row suppression requires at least one key');
+    const known = source.rows.filter((row) => keys.has(row.key)).length;
+    if (!known) throw new Error('row suppression does not match any result row');
+    const keep = source.rows.map((row) => !keys.has(row.key));
+    const result = cloneResult(source);
+    result.rows = result.rows.filter((_, index) => keep[index]);
+    result.cells = result.cells.filter((_, index) => keep[index]);
+    return result;
+  }
+  if (operation.kind === 'aggregate-rows') {
+    const keys = new Set(operation.rowKeys);
+    if (!keys.size) throw new Error('row aggregation requires at least one key');
+    if (!operation.outputRow.key.trim() || !operation.outputRow.label.trim()) throw new Error('aggregate row requires a key and label');
+    if (source.rows.some((row) => row.key === operation.outputRow.key)) throw new Error(`aggregate row key already exists: ${operation.outputRow.key}`);
+    const indexes = source.rows.map((row, index) => keys.has(row.key) ? index : -1).filter((index) => index >= 0);
+    if (!indexes.length) throw new Error('row aggregation does not match any result row');
+    const aggregate = source.columns.map((_, column) =>
+      indexes.reduce((sum, row) => sum + (source.cells[row]?.[column] ?? 0), 0));
+    const result = cloneResult(source);
+    if (operation.removeSources) {
+      result.rows = result.rows.filter((row) => !keys.has(row.key));
+      result.cells = result.cells.filter((_, index) => !indexes.includes(index));
+    }
+    result.rows.push({
+      key: operation.outputRow.key,
+      label: operation.outputRow.label,
+      source: 'derived',
+      ...(operation.outputRow.excludeFromTotal ? { excludeFromTotal: true } : {}),
+    });
+    result.cells.push(aggregate);
+    return result;
+  }
+  return undefined;
 }
 
 export function replayTableOperations(source: TabulationResult, operations: readonly TableOperation[]): TabulationResult {

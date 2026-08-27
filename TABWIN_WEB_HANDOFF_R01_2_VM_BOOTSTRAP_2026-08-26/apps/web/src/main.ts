@@ -165,6 +165,17 @@ const tableDecimals = element<HTMLSelectElement>('#table-decimals');
 const tableKeyVisible = element<HTMLInputElement>('#table-key-visible');
 const tableCopy = element<HTMLButtonElement>('#table-copy');
 const tablePrint = element<HTMLButtonElement>('#table-print');
+const tableEditing = element<HTMLElement>('#table-editing');
+const tableEditColumn = element<HTMLSelectElement>('#table-edit-column');
+const tableEditColumnLabel = element<HTMLInputElement>('#table-edit-column-label');
+const tableColumnRename = element<HTMLButtonElement>('#table-column-rename');
+const tableColumnLeft = element<HTMLButtonElement>('#table-column-left');
+const tableColumnRight = element<HTMLButtonElement>('#table-column-right');
+const tableColumnDelete = element<HTMLButtonElement>('#table-column-delete');
+const tableAggregateLabel = element<HTMLInputElement>('#table-aggregate-label');
+const tableAggregateRemove = element<HTMLInputElement>('#table-aggregate-remove');
+const tableRowAggregate = element<HTMLButtonElement>('#table-row-aggregate');
+const tableRowSuppress = element<HTMLButtonElement>('#table-row-suppress');
 const chart = element<HTMLElement>('#chart');
 const auditOutput = element<HTMLElement>('#audit-output');
 const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
@@ -710,6 +721,7 @@ function renderResult(): void {
   tableWrap.hidden = false;
   tableOperationsPanel.hidden = false;
   tablePresentation.hidden = false;
+  tableEditing.hidden = false;
   updateTablePresentationControls();
   renderTable(currentResult);
   updateTableOperationControls();
@@ -727,6 +739,11 @@ function operationLabel(operation: TableOperation): string {
     cumulative: 'acumulado', absolute: 'absoluto', integer: 'inteiro', sequence: 'sequência', constant: 'constante',
     expression: 'expressão',
   };
+  if (operation.kind === 'rename-column') return `${operation.label} · renomear coluna`;
+  if (operation.kind === 'move-column') return `${operation.columnKey} · mover ${operation.direction === 'left' ? 'à esquerda' : 'à direita'}`;
+  if (operation.kind === 'delete-column') return `${operation.columnKey} · remover coluna`;
+  if (operation.kind === 'suppress-rows') return `${operation.rowKeys.length} linha(s) · suprimir`;
+  if (operation.kind === 'aggregate-rows') return `${operation.outputRow.label} · agregar ${operation.rowKeys.length} linha(s)`;
   return `${operation.output.label} · ${names[operation.kind === 'binary' ? operation.operator : operation.kind] ?? operation.kind}`;
 }
 
@@ -813,12 +830,17 @@ function applySelectedTableOperation(): void {
   } else {
     operation = { kind: 'constant', value: numeric, output };
   }
-  currentResult = applyTableOperation(currentResult, operation).result;
-  tableOperations.push(operation);
+  commitTableOperation(operation);
   tableOperationLabel.value = '';
   if (operation.kind === 'expression') tableOperationExpression.value = '';
+}
+
+function commitTableOperation(operation: TableOperation): void {
+  if (!currentResult) return;
+  currentResult = applyTableOperation(currentResult, operation).result;
+  tableOperations.push(operation);
   renderResult();
-  showToast(`${operation.output.label}: coluna calculada`);
+  showToast(operationLabel(operation));
 }
 
 function restoreTableOperations(count: number): void {
@@ -830,7 +852,9 @@ function restoreTableOperations(count: number): void {
 
 function updateTablePresentationControls(): void {
   const previous = tableSortColumn.value;
+  const previousEdit = tableEditColumn.value;
   tableSortColumn.replaceChildren();
+  tableEditColumn.replaceChildren();
   const rowOption = document.createElement('option');
   rowOption.value = '__row_key__';
   rowOption.textContent = 'Chave/linha';
@@ -840,8 +864,36 @@ function updateTablePresentationControls(): void {
     option.value = column.key;
     option.textContent = column.label;
     tableSortColumn.append(option);
+    const editOption = document.createElement('option');
+    editOption.value = column.key;
+    editOption.textContent = column.label;
+    tableEditColumn.append(editOption);
   }
   if ([...tableSortColumn.options].some((option) => option.value === previous)) tableSortColumn.value = previous;
+  if ([...tableEditColumn.options].some((option) => option.value === previousEdit)) tableEditColumn.value = previousEdit;
+  updateColumnEditButtons();
+  updateRowEditButtons();
+}
+
+function updateColumnEditButtons(): void {
+  const index = currentResult?.columns.findIndex((column) => column.key === tableEditColumn.value) ?? -1;
+  tableColumnRename.disabled = index < 0;
+  tableColumnLeft.disabled = index <= 0;
+  tableColumnRight.disabled = index < 0 || index >= (currentResult?.columns.length ?? 0) - 1;
+  tableColumnDelete.disabled = (currentResult?.columns.length ?? 0) <= 1;
+}
+
+function updateRowEditButtons(): void {
+  const ready = Boolean(currentResult && tableLocate.value.trim() && currentTableRowIndexes().length);
+  tableRowAggregate.disabled = !ready;
+  tableRowSuppress.disabled = !ready;
+}
+
+function locatedRowKeys(): string[] {
+  if (!currentResult || !tableLocate.value.trim()) throw new Error('Use Localizar para escolher uma ou mais linhas');
+  const keys = currentTableRowIndexes().map((index) => currentResult!.rows[index]!.key);
+  if (!keys.length) throw new Error('Nenhuma linha localizada');
+  return keys;
 }
 
 function currentTableRowIndexes(): number[] {
@@ -1811,10 +1863,54 @@ for (const control of [tableSortColumn, tableSortDirection, tableDecimals, table
 }
 tableLocate.addEventListener('input', () => {
   if (currentResult) renderTable(currentResult);
+  updateRowEditButtons();
 });
 tableCopy.addEventListener('click', () => void copyPresentedTable().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
 tablePrint.addEventListener('click', () => window.print());
+tableEditColumn.addEventListener('change', updateColumnEditButtons);
+tableColumnRename.addEventListener('click', () => {
+  try {
+    commitTableOperation({ kind: 'rename-column', columnKey: tableEditColumn.value, label: tableEditColumnLabel.value });
+    tableEditColumnLabel.value = '';
+  } catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableColumnLeft.addEventListener('click', () => {
+  try { commitTableOperation({ kind: 'move-column', columnKey: tableEditColumn.value, direction: 'left' }); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableColumnRight.addEventListener('click', () => {
+  try { commitTableOperation({ kind: 'move-column', columnKey: tableEditColumn.value, direction: 'right' }); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableColumnDelete.addEventListener('click', () => {
+  try { commitTableOperation({ kind: 'delete-column', columnKey: tableEditColumn.value }); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableRowSuppress.addEventListener('click', () => {
+  try {
+    commitTableOperation({ kind: 'suppress-rows', rowKeys: locatedRowKeys() });
+    tableLocate.value = '';
+    if (currentResult) renderTable(currentResult);
+    updateRowEditButtons();
+  } catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableRowAggregate.addEventListener('click', () => {
+  try {
+    const rowKeys = locatedRowKeys();
+    const label = tableAggregateLabel.value.trim() || `Agregação de ${rowKeys.length} linhas`;
+    const removeSources = tableAggregateRemove.checked;
+    commitTableOperation({
+      kind: 'aggregate-rows', rowKeys,
+      outputRow: { key: `__aggregate_${tableOperations.length + 1}`, label, excludeFromTotal: !removeSources },
+      removeSources,
+    });
+    tableLocate.value = '';
+    tableAggregateLabel.value = '';
+    if (currentResult) renderTable(currentResult);
+    updateRowEditButtons();
+  } catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
 chartType.addEventListener('change', () => {
   if (currentResult) renderChart(currentResult);
 });
