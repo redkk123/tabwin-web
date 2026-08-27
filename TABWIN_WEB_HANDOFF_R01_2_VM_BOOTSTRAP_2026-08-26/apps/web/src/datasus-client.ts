@@ -33,6 +33,25 @@ function extensionOf(name: string): string {
   return name.includes('.') ? (name.split('.').pop() ?? '').toUpperCase() : '';
 }
 
+async function datasusHttpError(response: Response, context: string): Promise<Error> {
+  const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+  if (contentType.includes('application/json')) {
+    try {
+      const envelope = await response.clone().json() as unknown;
+      if (envelope && typeof envelope === 'object' && 'error' in envelope) {
+        const error = (envelope as { error?: unknown }).error;
+        if (error && typeof error === 'object' && 'message' in error
+          && typeof (error as { message?: unknown }).message === 'string') {
+          return new Error(`${context}: ${(error as { message: string }).message}`);
+        }
+      }
+    } catch {
+      // Fall back to the stable HTTP envelope below.
+    }
+  }
+  return new Error(`${context}: HTTP ${response.status}`);
+}
+
 async function postForm(endpoint: string, body: URLSearchParams, signal?: AbortSignal): Promise<string> {
   let response: Response;
   try {
@@ -48,7 +67,7 @@ async function postForm(endpoint: string, body: URLSearchParams, signal?: AbortS
     }
     throw error;
   }
-  if (!response.ok) throw new Error(`DATASUS retornou HTTP ${response.status}`);
+  if (!response.ok) throw await datasusHttpError(response, 'Falha na consulta ao DATASUS');
   return response.text();
 }
 
@@ -69,7 +88,7 @@ export async function fetchOfficialArchive(url: string, signal?: AbortSignal): P
     ? `${DATASUS_PROXY_BASE}/archive?url=${encodeURIComponent(url)}`
     : url;
   const response = await fetch(downloadUrl, signal ? { signal } : {});
-  if (!response.ok) throw new Error(`Download DATASUS retornou HTTP ${response.status}`);
+  if (!response.ok) throw await datasusHttpError(response, 'Falha no download DATASUS');
   const length = Number(response.headers.get('content-length') ?? 0);
   if (length > MAX_ARCHIVE_ENTRIES * MAX_FILE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');
   return new Uint8Array(await response.arrayBuffer());

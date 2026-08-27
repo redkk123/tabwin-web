@@ -1,13 +1,15 @@
 # Continuous integration
 
-R01.1 runs the TypeScript semantic-kernel test suite on every push and pull request.
+The verification workflow runs the complete browser-independent release gate on
+every push and pull request.
 
 Current gate:
 
 1. Node 22;
-2. dependency installation;
-3. TypeScript build;
-4. semantic tests, including DEF/CNV and synthetic golden comparison.
+2. deterministic `npm ci` installation;
+3. semantic tests, including DEF/CNV and committed G001 comparison;
+4. web typecheck and production Vite build;
+5. Cloudflare Worker configuration and bundle dry-run.
 
 Planned gates before an institutional beta:
 
@@ -15,6 +17,5 @@ Planned gates before an institutional beta:
 - real DBC integration fixtures;
 - G001+ golden compatibility suite;
 - accessibility smoke tests;
-- production web build;
 - dependency/license/security checks;
 - deterministic provenance/recipe fixtures.

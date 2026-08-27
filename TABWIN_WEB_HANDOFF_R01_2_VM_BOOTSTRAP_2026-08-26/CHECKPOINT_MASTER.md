@@ -1,17 +1,43 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R05.1-csv-import-and-selected-dbf
+**Revision:** R05.2-public-datasus-proxy
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; CSV ingestion and selected-record DBF export implemented
+**Status:** G001 exact golden passed; DATASUS proxy deployed and public acquisition verified end to end
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
 
 The ordered backlog and completion criteria are maintained in
-`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. Its immediate next block is
-R05.2: harden and deploy the allowlisted DATASUS CORS proxy, then connect the
-public GitHub Pages build and prove the live SIH-RD acquisition workflow.
+`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. R05.2 is complete; the
+immediate next block is R05.3 acquisition-rule coverage and cache UX.
+
+## 2026-08-27 R05.2 DATASUS proxy-hardening update
+
+The optional acquisition Worker now exposes a strict route/method matrix,
+canonical exact-origin allowlisting, constrained CORS preflight, bounded form
+requests/responses, normalized JSON failures, upstream timeouts, explicit
+redirect validation, deliberate response-header forwarding and bounded ZIP
+streaming. It cannot proxy arbitrary hosts or paths and remains outside the
+AnalysisSpec -> QueryPlan -> Executor analytical pipeline.
+
+Wrangler 4.127.0 validates the committed deployment bundle at 18.43 KiB
+(4.81 KiB gzip). The public DATASUS service was probed without retaining the
+archive: catalog and prepare returned 200; the approved path was
+`/wp-content/zipupload/Arq_642881253/arquivo.zip`; the response was
+`application/zip` with a declared 287,299-byte length. Portable verification
+is 86/86 plus browser typecheck and production build.
+
+The stable Worker is deployed at
+`https://tabwin-web-datasus-proxy.tabwin-web.workers.dev`; Pages commit
+`74e04d6` embeds that public origin. Live hostile-origin/target tests were
+rejected, and the public browser workflow found, downloaded and opened
+`RDAC2401.dbc` plus the verified SIH auxiliary bundle. The UI reported 97
+supported auxiliary archive entries and listed `COMPLEX2.CNV` among the loaded
+files. No credential was committed. Evidence and exact deployment/rollback
+commands are in
+`docs/handoffs/R05_2_DATASUS_PROXY_HARDENING_REPORT.md` and
+`apps/datasus-proxy/README.md`.
 
 ## 2026-08-27 R05.1 CSV-import and selected-DBF update
 

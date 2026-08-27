@@ -1,10 +1,10 @@
 {
-  "revision": "R05.1-csv-import-and-selected-dbf",
+  "revision": "R05.2-public-datasus-proxy",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 77,
-    "passed": 77,
+    "total": 86,
+    "passed": 86,
     "failed": 0,
     "command": "npm run check"
   },
@@ -47,6 +47,13 @@
     "recipe-statistics-view-persistence",
     "public-github-pages-static-release",
     "allowlisted-datasus-proxy-contract",
+    "hardened-datasus-proxy-route-method-and-origin-policy",
+    "bounded-datasus-form-and-archive-streaming",
+    "validated-upstream-redirect-and-header-policy",
+    "wrangler-production-bundle-dry-run",
+    "public-datasus-proxy-deployment",
+    "github-pages-production-proxy-binding",
+    "public-pages-sih-rd-and-auxiliary-acquisition-smoke",
     "reproducible-g001-asset-materializer",
     "tabwin-biff-reference-export-parser",
     "real-g001-zero-tolerance-golden-equivalence",
@@ -92,7 +99,6 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
-    "public-datasus-proxy-deployment",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",
@@ -108,6 +114,7 @@
     "fflate": "0.8.2",
     "typescript": "5.8.3",
     "vite": "8.2.2"
+    ,"wrangler": "4.127.0"
   },
   "g001": {
     "status": "pass-exact-structural-and-numeric-equality",
@@ -120,7 +127,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "harden-deploy-and-connect-public-datasus-cors-proxy",
+    "finish-official-acquisition-rules-and-cache-ux",
     "close-cataloged-tabwin-415-feature-families",
     "move-DBC-processing-to-cancellable-Web-Worker",
     "add-offline-recent-files-screen-and-cache-controls",

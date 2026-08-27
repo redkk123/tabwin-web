@@ -17,7 +17,7 @@ delivery blocks without confusing modern replacements with legacy equivalence.
 
 ## P0 — production DATASUS acquisition
 
-### R05.2 — hardened CORS proxy and public deployment — NEXT
+### R05.2 — hardened CORS proxy and public deployment — COMPLETE
 
 The Worker skeleton already allowlists the three official routes. The next
 block must make it production-safe and connect GitHub Pages to it.
@@ -44,6 +44,11 @@ committed to the repository.
 Done when the public app can search, prepare, download, cache and open the real
 G001 DBC without the current CORS error, while arbitrary targets/origins remain
 rejected by tests.
+
+Completed 2026-08-27. Worker version `1ff6db56-2b8b-4086-8241-b1fad1b88f8f`
+and Pages commit `74e04d6` passed the public SIH-RD AC 2024-01 workflow. A
+physical Android regression smoke remains grouped with R09.1; the production
+CORS path itself is now live and browser-verified.
 
 ### R05.3 — acquisition coverage and cache UX
 
@@ -226,13 +231,12 @@ not block the useful public beta.
 
 ## Immediate execution order
 
-1. R05.2 hardened proxy + Cloudflare deployment;
-2. R05.3 acquisition/cache coverage;
-3. R09.0 worker/cancellation before adding heavier workflows;
-4. R06.0 multi-file tabulation;
-5. R06.1 remaining DEF/CNV semantics;
-6. R07.0 `.TAB` read-only archaeology;
-7. R08 map/chart closure;
-8. R09.1 browser/mobile/a11y tests;
-9. short differential corpus;
-10. remaining authoring and demand-driven legacy adapters.
+1. R05.3 acquisition/cache coverage;
+2. R09.0 worker/cancellation before adding heavier workflows;
+3. R06.0 multi-file tabulation;
+4. R06.1 remaining DEF/CNV semantics;
+5. R07.0 `.TAB` read-only archaeology;
+6. R08 map/chart closure;
+7. R09.1 browser/mobile/a11y tests;
+8. short differential corpus;
+9. remaining authoring and demand-driven legacy adapters.

@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R05.1 — G001 exact golden passed; CSV/TSV sources and filtered DBF record exports now run entirely in the browser.
+> **Status:** R05.2 — G001 exact golden passed; the hardened DATASUS proxy is deployed and the public Pages app opens official DBC plus auxiliaries end to end.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -39,7 +39,7 @@ The current browser application and TypeScript packages provide:
 - strict CSV/TSV ingestion with conservative numeric inference;
 - validated local DBC-to-DBF expansion and download;
 - selected-record DBF writing through the executor's exact acceptance boundary;
-- official DATASUS catalog/acquisition adapter (server-verified; static-host CORS proxy pending);
+- official DATASUS catalog/acquisition adapter and deployed allowlisted Worker;
 - CSV/XML/XLSX, chart PNG/SVG and map PNG export;
 - eight chart families;
 - legacy `.MAP` parsing and interactive thematic maps;
@@ -51,8 +51,8 @@ Run:
 npm test
 ```
 
-Current checkpoint: **77 passing tests**, browser typecheck, production build
-and G001 zero-tolerance equivalence.
+Current checkpoint: **86 passing tests**, browser typecheck, production build,
+Cloudflare Worker dry-run and G001 zero-tolerance equivalence.
 
 ## Repository layout
 

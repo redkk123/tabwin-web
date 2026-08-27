@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R05.1 CSV-import and selected-DBF milestone.
+Verified on 2026-08-27 through the deployed R05.2 DATASUS proxy milestone.
 
 ## Portable check
 
@@ -12,12 +12,28 @@ npm run check
 
 Result:
 
-- 77 tests;
-- 77 passed;
+- 86 tests;
+- 86 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
 - Vite production build passed.
+
+The separate `npm run proxy:check` Wrangler gate also passed: the production
+Worker configuration bundled to 18.43 KiB (4.81 KiB gzip) with the exact
+GitHub Pages origin and all seven limit/timeout bindings.
+
+R05.2 replaces the two proxy-envelope tests with eleven focused tests covering
+fixed routes, exact archive URLs, origin canonicalization, unconfigured and
+hostile origins, per-route methods, constrained preflight, form media/size
+limits, header filtering, redirect rejection, normalized failures and bounded
+ZIP streaming. No test changes a legacy analytical golden.
+
+Production evidence additionally verifies Worker health 200, hostile origin
+403 without CORS reflection, hostile archive target 400, valid preflight 204,
+catalog/prepare 200 and a complete 287,299-byte ZIP stream. The published Pages
+build found `RDAC2401.dbc`, opened it and loaded the verified SIH auxiliaries;
+the file list included `COMPLEX2.CNV`.
 
 The inherited 22-test baseline remains intact. Nine tests now additionally
 cover real DATASUS request/response contracts, rejection of non-official

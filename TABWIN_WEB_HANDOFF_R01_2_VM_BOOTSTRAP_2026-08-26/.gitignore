@@ -6,6 +6,7 @@ coverage/
 *.log
 .env
 .env.*
+!apps/web/.env.production
 # Private legacy documentation retained only for local compatibility archaeology.
 .legacy-inspect/
 # Never commit supplied TabWin binaries or private/raw fixture data by default.

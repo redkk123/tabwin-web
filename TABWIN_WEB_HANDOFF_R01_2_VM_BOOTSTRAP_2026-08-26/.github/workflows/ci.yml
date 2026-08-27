@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 jobs:
-  semantic-kernel:
+  verification:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -16,5 +16,6 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - run: npm install --no-audit --no-fund
-      - run: npm test
+      - run: npm ci --no-audit --no-fund
+      - run: npm run check
+      - run: npm run proxy:check

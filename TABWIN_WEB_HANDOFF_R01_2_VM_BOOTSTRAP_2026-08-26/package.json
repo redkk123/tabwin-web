@@ -11,6 +11,10 @@
     "web:dev": "vite --config vite.config.ts",
     "web:build": "vite build --config vite.config.ts",
     "web:preview": "vite preview --config vite.config.ts",
+    "proxy:check": "wrangler deploy --dry-run --config apps/datasus-proxy/wrangler.jsonc --outdir dist/datasus-proxy",
+    "proxy:dev": "wrangler dev --config apps/datasus-proxy/wrangler.jsonc",
+    "proxy:deploy": "wrangler deploy --config apps/datasus-proxy/wrangler.jsonc",
+    "proxy:rollback": "wrangler rollback --config apps/datasus-proxy/wrangler.jsonc",
     "verify:datasus-live": "npm run build && node scripts/verify-datasus-live.mjs",
     "materialize:g001": "npm run build && node scripts/materialize-g001.mjs",
     "verify:g001": "npm run build && node scripts/verify-g001-local.mjs",
@@ -22,6 +26,7 @@
   },
   "devDependencies": {
     "typescript": "5.8.3",
-    "vite": "8.2.2"
+    "vite": "8.2.2",
+    "wrangler": "4.127.0"
   }
 }
