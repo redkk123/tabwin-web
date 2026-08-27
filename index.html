@@ -8,7 +8,7 @@
     <meta property="og:title" content="TabWin Web" />
     <meta property="og:description" content="Análise local, moderna e auditável de microdados DATASUS." />
     <title>TabWin Web — análise DATASUS local</title>
-    <script type="module" crossorigin src="./assets/index-Bg1mspeA.js"></script>
+    <script type="module" crossorigin src="./assets/index-HbeAWjie.js"></script>
     <link rel="stylesheet" crossorigin href="./assets/index-BCtUL_dc.css">
   </head>
   <body>
@@ -182,11 +182,12 @@
                   <option value="percentage">Percentual A ÷ B</option><option value="factor">Multiplicar por fator</option>
                   <option value="cumulative">Acumulado</option><option value="absolute">Valor absoluto</option>
                   <option value="integer">Converter para inteiro</option><option value="sequence">Sequência</option>
-                  <option value="constant">Nova coluna constante</option>
+                  <option value="constant">Nova coluna constante</option><option value="expression">Nova coluna por expressão</option>
                 </select></label>
                 <label id="table-operation-left-label">Coluna A<select id="table-operation-left"></select></label>
                 <label id="table-operation-right-label">Coluna B<select id="table-operation-right"></select></label>
                 <label id="table-operation-number-label" hidden>Fator/valor<input id="table-operation-number" type="number" step="any" value="1"></label>
+                <label id="table-operation-expression-label" hidden>Expressão<input id="table-operation-expression" type="text" spellcheck="false" placeholder="(C01 + C02) / 2"></label>
                 <label id="table-operation-zero-label" hidden>Divisão por zero<select id="table-operation-zero"><option value="error">Interromper</option><option value="zero">Usar zero</option></select></label>
                 <label>Nome da coluna<input id="table-operation-label" type="text" maxlength="80" placeholder="Gerado automaticamente"></label>
                 <label>Política do total<select id="table-operation-total">
