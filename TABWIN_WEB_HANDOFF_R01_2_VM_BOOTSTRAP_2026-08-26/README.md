@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R05.3-A — G001 exact golden passed; public DATASUS acquisition is live; recent-download, offline-cache and provenance controls are complete locally.
+> **Status:** R05.3-B — G001 exact golden passed; public DATASUS acquisition/cache is live; streaming progress and cancellation are complete locally.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -42,6 +42,7 @@ The current browser application and TypeScript packages provide:
 - official DATASUS catalog/acquisition adapter and deployed allowlisted Worker;
 - visible recent-download cache with explicit removal and offline data reopen;
 - official source URL, retrieval time and ZIP hash in Audit/recipes;
+- bounded official-archive streaming with progress and manual cancellation;
 - CSV/XML/XLSX, chart PNG/SVG and map PNG export;
 - eight chart families;
 - legacy `.MAP` parsing and interactive thematic maps;

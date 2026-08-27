@@ -1,5 +1,5 @@
 {
-  "revision": "R05.3-A-offline-cache-provenance",
+  "revision": "R05.3-B-acquisition-progress-cancel",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
@@ -25,6 +25,9 @@
     "official-source-url-retrieval-time-and-archive-sha256-provenance",
     "recipe-persisted-optional-official-acquisition-provenance",
     "public-pages-offline-rdac2401-cache-reopen-smoke",
+    "bounded-streaming-official-archive-download-progress",
+    "catalog-and-download-manual-cancellation",
+    "distinct-manual-cancel-timeout-and-retry-ready-states",
     "verified-sih-rd-def-cnv-auxiliary-resolution",
     "csv-tabulation-export",
     "xml-tabulation-export-with-provenance",
@@ -105,7 +108,7 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
-    "acquisition-retry-cancel-and-progress-controls",
+    "public-r05-3-b-progress-and-cancel-smoke-pending-deployment",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",

@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the local R05.3-A offline-cache/provenance slice.
+Verified on 2026-08-27 through the local R05.3-B acquisition-progress/cancel slice.
 
 ## Portable check
 
@@ -30,6 +30,13 @@ removal and offline data-envelope reopen. A local 390 x 844 browser case found
 no horizontal overflow or console errors. Pages deployment `a902224` migrated
 the existing public-browser SIH cache and reopened `RDAC2401.dbc` offline with
 4,315 records, 113 fields and separate DBC/archive SHA-256 provenance.
+
+R05.3-B adds bounded streaming progress and a shared cancellation signal across
+catalog, auxiliary, preparation and archive stages. The local browser observed
+Cancel during an active SIH query, obtained `Consulta cancelada`, restored the
+search control, hid Cancel and emitted no console error. The portable gate
+remains 86/86 because this slice changes the browser transport surface, not a
+semantic-kernel case.
 
 R05.2 replaces the two proxy-envelope tests with eleven focused tests covering
 fixed routes, exact archive URLs, origin canonicalization, unconfigured and

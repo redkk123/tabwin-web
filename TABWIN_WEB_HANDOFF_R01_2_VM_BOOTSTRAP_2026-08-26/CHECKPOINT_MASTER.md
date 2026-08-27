@@ -1,17 +1,33 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R05.3-A-offline-cache-provenance
+**Revision:** R05.3-B-acquisition-progress-cancel
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; public acquisition live; offline cache controls complete locally
+**Status:** G001 exact golden passed; public acquisition/cache live; streaming progress and cancel complete locally
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
 
 The ordered backlog and completion criteria are maintained in
-`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. R05.2 is complete; R05.3-A
-closes recent downloads, offline reopen and source provenance. The remaining
-R05.3 work is manual auxiliary fallback plus retry/cancel/progress UX.
+`docs/product/REMAINING_IMPLEMENTATION_PLAN.md`. R05.2 and the R05.3-A cache
+slice are complete. R05.3-B closes streaming progress, manual cancellation and
+retry-ready terminal states. The remaining R05.3 work is verified/manual
+auxiliary coverage.
+
+## 2026-08-27 R05.3-B acquisition-progress and cancellation update
+
+Official ZIP acquisition now reads a bounded response stream and reports bytes
+or percentage progress instead of waiting silently for a monolithic buffer.
+Catalog and open operations expose a contextual Cancel button backed by one
+AbortController across auxiliary lookup, preparation and download. Manual
+cancel differs from timeout, every final path restores controls, and an aborted
+auxiliary lookup cannot accidentally continue into the data download.
+
+Portable verification remains 86/86 plus browser typecheck and production
+build. A local browser case observed Cancel during SIH-RD search, aborted it,
+received `Consulta cancelada`, regained the search button and found no console
+error. Public Worker-origin verification follows deployment. Evidence is in
+`docs/handoffs/R05_3_B_ACQUISITION_PROGRESS_AND_CANCEL_REPORT.md`.
 
 ## 2026-08-27 R05.3-A offline-cache and provenance update
 

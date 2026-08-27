@@ -18,6 +18,7 @@ export interface ExtractedArchiveFile {
 
 const SUPPORTED_EXTENSIONS = new Set(['DBC', 'DBF', 'DEF', 'CNV', 'MAP']);
 const MAX_ARCHIVE_ENTRIES = 5_000;
+const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
 const MAX_EXPANDED_BYTES = 512 * 1024 * 1024;
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
 const DATASUS_PROXY_BASE = (import.meta.env.VITE_DATASUS_PROXY_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
@@ -83,15 +84,52 @@ export async function prepareOfficialDownload(files: readonly DatasusRemoteFile[
   return parsePreparedDownloadResponse(await postForm(DATASUS_DOWNLOAD_ENDPOINT, buildDownloadBody(files), signal));
 }
 
-export async function fetchOfficialArchive(url: string, signal?: AbortSignal): Promise<Uint8Array> {
+export interface ArchiveDownloadProgress {
+  receivedBytes: number;
+  totalBytes?: number;
+}
+
+export async function fetchOfficialArchive(
+  url: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: ArchiveDownloadProgress) => void,
+): Promise<Uint8Array> {
   const downloadUrl = DATASUS_PROXY_BASE
     ? `${DATASUS_PROXY_BASE}/archive?url=${encodeURIComponent(url)}`
     : url;
   const response = await fetch(downloadUrl, signal ? { signal } : {});
   if (!response.ok) throw await datasusHttpError(response, 'Falha no download DATASUS');
   const length = Number(response.headers.get('content-length') ?? 0);
-  if (length > MAX_ARCHIVE_ENTRIES * MAX_FILE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');
-  return new Uint8Array(await response.arrayBuffer());
+  if (length > MAX_ARCHIVE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');
+  const totalBytes = length > 0 ? length : undefined;
+  if (!response.body) {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    if (bytes.byteLength > MAX_ARCHIVE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');
+    onProgress?.({ receivedBytes: bytes.byteLength, ...(totalBytes ? { totalBytes } : {}) });
+    return bytes;
+  }
+
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let receivedBytes = 0;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    receivedBytes += value.byteLength;
+    if (receivedBytes > MAX_ARCHIVE_BYTES) {
+      await reader.cancel('archive limit exceeded');
+      throw new Error('Arquivo remoto excede o limite de segurança');
+    }
+    chunks.push(value);
+    onProgress?.({ receivedBytes, ...(totalBytes ? { totalBytes } : {}) });
+  }
+  const archive = new Uint8Array(receivedBytes);
+  let offset = 0;
+  for (const chunk of chunks) {
+    archive.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return archive;
 }
 
 export function extractSupportedArchiveFiles(archive: Uint8Array): ExtractedArchiveFile[] {

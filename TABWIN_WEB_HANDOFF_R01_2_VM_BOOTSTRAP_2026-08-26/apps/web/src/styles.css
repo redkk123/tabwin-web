@@ -236,6 +236,9 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
 .catalog-check { display: flex; align-items: flex-start; gap: 9px; color: #526c70; font-size: 11px; line-height: 1.45; }
 .catalog-check input { width: 17px; height: 17px; flex: 0 0 auto; accent-color: #17866e; }
 .catalog-check span { margin: 0 !important; text-transform: none !important; letter-spacing: 0 !important; }
+.catalog-request-actions { display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: center; }
+.catalog-request-actions .primary-button { margin: 0; }
+.catalog-request-actions .secondary-button { min-height: 48px; }
 .catalog-status { min-height: 20px; margin-top: 17px; color: #5c7479; font-size: 11px; }
 .catalog-status.error { color: #a03c33; }
 .catalog-results { display: grid; gap: 8px; margin-top: 5px; }

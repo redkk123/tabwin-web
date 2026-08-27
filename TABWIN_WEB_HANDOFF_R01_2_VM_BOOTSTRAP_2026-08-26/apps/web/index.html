@@ -345,7 +345,10 @@
           <label id="catalog-uf-label"><span>UF</span><select id="catalog-uf"></select></label>
         </div>
         <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar DEF e CNV automaticamente quando houver regra verificada</span></label>
-        <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
+        <div class="catalog-request-actions">
+          <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
+          <button class="secondary-button danger-button" id="catalog-cancel-button" type="button" hidden>Cancelar</button>
+        </div>
       </form>
       <div class="catalog-status" id="catalog-status" aria-live="polite"></div>
       <div class="catalog-results" id="catalog-results"></div>

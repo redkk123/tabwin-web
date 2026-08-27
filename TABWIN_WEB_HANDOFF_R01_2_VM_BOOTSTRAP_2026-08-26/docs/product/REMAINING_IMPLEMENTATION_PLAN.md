@@ -57,7 +57,7 @@ CORS path itself is now live and browser-verified.
 - recent downloads screen, cache size, retention and explicit removal (**R05.3-A complete locally**);
 - offline reopening of cached official archives (**R05.3-A complete and public-smoke verified**);
 - source URL, retrieval time and archive hashes in Audit/recipe (**R05.3-A complete**);
-- clear retry/cancel/progress states for slow DATASUS responses.
+- clear retry/cancel/progress states for slow DATASUS responses (**R05.3-B complete locally; public smoke pending deployment**).
 
 Done when every cataloged system is either supported by a verified rule or
 explicitly routed through a manual auxiliary picker—never guessed.

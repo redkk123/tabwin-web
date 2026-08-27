@@ -239,6 +239,7 @@ const catalogMonthLabel = element<HTMLElement>('#catalog-month-label');
 const catalogUfLabel = element<HTMLElement>('#catalog-uf-label');
 const catalogAuxiliary = element<HTMLInputElement>('#catalog-auxiliary');
 const catalogSearchButton = element<HTMLButtonElement>('#catalog-search-button');
+const catalogCancelButton = element<HTMLButtonElement>('#catalog-cancel-button');
 const catalogStatus = element<HTMLElement>('#catalog-status');
 const catalogResults = element<HTMLElement>('#catalog-results');
 const catalogRecentSummary = element<HTMLElement>('#catalog-recent-summary');
@@ -272,6 +273,7 @@ let mapPanY = 0;
 let mapProjection: { west: number; north: number; fit: number; offsetX: number; offsetY: number } | null = null;
 let lastMapValues = new Map<TabwinMapObject, number | undefined>();
 let mapDrag: { pointerId: number; x: number; y: number } | null = null;
+let activeCatalogController: AbortController | null = null;
 
 function showToast(message: string, isError = false): void {
   window.clearTimeout(toastTimer);
@@ -1484,9 +1486,15 @@ function setCatalogStatus(message: string, isError = false): void {
   catalogStatus.classList.toggle('error', isError);
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 function setCatalogBusy(busy: boolean): void {
   catalogSearchButton.disabled = busy;
   for (const button of catalogResults.querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
+  catalogCancelButton.hidden = !busy || activeCatalogController === null;
+  if (!busy) catalogCancelButton.disabled = false;
 }
 
 function populateCatalogFileTypes(): void {
@@ -1539,7 +1547,12 @@ async function downloadCatalogEntries(
   }
   if (!archive) {
     const preparedUrl = await prepareOfficialDownload(files, signal);
-    archive = await fetchOfficialArchive(preparedUrl, signal);
+    archive = await fetchOfficialArchive(preparedUrl, signal, ({ receivedBytes, totalBytes }) => {
+      const progress = totalBytes
+        ? `${Math.min(100, Math.round(receivedBytes / totalBytes * 100))}% · ${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`
+        : formatBytes(receivedBytes);
+      setCatalogStatus(`Baixando ${files.map((file) => file.name).join(', ')}… ${progress}`);
+    });
     const archiveSha256 = await sha256(archive);
     try {
       summary = await writeCachedArchive(cacheKey, archive, {
@@ -1607,15 +1620,21 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
 }
 
 async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQuery): Promise<void> {
-  setCatalogBusy(true);
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  activeCatalogController = controller;
+  setCatalogBusy(true);
+  let timedOut = false;
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 120_000);
   try {
     let auxiliaryCount = 0;
     if (catalogAuxiliary.checked) {
       try {
         auxiliaryCount = await loadVerifiedAuxiliaries(query, controller.signal);
       } catch (error) {
+        if (isAbortError(error)) throw error;
         showToast(`Auxiliares não carregados: ${error instanceof Error ? error.message : String(error)}`, true);
       }
     }
@@ -1640,12 +1659,13 @@ async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQ
       : `${remote.name} carregado diretamente do DATASUS`);
     void renderRecentArchives();
   } catch (error) {
-    const message = error instanceof DOMException && error.name === 'AbortError'
-      ? 'O DATASUS demorou mais de 2 minutos para responder'
+    const message = isAbortError(error)
+      ? timedOut ? 'O DATASUS demorou mais de 2 minutos para responder. Tente novamente.' : 'Operação cancelada.'
       : error instanceof Error ? error.message : String(error);
-    setCatalogStatus(message, true);
+    setCatalogStatus(message, !isAbortError(error) || timedOut);
   } finally {
     window.clearTimeout(timer);
+    if (activeCatalogController === controller) activeCatalogController = null;
     setCatalogBusy(false);
   }
 }
@@ -1746,11 +1766,16 @@ async function searchCatalog(): Promise<void> {
     ...(!systemIsAnnual(catalogSystem.value) ? { month: catalogMonth.value } : {}),
     ...(catalogUf.value ? { uf: catalogUf.value } : {}),
   };
-  setCatalogBusy(true);
   catalogResults.replaceChildren();
   setCatalogStatus('Consultando o catálogo oficial…');
   const controller = new AbortController();
-  const timer = window.setTimeout(() => controller.abort(), 60_000);
+  activeCatalogController = controller;
+  setCatalogBusy(true);
+  let timedOut = false;
+  const timer = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 60_000);
   try {
     const files = await searchOfficialFiles(query, controller.signal);
     if (!files.length) {
@@ -1776,12 +1801,13 @@ async function searchCatalog(): Promise<void> {
       catalogResults.append(item);
     }
   } catch (error) {
-    const message = error instanceof DOMException && error.name === 'AbortError'
-      ? 'O catálogo DATASUS demorou para responder. Tente novamente.'
+    const message = isAbortError(error)
+      ? timedOut ? 'O catálogo DATASUS demorou para responder. Tente novamente.' : 'Consulta cancelada.'
       : error instanceof Error ? error.message : String(error);
-    setCatalogStatus(message, true);
+    setCatalogStatus(message, !isAbortError(error) || timedOut);
   } finally {
     window.clearTimeout(timer);
+    if (activeCatalogController === controller) activeCatalogController = null;
     setCatalogBusy(false);
   }
 }
@@ -2374,6 +2400,12 @@ catalogFileType.addEventListener('change', updateCatalogGeography);
 catalogForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void searchCatalog();
+});
+catalogCancelButton.addEventListener('click', () => {
+  if (!activeCatalogController) return;
+  catalogCancelButton.disabled = true;
+  setCatalogStatus('Cancelando a operação…');
+  activeCatalogController.abort();
 });
 catalogCacheClear.addEventListener('click', () => {
   if (!window.confirm('Remover todos os downloads oficiais salvos neste aparelho?')) return;
