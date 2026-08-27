@@ -17,6 +17,9 @@ export interface AnalysisRecipeV1 {
   sourceHints: Array<Pick<SourceFingerprint, 'name' | 'sha256' | 'size'>>;
   view?: {
     chartType?: 'horizontal-bar' | 'vertical-bar' | 'line' | 'area' | 'pie' | 'points' | 'bubbles' | 'arrows';
+    mapClassification?: 'continuous' | 'equal-interval' | 'quantile';
+    mapClassCount?: number;
+    mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
   };
 }
 
@@ -83,6 +86,18 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   const allowedChartTypes = new Set(['horizontal-bar', 'vertical-bar', 'line', 'area', 'pie', 'points', 'bubbles', 'arrows']);
   if (parsed.view?.chartType && !allowedChartTypes.has(parsed.view.chartType)) {
     throw new Error('invalid chart type in TabWin Web recipe');
+  }
+  const allowedMapClassifications = new Set(['continuous', 'equal-interval', 'quantile']);
+  if (parsed.view?.mapClassification && !allowedMapClassifications.has(parsed.view.mapClassification)) {
+    throw new Error('invalid map classification in TabWin Web recipe');
+  }
+  if (parsed.view?.mapClassCount !== undefined
+    && (!Number.isInteger(parsed.view.mapClassCount) || parsed.view.mapClassCount < 2 || parsed.view.mapClassCount > 9)) {
+    throw new Error('invalid map class count in TabWin Web recipe');
+  }
+  const allowedMapPalettes = new Set(['green', 'blue', 'orange', 'purple']);
+  if (parsed.view?.mapPalette && !allowedMapPalettes.has(parsed.view.mapPalette)) {
+    throw new Error('invalid map palette in TabWin Web recipe');
   }
   return parsed as AnalysisRecipeV1;
 }

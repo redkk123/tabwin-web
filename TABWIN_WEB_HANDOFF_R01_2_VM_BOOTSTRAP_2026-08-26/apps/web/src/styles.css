@@ -156,11 +156,21 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .bar-value { text-align: right; color: var(--ink); font-weight: 750; font-variant-numeric: tabular-nums; }
 @keyframes grow { from { transform: scaleX(0); } }
 .map-stage { position: relative; min-height: 390px; overflow: hidden; border-radius: 14px; background: linear-gradient(145deg, #eaf4f0, #dcebe6); }
-#map-canvas { display: block; width: 100%; height: 480px; }
+.map-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 10px; }
+.map-toolbar label { display: grid; gap: 5px; color: #60757b; font-size: 10px; font-weight: 700; }
+.map-toolbar select { min-width: 110px; padding: 7px 9px; border: 1px solid #d5e0dd; border-radius: 8px; color: var(--ink); background: #fff; }
+.map-zoom-actions { margin-left: auto; }
+.map-zoom-actions button { min-width: 34px; }
+#map-canvas { display: block; width: 100%; height: 480px; cursor: grab; touch-action: none; }
+#map-canvas:active { cursor: grabbing; }
 .map-message { position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; text-align: center; color: #6d8284; font-size: 12px; }
 .map-legend { position: absolute; right: 14px; bottom: 14px; min-width: 150px; padding: 12px; border: 1px solid rgba(255,255,255,.7); border-radius: 10px; background: rgba(255,255,255,.88); box-shadow: 0 8px 25px rgba(25,58,63,.12); font-size: 9px; backdrop-filter: blur(10px); }
 .legend-gradient { height: 8px; margin: 7px 0 5px; border-radius: 5px; background: linear-gradient(90deg, #dceae5, #61d3ae, #0a6654); }
 .legend-range { display: flex; justify-content: space-between; gap: 10px; color: #526c70; }
+.legend-classes { display: grid; gap: 4px; margin-top: 7px; }
+.legend-class { display: grid; grid-template-columns: 12px 1fr; gap: 6px; align-items: center; }
+.legend-swatch { width: 12px; height: 8px; border-radius: 2px; }
+.map-tooltip { position: absolute; z-index: 2; max-width: 230px; padding: 8px 10px; pointer-events: none; border-radius: 8px; color: #fff; background: rgba(8,32,38,.9); box-shadow: 0 7px 20px rgba(8,32,38,.25); font-size: 10px; line-height: 1.4; }
 .audit-intro { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 5px 2px 13px; font-size: 11px; }
 .audit-intro p { margin: 0; color: #738489; }
 .audit-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px #dcf7ee; }

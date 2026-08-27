@@ -179,11 +179,31 @@
           </div>
 
           <div class="view-panel map-panel" id="map-view" data-panel="map" hidden>
-            <div class="panel-actions"><button class="secondary-button" id="map-png-button" type="button" disabled>Baixar mapa PNG</button></div>
+            <div class="map-toolbar">
+              <label>Método<select id="map-classification">
+                <option value="continuous">Contínuo</option>
+                <option value="equal-interval">Intervalos iguais</option>
+                <option value="quantile">Quantis</option>
+              </select></label>
+              <label>Classes<select id="map-class-count">
+                <option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option>
+              </select></label>
+              <label>Paleta<select id="map-palette">
+                <option value="green">Verde</option><option value="blue">Azul</option>
+                <option value="orange">Laranja</option><option value="purple">Roxo</option>
+              </select></label>
+              <div class="panel-actions map-zoom-actions">
+                <button class="secondary-button" id="map-zoom-out" type="button" title="Afastar">−</button>
+                <button class="secondary-button" id="map-zoom-reset" type="button">Ajustar</button>
+                <button class="secondary-button" id="map-zoom-in" type="button" title="Aproximar">+</button>
+                <button class="secondary-button" id="map-png-button" type="button" disabled>PNG</button>
+              </div>
+            </div>
             <div class="map-stage">
               <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
               <div class="map-message" id="map-message">Escolha uma variável geográfica para criar o mapa.</div>
               <div class="map-legend" id="map-legend" hidden></div>
+              <output class="map-tooltip" id="map-tooltip" hidden></output>
             </div>
           </div>
 

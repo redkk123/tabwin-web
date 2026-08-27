@@ -1,8 +1,8 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R03.0-chart-families
+**Revision:** R03.1-interactive-map-classification
 **Date:** 2026-08-27
-**Status:** Browser workbench, official DATASUS acquisition, recipes and eight chart families implemented; G001 Windows golden capture still pending
+**Status:** Browser workbench, official acquisition, recipes, eight chart families and interactive map classification implemented; G001 Windows golden capture still pending
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
@@ -23,7 +23,7 @@ official HTTPS ZIP, expand it locally and open its DBC. The live verifier
 confirmed `RDAC2401.dbc` (313,213 bytes; 4,315 records) and current
 `TAB_SIH.zip` (886 entries including `RD2008.DEF` and `COMPLEX2.CNV`).
 
-Current portable verification is 35/35 tests plus web typecheck and production
+Current portable verification is 38/38 tests plus web typecheck and production
 build. Full evidence and limitations are in
 `docs/handoffs/R02_1_OFFICIAL_DATASUS_ACQUISITION_AND_EXPORT_REPORT.md`.
 No compatibility golden was changed. The Windows TabWin 4.15 G001 capture
@@ -47,6 +47,12 @@ points, bubbles and arrows. The selected family persists in recipes and every
 chart exports standalone SVG or a 2,000 x 1,000 PNG. These are modern
 presentation defaults, not a pixel-equivalence claim. Evidence is in
 `docs/handoffs/R03_0_CHART_FAMILIES_REPORT.md`.
+
+R03.1 added continuous, equal-interval and quantile thematic-map modes, class
+count and palette controls, recipe/audit persistence, zoom, pan, reset and
+local polygon hit testing. These are explicitly modern presentation modes;
+legacy class endpoint and rounding equivalence remain unclaimed. Evidence is
+in `docs/handoffs/R03_1_INTERACTIVE_MAP_CLASSIFICATION_REPORT.md`.
 
 ---
 

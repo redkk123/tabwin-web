@@ -38,6 +38,11 @@ A user can open official DATASUS microdata locally, reproduce a familiar TabWin 
 All eight cataloged chart families now have initial SVG renderers and PNG/SVG
 export. Advanced axes, styling, zoom and golden display cases remain pending.
 
+The initial map surface now supports continuous/equal-interval/quantile
+classification, class counts, palettes, zoom/pan/reset and local area
+identification. Manual breaks, layer composition, flow maps and geodata export
+remain pending.
+
 ### 4. Audit
 
 Every result should expose:

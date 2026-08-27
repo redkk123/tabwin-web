@@ -110,11 +110,11 @@ visual sorting or formatting.
 | Open TabWin `.MAP` | **Web / Parsed** | Version 1.00 parser validated on the supplied UF and 5,570-municipality maps. |
 | Choropleth from table | **Web** | Canvas renderer associates result keys or labels locally. |
 | Bundled municipality and UF maps | **Web** | A DBC geographic row can map without a second download. |
-| Equal interval / equal frequency classes | **Cataloged** | Current first slice uses a continuous square-root scale. Legacy class semantics pending. |
-| Edit class count, limits, colors and palette | **Cataloged** | UI and recipe representation pending. |
-| Zoom, pan and repaint | **Cataloged** | Responsive fit exists; interactive navigation pending. |
+| Equal interval / equal frequency classes | **Web** | Continuous, equal-interval and quantile/equal-frequency presentations are explicit; exact legacy break/rounding semantics remain pending. |
+| Edit class count, limits, colors and palette | **Web / Partial** | Class count and four accessible palettes persist in recipes; manual limits and individual colors remain pending. |
+| Zoom, pan and repaint | **Web** | Buttons, wheel/touchpad zoom, pointer/touch pan and reset are available. |
 | Borders, seats, names and values | **Parsed / Cataloged** | MAP seat/type and label coordinates retained; display controls pending. |
-| Select areas / obtain information | **Cataloged** | Hit testing and selection-to-filter bridge pending. |
+| Select areas / obtain information | **Web / Partial** | Local polygon hit testing identifies name/code and associated value; selection-to-filter bridge remains pending. |
 | Add/remove layers and new base map | **Cataloged** | Must remain local-first. |
 | Distance column | **Cataloged** | Geographic formula and projection handling require oracle evidence. |
 | Origin–destination flows | **Cataloged** | Help confirms flow table, arrows, origin/destination totals and sector charts. |

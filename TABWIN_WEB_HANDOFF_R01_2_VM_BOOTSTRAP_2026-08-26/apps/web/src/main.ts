@@ -23,7 +23,9 @@ import {
   parseTabwinMap,
   type CnvDefinition,
   type DefDefinition,
+  type MapCoordinate,
   type TabwinMapDefinition,
+  type TabwinMapObject,
 } from '../../../packages/formats/src/index.ts';
 import {
   DATASUS_SYSTEMS,
@@ -46,6 +48,11 @@ import {
 import { readCachedArchive, writeCachedArchive } from './archive-cache.ts';
 import { renderChartSvg } from './chart-renderer.ts';
 import type { ChartType } from '../../../packages/visualization/src/chart-model.ts';
+import {
+  createMapScale,
+  type MapClassification,
+  type MapPalette,
+} from '../../../packages/visualization/src/map-scale.ts';
 import './styles.css';
 
 type ViewName = 'table' | 'chart' | 'map' | 'audit';
@@ -97,6 +104,12 @@ const chartPngButton = element<HTMLButtonElement>('#chart-png-button');
 const chartSvgButton = element<HTMLButtonElement>('#chart-svg-button');
 const chartType = element<HTMLSelectElement>('#chart-type');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
+const mapClassification = element<HTMLSelectElement>('#map-classification');
+const mapClassCount = element<HTMLSelectElement>('#map-class-count');
+const mapPalette = element<HTMLSelectElement>('#map-palette');
+const mapZoomOut = element<HTMLButtonElement>('#map-zoom-out');
+const mapZoomReset = element<HTMLButtonElement>('#map-zoom-reset');
+const mapZoomIn = element<HTMLButtonElement>('#map-zoom-in');
 const resultKicker = element<HTMLElement>('#result-kicker');
 const resultTitle = element<HTMLElement>('#result-title');
 const datasetStats = element<HTMLElement>('#dataset-stats');
@@ -108,6 +121,7 @@ const auditOutput = element<HTMLElement>('#audit-output');
 const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
 const mapMessage = element<HTMLElement>('#map-message');
 const mapLegend = element<HTMLElement>('#map-legend');
+const mapTooltip = element<HTMLOutputElement>('#map-tooltip');
 const toast = element<HTMLElement>('#toast');
 const aboutDialog = element<HTMLDialogElement>('#about-dialog');
 const catalogDialog = element<HTMLDialogElement>('#catalog-dialog');
@@ -140,6 +154,12 @@ const loadedSources: LoadedSource[] = [];
 let activeFilterConversion = '';
 let activeFilterStartPosition: number | undefined;
 let configuredFilters: FilterSpec[] = [];
+let mapZoom = 1;
+let mapPanX = 0;
+let mapPanY = 0;
+let mapProjection: { west: number; north: number; fit: number; offsetX: number; offsetY: number } | null = null;
+let lastMapValues = new Map<TabwinMapObject, number | undefined>();
+let mapDrag: { pointerId: number; x: number; y: number } | null = null;
 
 function showToast(message: string, isError = false): void {
   window.clearTimeout(toastTimer);
@@ -641,7 +661,7 @@ function renderChart(result: TabulationResult): void {
 
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.6.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.7.0-dev', compatibilityProfile: 'tabwin-4.15' },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -650,7 +670,14 @@ function renderAudit(): void {
       warnings: activeDef.warnings,
       unresolvedLines: activeDef.unknownLines.length,
     } : null,
-    map: activeMap ? { source: activeMapSource, objects: activeMap.objects.length, version: activeMap.version } : null,
+    map: activeMap ? {
+      source: activeMapSource,
+      objects: activeMap.objects.length,
+      version: activeMap.version,
+      classification: mapClassification.value,
+      classCount: Number(mapClassCount.value),
+      palette: mapPalette.value,
+    } : null,
     queryPlan: currentPlan,
     result: currentResult ? {
       recordsSeen: currentResult.recordsSeen,
@@ -667,13 +694,38 @@ function normalizeLabel(value: string): string {
   return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLowerCase();
 }
 
-function colorFor(value: number | undefined, max: number): string {
-  if (value === undefined) return '#dfe8e5';
-  const ratio = max > 0 ? Math.sqrt(Math.max(0, value) / max) : 0;
-  const start = [185, 232, 217];
-  const end = [6, 96, 78];
-  const rgb = start.map((channel, index) => Math.round(channel + ((end[index] ?? channel) - channel) * ratio));
-  return `rgb(${rgb.join(',')})`;
+function valueForMapObject(object: TabwinMapObject, values: Map<string, number>): number | undefined {
+  return values.get(object.geocode.trim().toLowerCase()) ?? values.get(normalizeLabel(object.name));
+}
+
+function pointInRing(point: MapCoordinate, ring: MapCoordinate[]): boolean {
+  let inside = false;
+  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
+    const currentPoint = ring[index];
+    const previousPoint = ring[previous];
+    if (!currentPoint || !previousPoint) continue;
+    const intersects = (currentPoint.y > point.y) !== (previousPoint.y > point.y)
+      && point.x < (previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)
+        / (previousPoint.y - currentPoint.y) + currentPoint.x;
+    if (intersects) inside = !inside;
+  }
+  return inside;
+}
+
+function objectAtCanvasPoint(canvasX: number, canvasY: number): TabwinMapObject | undefined {
+  if (!activeMap || !mapProjection) return undefined;
+  const point = {
+    x: (canvasX - mapProjection.offsetX) / mapProjection.fit + mapProjection.west,
+    y: mapProjection.north - (canvasY - mapProjection.offsetY) / mapProjection.fit,
+  };
+  for (let index = activeMap.objects.length - 1; index >= 0; index--) {
+    const object = activeMap.objects[index];
+    if (!object || (object.type !== 'polygon' && object.type !== 'polygon-with-seat')) continue;
+    let inside = false;
+    for (const part of object.parts) if (pointInRing(point, part)) inside = !inside;
+    if (inside) return object;
+  }
+  return undefined;
 }
 
 function renderMap(): void {
@@ -694,11 +746,13 @@ function renderMap(): void {
   const sourceWidth = east - west;
   const sourceHeight = north - south;
   const padding = 18;
-  const fit = Math.min((cssWidth - padding * 2) / sourceWidth, (cssHeight - padding * 2) / sourceHeight);
+  const baseFit = Math.min((cssWidth - padding * 2) / sourceWidth, (cssHeight - padding * 2) / sourceHeight);
+  const fit = baseFit * mapZoom;
   const drawnWidth = sourceWidth * fit;
   const drawnHeight = sourceHeight * fit;
-  const offsetX = (cssWidth - drawnWidth) / 2;
-  const offsetY = (cssHeight - drawnHeight) / 2;
+  const offsetX = (cssWidth - drawnWidth) / 2 + mapPanX;
+  const offsetY = (cssHeight - drawnHeight) / 2 + mapPanY;
+  mapProjection = { west, north, fit, offsetX, offsetY };
   const project = (x: number, y: number) => ({
     x: offsetX + (x - west) * fit,
     y: offsetY + (north - y) * fit,
@@ -710,15 +764,21 @@ function renderMap(): void {
     values.set(row.key.trim().toLowerCase(), value);
     values.set(normalizeLabel(row.label), value);
   });
-  const max = Math.max(...values.values(), 0);
+  const scaleModel = createMapScale(
+    values.values(),
+    mapClassification.value as MapClassification,
+    Number(mapClassCount.value),
+    mapPalette.value as MapPalette,
+  );
   let matched = 0;
+  lastMapValues = new Map();
 
   context.lineJoin = 'round';
   context.lineWidth = Math.max(.28, .45 / scale);
   context.strokeStyle = 'rgba(49, 91, 86, .48)';
   for (const object of activeMap.objects) {
-    if (object.type !== 'polygon' && object.type !== 'polygon-with-seat') continue;
-    const value = values.get(object.geocode.trim().toLowerCase()) ?? values.get(normalizeLabel(object.name));
+    const value = valueForMapObject(object, values);
+    lastMapValues.set(object, value);
     if (value !== undefined) matched++;
     context.beginPath();
     for (const part of object.parts) {
@@ -731,11 +791,23 @@ function renderMap(): void {
         const next = project(point.x, point.y);
         context.lineTo(next.x, next.y);
       }
-      context.closePath();
+      if (object.type === 'polygon' || object.type === 'polygon-with-seat') context.closePath();
     }
-    context.fillStyle = colorFor(value, max);
-    context.fill('evenodd');
-    context.stroke();
+    if (object.type === 'polygon' || object.type === 'polygon-with-seat') {
+      context.fillStyle = scaleModel.colorFor(value);
+      context.fill('evenodd');
+      context.stroke();
+    } else if (object.type === 'line') {
+      context.strokeStyle = scaleModel.colorFor(value);
+      context.lineWidth = 1.4;
+      context.stroke();
+      context.strokeStyle = 'rgba(49, 91, 86, .48)';
+    } else {
+      const point = project(object.labelPoint.x, object.labelPoint.y);
+      context.fillStyle = scaleModel.colorFor(value);
+      context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
+      context.fill();
+    }
   }
 
   mapMessage.hidden = matched > 0;
@@ -748,14 +820,31 @@ function renderMap(): void {
   title.textContent = `${integerFormat.format(matched)} áreas associadas`;
   const gradient = document.createElement('div');
   gradient.className = 'legend-gradient';
+  gradient.style.background = `linear-gradient(90deg, ${scaleModel.classes[0]?.color ?? '#dfe8e5'}, ${scaleModel.classes.at(-1)?.color ?? '#08634f'})`;
   const range = document.createElement('div');
   range.className = 'legend-range';
   const low = document.createElement('span');
   const high = document.createElement('span');
-  low.textContent = '0';
-  high.textContent = numberFormat.format(max);
+  low.textContent = numberFormat.format(scaleModel.min);
+  high.textContent = numberFormat.format(scaleModel.max);
   range.append(low, high);
   mapLegend.append(title, gradient, range);
+  if (mapClassification.value !== 'continuous') {
+    const classList = document.createElement('div');
+    classList.className = 'legend-classes';
+    for (const item of scaleModel.classes) {
+      const row = document.createElement('div');
+      row.className = 'legend-class';
+      const swatch = document.createElement('span');
+      swatch.className = 'legend-swatch';
+      swatch.style.background = item.color;
+      const label = document.createElement('span');
+      label.textContent = `${numberFormat.format(item.lower)} – ${numberFormat.format(item.upper)}`;
+      row.append(swatch, label);
+      classList.append(row);
+    }
+    mapLegend.append(classList);
+  }
   mapPngButton.disabled = matched === 0;
   renderAudit();
 }
@@ -1034,7 +1123,12 @@ function saveRecipe(): void {
       sha256: datasetFingerprint.sha256,
       size: datasetFingerprint.size,
     }],
-    view: { chartType: chartType.value as ChartType },
+    view: {
+      chartType: chartType.value as ChartType,
+      mapClassification: mapClassification.value as MapClassification,
+      mapClassCount: Number(mapClassCount.value),
+      mapPalette: mapPalette.value as MapPalette,
+    },
   };
   downloadBlob(
     new Blob([serializeRecipe(recipe)], { type: 'application/json;charset=utf-8' }),
@@ -1061,6 +1155,10 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.spec.measure.field) measureField.value = recipe.spec.measure.field;
   suppressZero.checked = recipe.spec.suppressZeroRows ?? false;
   if (recipe.view?.chartType) chartType.value = recipe.view.chartType;
+  if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
+  if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
+  if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
+  mapClassCount.disabled = mapClassification.value === 'continuous';
   rowConversion.value = '';
   if (recipe.spec.rows.conversionId) {
     const loaded = conversionNameInRegistry(recipe.spec.rows.conversionId);
@@ -1106,6 +1204,35 @@ function exportMapPng(): void {
   mapCanvas.toBlob((blob) => {
     if (blob) downloadBlob(blob, `${exportBaseName()}-mapa.png`);
   }, 'image/png');
+}
+
+function updateMapZoom(next: number): void {
+  mapZoom = Math.min(8, Math.max(1, next));
+  if (mapZoom === 1) {
+    mapPanX = 0;
+    mapPanY = 0;
+  }
+  if (activeMap && currentResult) renderMap();
+}
+
+function canvasPointer(event: PointerEvent | WheelEvent): { x: number; y: number } {
+  const bounds = mapCanvas.getBoundingClientRect();
+  return { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+}
+
+function showMapTooltip(event: PointerEvent): void {
+  if (mapDrag) return;
+  const point = canvasPointer(event);
+  const object = objectAtCanvasPoint(point.x, point.y);
+  if (!object) {
+    mapTooltip.hidden = true;
+    return;
+  }
+  const value = lastMapValues.get(object);
+  mapTooltip.textContent = `${object.name || object.geocode} · ${value === undefined ? 'sem valor associado' : numberFormat.format(value)}`;
+  mapTooltip.style.left = `${Math.min(point.x + 12, mapCanvas.clientWidth - 240)}px`;
+  mapTooltip.style.top = `${Math.max(8, point.y - 34)}px`;
+  mapTooltip.hidden = false;
 }
 
 function serializedChartSvg(): string | null {
@@ -1214,6 +1341,44 @@ chartSvgButton.addEventListener('click', exportChartSvg);
 chartPngButton.addEventListener('click', () => void exportChartPng().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
 mapPngButton.addEventListener('click', exportMapPng);
+for (const control of [mapClassification, mapClassCount, mapPalette]) {
+  control.addEventListener('change', () => {
+    mapClassCount.disabled = mapClassification.value === 'continuous';
+    if (activeMap && currentResult) renderMap();
+  });
+}
+mapClassCount.disabled = mapClassification.value === 'continuous';
+mapZoomOut.addEventListener('click', () => updateMapZoom(mapZoom / 1.5));
+mapZoomReset.addEventListener('click', () => updateMapZoom(1));
+mapZoomIn.addEventListener('click', () => updateMapZoom(mapZoom * 1.5));
+mapCanvas.addEventListener('wheel', (event) => {
+  event.preventDefault();
+  updateMapZoom(mapZoom * (event.deltaY < 0 ? 1.2 : 1 / 1.2));
+}, { passive: false });
+mapCanvas.addEventListener('pointerdown', (event) => {
+  const point = canvasPointer(event);
+  mapDrag = { pointerId: event.pointerId, x: point.x, y: point.y };
+  mapCanvas.setPointerCapture(event.pointerId);
+  mapTooltip.hidden = true;
+});
+mapCanvas.addEventListener('pointermove', (event) => {
+  if (!mapDrag || mapDrag.pointerId !== event.pointerId) {
+    showMapTooltip(event);
+    return;
+  }
+  const point = canvasPointer(event);
+  mapPanX += point.x - mapDrag.x;
+  mapPanY += point.y - mapDrag.y;
+  mapDrag = { ...mapDrag, x: point.x, y: point.y };
+  if (activeMap && currentResult) renderMap();
+});
+mapCanvas.addEventListener('pointerup', (event) => {
+  if (mapDrag?.pointerId === event.pointerId) mapDrag = null;
+  mapCanvas.releasePointerCapture(event.pointerId);
+  showMapTooltip(event);
+});
+mapCanvas.addEventListener('pointercancel', () => { mapDrag = null; });
+mapCanvas.addEventListener('pointerleave', () => { if (!mapDrag) mapTooltip.hidden = true; });
 element<HTMLButtonElement>('#about-button').addEventListener('click', () => aboutDialog.showModal());
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());
 aboutDialog.addEventListener('click', (event) => {

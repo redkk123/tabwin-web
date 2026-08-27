@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R03.0 chart-family milestone.
+Verified on 2026-08-27 through the R03.1 interactive-map milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 35 tests;
-- 35 passed;
+- 38 tests;
+- 38 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -59,3 +59,9 @@ result mutation and first-to-last arrow derivation/order. Recipe validation
 also rejects unknown chart types. SVG renderer behavior is covered by browser
 typechecking and the production build; dedicated visual regression cases are
 still pending.
+
+R03.1 adds deterministic tests for equal-interval and quantile map classes,
+stable equal-value coloring and source-array immutability. Browser typechecking,
+the production build and a local interface inspection cover the new map
+toolbar and interaction bindings; automated pointer-level browser tests remain
+future work.

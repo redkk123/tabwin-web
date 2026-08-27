@@ -1,10 +1,10 @@
 {
-  "revision": "R03.0-chart-families",
+  "revision": "R03.1-interactive-map-classification",
   "date": "2026-08-27",
-  "phase": "official-acquisition-reproducible-workbench-and-eight-chart-families-implemented",
+  "phase": "reproducible-workbench-chart-families-and-interactive-map-classification-implemented",
   "tests": {
-    "total": 35,
-    "passed": 35,
+    "total": 38,
+    "passed": 38,
     "failed": 0,
     "command": "npm run check"
   },
@@ -30,7 +30,10 @@
     "recipe-plan-and-fingerprint-validation",
     "eight-chart-family-svg-renderers",
     "chart-svg-and-png-export",
-    "recipe-chart-view-persistence"
+    "recipe-chart-view-persistence",
+    "map-continuous-equal-interval-and-quantile-classification",
+    "map-class-count-and-palette-recipe-persistence",
+    "map-zoom-pan-reset-and-polygon-hit-testing"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -51,7 +54,7 @@
     "DEF-X-directive-semantics",
     "TAB-replay",
     "advanced-chart-editing-axes-zoom-and-print",
-    "legacy-map-classification-and-interaction",
+    "legacy-map-manual-breaks-label-layers-and-selection-bridge",
     "xlsx-parquet-svg-geojson-kml-exports",
     "golden-equivalence-claim"
   ],
