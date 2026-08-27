@@ -67,9 +67,11 @@ explicitly routed through a manual auxiliary picker—never guessed.
 ### R06.0 — multi-file and period tabulation
 
 - open a list of compatible DBC/DBF files;
+- select and acquire multiple UFs and multiple available periods in one
+  official-source request flow, matching the useful SINAN/TabNet workflow;
 - schema compatibility check and per-source fingerprints;
 - deterministic source order and duplicate handling;
-- period/source dimension as an explicit option;
+- period, UF and source dimensions as explicit options;
 - oracle cases for separate(A)+separate(B) versus combined(A,B).
 
 ### R06.1 — remaining dimension and selection semantics
