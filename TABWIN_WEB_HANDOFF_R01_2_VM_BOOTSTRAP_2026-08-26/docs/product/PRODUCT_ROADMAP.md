@@ -33,7 +33,10 @@ A user can open official DATASUS microdata locally, reproduce a familiar TabWin 
 - charts;
 - map;
 - origin–destination flows;
-- export CSV/XML/PNG (**initial Web slice complete**), then XLSX/Parquet/SVG as appropriate.
+- export CSV/XML/PNG/SVG (**initial Web slice complete**), then XLSX/Parquet and map-oriented vector/geodata formats as appropriate.
+
+All eight cataloged chart families now have initial SVG renderers and PNG/SVG
+export. Advanced axes, styling, zoom and golden display cases remain pending.
 
 ### 4. Audit
 

@@ -89,19 +89,19 @@ visual sorting or formatting.
 | Chart or operation | Status |
 | --- | --- |
 | Horizontal bars | **Web** | First responsive chart view, driven by the current `TabulationResult`. |
-| Lines | **Cataloged** | Confirmed by help and toolbar. |
-| Vertical bars | **Cataloged** | Confirmed by help and toolbar. |
-| Pie / sectors | **Cataloged** | Confirmed by help and toolbar. |
-| Areas | **Cataloged** | Confirmed by help and toolbar. |
-| Points / scatter | **Cataloged** | Confirmed by help and toolbar. |
-| Bubbles | **Cataloged** | Confirmed by help. |
-| Arrows | **Cataloged** | Distinct from map flow arrows. |
+| Lines | **Web** | SVG renderer over current result; legacy display options still need oracle cases. |
+| Vertical bars | **Web** | SVG renderer over current result. |
+| Pie / sectors | **Web** | Top positive categories with explicit percentages. |
+| Areas | **Web** | SVG area/line renderer over source row order. |
+| Points / scatter | **Web** | Point view over row position and value; expert axis binding remains pending. |
+| Bubbles | **Web** | Bubble size derives from result magnitude. |
+| Arrows | **Web** | Requires two or more columns and displays first-to-last change; distinct from map flows. |
 | Empty chart / add chart type | **Cataloged** | Composition workflow pending. |
 | Edit background, title font, legend and display options | **Cataloged** | Will be expressed as portable view settings. |
 | Edit axes, zoom and zoom reset | **Cataloged** | Touch/keyboard behavior required on web. |
 | 3D effect | **Cataloged / likely historical** | Compatibility option only if it changes an exported artifact users still need. |
 | Background image | **Cataloged** | Local-only image input if retained. |
-| Copy, print and save chart | **Web (PNG) / Cataloged** | Current horizontal bar chart exports PNG; SVG, print and other chart families remain pending. |
+| Copy, print and save chart | **Web (PNG/SVG) / Cataloged** | Every current chart family exports PNG and SVG; browser print remains pending. |
 
 ## 6. Maps and geographic analysis
 

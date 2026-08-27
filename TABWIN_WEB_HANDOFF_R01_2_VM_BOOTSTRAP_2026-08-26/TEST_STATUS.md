@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R02.3 recipe/multiple-filter milestone.
+Verified on 2026-08-27 through the R03.0 chart-family milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 33 tests;
-- 33 passed;
+- 35 tests;
+- 35 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -53,3 +53,9 @@ new controls; dedicated interaction tests remain future browser-test work.
 R02.3 adds tests for invalid recipe plans/fingerprints and deterministic
 intersection of simultaneous filters. Portable recipe round-trip coverage
 remains passing.
+
+R03.0 adds pure visualization-model tests for ranked row totals without
+result mutation and first-to-last arrow derivation/order. Recipe validation
+also rejects unknown chart types. SVG renderer behavior is covered by browser
+typechecking and the production build; dedicated visual regression cases are
+still pending.

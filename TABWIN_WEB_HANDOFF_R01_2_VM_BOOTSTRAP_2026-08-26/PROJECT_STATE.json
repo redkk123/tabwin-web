@@ -1,10 +1,10 @@
 {
-  "revision": "R02.3-recipes-multi-filter",
+  "revision": "R03.0-chart-families",
   "date": "2026-08-27",
-  "phase": "official-acquisition-reproducible-recipes-and-multi-filter-workbench-implemented",
+  "phase": "official-acquisition-reproducible-workbench-and-eight-chart-families-implemented",
   "tests": {
-    "total": 31,
-    "passed": 31,
+    "total": 35,
+    "passed": 35,
     "failed": 0,
     "command": "npm run check"
   },
@@ -27,7 +27,10 @@
     "single-raw-or-cnv-backed-inclusion-filter-ui",
     "multiple-simultaneous-inclusion-filters",
     "portable-recipe-save-open-with-fingerprints",
-    "recipe-plan-and-fingerprint-validation"
+    "recipe-plan-and-fingerprint-validation",
+    "eight-chart-family-svg-renderers",
+    "chart-svg-and-png-export",
+    "recipe-chart-view-persistence"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -47,7 +50,7 @@
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",
-    "all-chart-families",
+    "advanced-chart-editing-axes-zoom-and-print",
     "legacy-map-classification-and-interaction",
     "xlsx-parquet-svg-geojson-kml-exports",
     "golden-equivalence-claim"

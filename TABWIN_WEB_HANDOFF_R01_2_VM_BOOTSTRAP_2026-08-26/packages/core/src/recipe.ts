@@ -15,6 +15,9 @@ export interface AnalysisRecipeV1 {
   spec: TabulationSpec;
   conversions: ConversionFingerprint[];
   sourceHints: Array<Pick<SourceFingerprint, 'name' | 'sha256' | 'size'>>;
+  view?: {
+    chartType?: 'horizontal-bar' | 'vertical-bar' | 'line' | 'area' | 'pie' | 'points' | 'bubbles' | 'arrows';
+  };
 }
 
 export interface RunManifestV1 {
@@ -76,6 +79,10 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
         typeof source.size !== 'number') {
       throw new Error('invalid source fingerprint in TabWin Web recipe');
     }
+  }
+  const allowedChartTypes = new Set(['horizontal-bar', 'vertical-bar', 'line', 'area', 'pie', 'points', 'bubbles', 'arrows']);
+  if (parsed.view?.chartType && !allowedChartTypes.has(parsed.view.chartType)) {
+    throw new Error('invalid chart type in TabWin Web recipe');
   }
   return parsed as AnalysisRecipeV1;
 }

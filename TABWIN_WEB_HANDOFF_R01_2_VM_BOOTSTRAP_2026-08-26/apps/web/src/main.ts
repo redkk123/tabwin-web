@@ -44,6 +44,8 @@ import {
   type ExtractedArchiveFile,
 } from './datasus-client.ts';
 import { readCachedArchive, writeCachedArchive } from './archive-cache.ts';
+import { renderChartSvg } from './chart-renderer.ts';
+import type { ChartType } from '../../../packages/visualization/src/chart-model.ts';
 import './styles.css';
 
 type ViewName = 'table' | 'chart' | 'map' | 'audit';
@@ -92,6 +94,8 @@ const runButton = element<HTMLButtonElement>('#run-button');
 const exportCsvButton = element<HTMLButtonElement>('#export-csv-button');
 const exportXmlButton = element<HTMLButtonElement>('#export-xml-button');
 const chartPngButton = element<HTMLButtonElement>('#chart-png-button');
+const chartSvgButton = element<HTMLButtonElement>('#chart-svg-button');
+const chartType = element<HTMLSelectElement>('#chart-type');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const resultKicker = element<HTMLElement>('#result-kicker');
 const resultTitle = element<HTMLElement>('#result-title');
@@ -557,6 +561,7 @@ async function runAnalysis(): Promise<void> {
     exportCsvButton.disabled = false;
     exportXmlButton.disabled = false;
     chartPngButton.disabled = false;
+    chartSvgButton.disabled = false;
     saveRecipeButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map') await ensureMap();
@@ -631,35 +636,12 @@ function renderTable(result: TabulationResult): void {
 
 function renderChart(result: TabulationResult): void {
   chart.replaceChildren();
-  const ranked = result.rows
-    .map((row, index) => ({ label: row.label, value: cellValue(result, index) }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 24);
-  const max = Math.max(...ranked.map((item) => item.value), 1);
-  for (const item of ranked) {
-    const row = document.createElement('div');
-    row.className = 'bar-row';
-    const label = document.createElement('div');
-    label.className = 'bar-label';
-    label.title = item.label;
-    label.textContent = item.label;
-    const track = document.createElement('div');
-    track.className = 'bar-track';
-    const fill = document.createElement('div');
-    fill.className = 'bar-fill';
-    fill.style.width = `${Math.max(0.5, (item.value / max) * 100)}%`;
-    track.append(fill);
-    const value = document.createElement('div');
-    value.className = 'bar-value';
-    value.textContent = numberFormat.format(item.value);
-    row.append(label, track, value);
-    chart.append(row);
-  }
+  chart.append(renderChartSvg(result, chartType.value as ChartType, resultTitle.textContent ?? rowField.value));
 }
 
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.5.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.6.0-dev', compatibilityProfile: 'tabwin-4.15' },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -1052,6 +1034,7 @@ function saveRecipe(): void {
       sha256: datasetFingerprint.sha256,
       size: datasetFingerprint.size,
     }],
+    view: { chartType: chartType.value as ChartType },
   };
   downloadBlob(
     new Blob([serializeRecipe(recipe)], { type: 'application/json;charset=utf-8' }),
@@ -1077,6 +1060,7 @@ async function openRecipe(file: File): Promise<void> {
   measureKind.value = recipe.spec.measure.kind;
   if (recipe.spec.measure.field) measureField.value = recipe.spec.measure.field;
   suppressZero.checked = recipe.spec.suppressZeroRows ?? false;
+  if (recipe.view?.chartType) chartType.value = recipe.view.chartType;
   rowConversion.value = '';
   if (recipe.spec.rows.conversionId) {
     const loaded = conversionNameInRegistry(recipe.spec.rows.conversionId);
@@ -1124,47 +1108,43 @@ function exportMapPng(): void {
   }, 'image/png');
 }
 
-function exportChartPng(): void {
-  if (!currentResult) return;
-  const ranked = currentResult.rows
-    .map((row, index) => ({ label: row.label, value: cellValue(currentResult!, index) }))
-    .sort((a, b) => b.value - a.value)
-    .slice(0, 24);
-  const width = 1400;
-  const rowHeight = 48;
-  const height = 130 + ranked.length * rowHeight;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const context = canvas.getContext('2d');
-  if (!context) return;
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, width, height);
-  context.fillStyle = '#102c39';
-  context.font = '700 28px system-ui, sans-serif';
-  context.fillText(resultTitle.textContent ?? rowField.value, 42, 48);
-  context.fillStyle = '#63767d';
-  context.font = '16px system-ui, sans-serif';
-  context.fillText(`${datasetName} · ${new Date().toLocaleString('pt-BR')}`, 42, 78);
-  const max = Math.max(...ranked.map((item) => item.value), 1);
-  ranked.forEach((item, index) => {
-    const y = 112 + index * rowHeight;
-    const label = item.label.length > 34 ? `${item.label.slice(0, 33)}…` : item.label;
-    context.fillStyle = '#3c5861';
-    context.font = '15px system-ui, sans-serif';
-    context.fillText(label, 42, y + 21);
-    context.fillStyle = '#eff4f2';
-    context.fillRect(360, y, 850, 28);
-    context.fillStyle = '#178b71';
-    context.fillRect(360, y, Math.max(2, (item.value / max) * 850), 28);
-    context.fillStyle = '#102c39';
-    context.font = '700 15px system-ui, sans-serif';
-    context.textAlign = 'right';
-    context.fillText(numberFormat.format(item.value), 1355, y + 20);
-    context.textAlign = 'left';
+function serializedChartSvg(): string | null {
+  const svg = chart.querySelector<SVGSVGElement>('svg');
+  if (!svg) return null;
+  return new XMLSerializer().serializeToString(svg);
+}
+
+function exportChartSvg(): void {
+  const svg = serializedChartSvg();
+  if (!svg) return;
+  downloadBlob(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }), `${exportBaseName()}-${chartType.value}.svg`);
+}
+
+async function exportChartPng(): Promise<void> {
+  const svg = serializedChartSvg();
+  if (!svg) return;
+  const source = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+  const sourceUrl = URL.createObjectURL(source);
+  const image = new Image();
+  await new Promise<void>((resolve, reject) => {
+    image.onload = () => resolve();
+    image.onerror = () => reject(new Error('Não foi possível rasterizar o gráfico'));
+    image.src = sourceUrl;
   });
+  const canvas = document.createElement('canvas');
+  canvas.width = 2000;
+  canvas.height = 1000;
+  const context = canvas.getContext('2d');
+  if (!context) {
+    URL.revokeObjectURL(sourceUrl);
+    return;
+  }
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(sourceUrl);
   canvas.toBlob((blob) => {
-    if (blob) downloadBlob(blob, `${exportBaseName()}-grafico.png`);
+    if (blob) downloadBlob(blob, `${exportBaseName()}-${chartType.value}.png`);
   }, 'image/png');
 }
 
@@ -1227,7 +1207,12 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')
 }
 exportCsvButton.addEventListener('click', exportCsv);
 exportXmlButton.addEventListener('click', exportXml);
-chartPngButton.addEventListener('click', exportChartPng);
+chartType.addEventListener('change', () => {
+  if (currentResult) renderChart(currentResult);
+});
+chartSvgButton.addEventListener('click', exportChartSvg);
+chartPngButton.addEventListener('click', () => void exportChartPng().catch((error) =>
+  showToast(error instanceof Error ? error.message : String(error), true)));
 mapPngButton.addEventListener('click', exportMapPng);
 element<HTMLButtonElement>('#about-button').addEventListener('click', () => aboutDialog.showModal());
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());

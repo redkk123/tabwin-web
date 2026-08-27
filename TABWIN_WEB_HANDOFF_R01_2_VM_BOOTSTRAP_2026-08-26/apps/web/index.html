@@ -159,7 +159,22 @@
           </div>
 
           <div class="view-panel" id="chart-view" data-panel="chart" hidden>
-            <div class="panel-actions"><button class="secondary-button" id="chart-png-button" type="button" disabled>Baixar gráfico PNG</button></div>
+            <div class="chart-toolbar">
+              <label><span>Tipo de gráfico</span><select id="chart-type">
+                <option value="horizontal-bar">Barras horizontais</option>
+                <option value="vertical-bar">Barras verticais</option>
+                <option value="line">Linhas</option>
+                <option value="area">Áreas</option>
+                <option value="pie">Setores</option>
+                <option value="points">Pontos</option>
+                <option value="bubbles">Bolhas</option>
+                <option value="arrows">Setas</option>
+              </select></label>
+              <div class="panel-actions">
+                <button class="secondary-button" id="chart-svg-button" type="button" disabled>SVG</button>
+                <button class="secondary-button" id="chart-png-button" type="button" disabled>PNG</button>
+              </div>
+            </div>
             <div class="chart" id="chart"></div>
           </div>
 
