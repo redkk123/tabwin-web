@@ -53,9 +53,15 @@ import {
   type MapClassification,
   type MapPalette,
 } from '../../../packages/visualization/src/map-scale.ts';
+import {
+  descriptiveStatistics,
+  histogram,
+  pearsonCorrelation,
+  simpleLinearRegression,
+} from '../../../packages/analysis/src/statistics.ts';
 import './styles.css';
 
-type ViewName = 'table' | 'chart' | 'map' | 'audit';
+type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'audit';
 
 interface LoadedSource {
   name: string;
@@ -122,6 +128,13 @@ const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
 const mapMessage = element<HTMLElement>('#map-message');
 const mapLegend = element<HTMLElement>('#map-legend');
 const mapTooltip = element<HTMLOutputElement>('#map-tooltip');
+const statisticsOperation = element<HTMLSelectElement>('#statistics-operation');
+const statisticsX = element<HTMLSelectElement>('#statistics-x');
+const statisticsY = element<HTMLSelectElement>('#statistics-y');
+const statisticsYLabel = element<HTMLElement>('#statistics-y-label');
+const histogramBinsLabel = element<HTMLElement>('#histogram-bins-label');
+const histogramBins = element<HTMLInputElement>('#histogram-bins');
+const statisticsResult = element<HTMLElement>('#statistics-result');
 const toast = element<HTMLElement>('#toast');
 const aboutDialog = element<HTMLDialogElement>('#about-dialog');
 const catalogDialog = element<HTMLDialogElement>('#catalog-dialog');
@@ -604,6 +617,8 @@ function renderResult(): void {
   tableWrap.hidden = false;
   renderTable(currentResult);
   renderChart(currentResult);
+  populateStatisticsColumns(currentResult);
+  renderStatistics();
   renderAudit();
   if (activeMap) renderMap();
 }
@@ -659,9 +674,122 @@ function renderChart(result: TabulationResult): void {
   chart.append(renderChartSvg(result, chartType.value as ChartType, resultTitle.textContent ?? rowField.value));
 }
 
+function populateStatisticsColumns(result: TabulationResult): void {
+  const previousX = statisticsX.value;
+  const previousY = statisticsY.value;
+  statisticsX.replaceChildren();
+  statisticsY.replaceChildren();
+  result.columns.forEach((column, index) => {
+    const optionX = document.createElement('option');
+    optionX.value = String(index);
+    optionX.textContent = column.label;
+    const optionY = optionX.cloneNode(true) as HTMLOptionElement;
+    statisticsX.append(optionX);
+    statisticsY.append(optionY);
+  });
+  statisticsX.disabled = result.columns.length === 0;
+  statisticsY.disabled = result.columns.length < 2;
+  if ([...statisticsX.options].some((option) => option.value === previousX)) statisticsX.value = previousX;
+  if ([...statisticsY.options].some((option) => option.value === previousY)) statisticsY.value = previousY;
+  else if (result.columns.length > 1) statisticsY.value = '1';
+}
+
+function statisticsColumn(index: number): number[] {
+  if (!currentResult) return [];
+  return currentResult.cells.map((row) => row[index] ?? 0);
+}
+
+function statisticCard(label: string, value: string): HTMLElement {
+  const card = document.createElement('div');
+  card.className = 'stat-card';
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  const strong = document.createElement('strong');
+  strong.textContent = value;
+  card.append(caption, strong);
+  return card;
+}
+
+function renderStatistics(): void {
+  const operation = statisticsOperation.value;
+  const pairedOperation = operation === 'correlation' || operation === 'regression';
+  statisticsYLabel.hidden = !pairedOperation;
+  histogramBinsLabel.hidden = operation !== 'histogram';
+  statisticsResult.replaceChildren();
+  if (!currentResult?.columns.length) {
+    const message = document.createElement('p');
+    message.textContent = 'Execute uma análise para calcular estatísticas sobre as colunas do resultado.';
+    statisticsResult.append(message);
+    return;
+  }
+  if (pairedOperation && currentResult.columns.length < 2) {
+    const message = document.createElement('p');
+    message.textContent = 'Correlação e regressão precisam de pelo menos duas colunas no resultado.';
+    statisticsResult.append(message);
+    return;
+  }
+  const x = statisticsColumn(Number(statisticsX.value));
+  try {
+    if (operation === 'descriptive') {
+      const result = descriptiveStatistics(x);
+      const grid = document.createElement('div');
+      grid.className = 'statistics-grid';
+      const values: Array<[string, number]> = [
+        ['Observações', result.count], ['Soma', result.sum], ['Média', result.mean],
+        ['Mediana', result.median], ['Mínimo', result.minimum], ['Máximo', result.maximum],
+        ['Variância amostral', result.sampleVariance], ['Desvio-padrão amostral', result.sampleStandardDeviation],
+      ];
+      for (const [label, value] of values) grid.append(statisticCard(label, numberFormat.format(value)));
+      statisticsResult.append(grid);
+    } else if (operation === 'correlation') {
+      const correlation = pearsonCorrelation(x, statisticsColumn(Number(statisticsY.value)));
+      statisticsResult.append(statisticCard('Coeficiente de Pearson (r)', numberFormat.format(correlation)));
+    } else if (operation === 'regression') {
+      const result = simpleLinearRegression(x, statisticsColumn(Number(statisticsY.value)));
+      const grid = document.createElement('div');
+      grid.className = 'statistics-grid';
+      grid.append(
+        statisticCard('Observações', integerFormat.format(result.count)),
+        statisticCard('Inclinação', numberFormat.format(result.slope)),
+        statisticCard('Intercepto', numberFormat.format(result.intercept)),
+        statisticCard('R²', numberFormat.format(result.rSquared)),
+      );
+      statisticsResult.append(grid);
+    } else {
+      const requestedBins = Math.min(50, Math.max(1, Math.round(Number(histogramBins.value) || 8)));
+      histogramBins.value = String(requestedBins);
+      const bins = histogram(x, requestedBins);
+      const max = Math.max(...bins.map((item) => item.count), 1);
+      const rows = document.createElement('div');
+      rows.className = 'histogram-bars';
+      for (const item of bins) {
+        const row = document.createElement('div');
+        row.className = 'histogram-row';
+        const label = document.createElement('span');
+        label.textContent = `${numberFormat.format(item.lower)} – ${numberFormat.format(item.upper)}`;
+        const track = document.createElement('div');
+        track.className = 'histogram-track';
+        const fill = document.createElement('div');
+        fill.className = 'histogram-fill';
+        fill.style.width = `${item.count / max * 100}%`;
+        track.append(fill);
+        const count = document.createElement('strong');
+        count.textContent = integerFormat.format(item.count);
+        row.append(label, track, count);
+        rows.append(row);
+      }
+      statisticsResult.append(rows);
+    }
+  } catch (error) {
+    const message = document.createElement('p');
+    message.textContent = error instanceof Error ? error.message : String(error);
+    statisticsResult.append(message);
+  }
+}
+
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.7.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.8.0-dev', compatibilityProfile: 'tabwin-4.15' },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -1128,6 +1256,14 @@ function saveRecipe(): void {
       mapClassification: mapClassification.value as MapClassification,
       mapClassCount: Number(mapClassCount.value),
       mapPalette: mapPalette.value as MapPalette,
+      statisticsOperation: statisticsOperation.value as 'descriptive' | 'correlation' | 'regression' | 'histogram',
+      ...(currentResult?.columns[Number(statisticsX.value)]?.key
+        ? { statisticsXColumnKey: currentResult.columns[Number(statisticsX.value)]!.key }
+        : {}),
+      ...(currentResult?.columns[Number(statisticsY.value)]?.key
+        ? { statisticsYColumnKey: currentResult.columns[Number(statisticsY.value)]!.key }
+        : {}),
+      histogramBins: Math.min(50, Math.max(1, Math.round(Number(histogramBins.value) || 8))),
     },
   };
   downloadBlob(
@@ -1158,6 +1294,8 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
+  if (recipe.view?.statisticsOperation) statisticsOperation.value = recipe.view.statisticsOperation;
+  if (recipe.view?.histogramBins) histogramBins.value = String(recipe.view.histogramBins);
   mapClassCount.disabled = mapClassification.value === 'continuous';
   rowConversion.value = '';
   if (recipe.spec.rows.conversionId) {
@@ -1175,6 +1313,13 @@ async function openRecipe(file: File): Promise<void> {
   renderConfiguredFilters();
   updateMeasureControls();
   await runAnalysis();
+  if (currentResult) {
+    const xIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsXColumnKey);
+    const yIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsYColumnKey);
+    if (xIndex >= 0) statisticsX.value = String(xIndex);
+    if (yIndex >= 0) statisticsY.value = String(yIndex);
+    renderStatistics();
+  }
   const sameSource = recipe.sourceHints.some((hint) => hint.sha256 === datasetFingerprint?.sha256);
   showToast(sameSource
     ? `${file.name}: análise reproduzida`
@@ -1337,6 +1482,9 @@ exportXmlButton.addEventListener('click', exportXml);
 chartType.addEventListener('change', () => {
   if (currentResult) renderChart(currentResult);
 });
+for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins]) {
+  control.addEventListener('change', renderStatistics);
+}
 chartSvgButton.addEventListener('click', exportChartSvg);
 chartPngButton.addEventListener('click', () => void exportChartPng().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));

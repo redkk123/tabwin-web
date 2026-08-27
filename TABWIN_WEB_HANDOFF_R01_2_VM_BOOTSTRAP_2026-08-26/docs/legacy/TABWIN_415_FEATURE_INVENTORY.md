@@ -123,15 +123,17 @@ visual sorting or formatting.
 
 ## 7. Statistical analysis
 
-Four named operations are confirmed and currently **Cataloged**:
+Four named operations are confirmed and now have an initial **Web** surface:
 
 1. descriptive statistics for one column;
 2. Pearson correlation coefficient;
 3. simple linear regression;
 4. histogram analysis.
 
-Each needs golden numerical cases, including missing-value and rounding policy,
-before compatibility claims.
+They operate over columns of the current `TabulationResult`, persist their view
+settings in recipes and are labeled as modern calculations. Each still needs
+golden numerical cases, including missing-value, population/sample and rounding
+policy, before compatibility claims.
 
 ## 8. DEF/CNV authoring and DBF utilities
 

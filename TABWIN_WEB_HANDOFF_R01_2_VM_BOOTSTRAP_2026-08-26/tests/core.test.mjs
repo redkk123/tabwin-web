@@ -110,6 +110,11 @@ test('analysis recipe parsing rejects structurally invalid plans and fingerprint
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
     conversions: [], sourceHints: [], view: { mapClassification: 'natural-breaks', mapClassCount: 20 },
   })), /invalid map classification/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { statisticsOperation: 'anova', histogramBins: 100 },
+  })), /invalid statistics operation/);
 });
 
 test('DEF-style startPosition slices a composite DBF field before CNV conversion', () => {

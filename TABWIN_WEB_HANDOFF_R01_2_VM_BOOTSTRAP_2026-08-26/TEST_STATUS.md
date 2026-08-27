@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R03.1 interactive-map milestone.
+Verified on 2026-08-27 through the R03.2 statistical-analysis milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 38 tests;
-- 38 passed;
+- 42 tests;
+- 42 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -65,3 +65,8 @@ stable equal-value coloring and source-array immutability. Browser typechecking,
 the production build and a local interface inspection cover the new map
 toolbar and interaction bindings; automated pointer-level browser tests remain
 future work.
+
+R03.2 adds tests for descriptive sample measures without input mutation, exact
+Pearson/regression behavior, histogram maximum-endpoint inclusion and explicit
+constant-series errors. Browser typechecking, production build and local visual
+inspection cover the new Statistics tab shell.

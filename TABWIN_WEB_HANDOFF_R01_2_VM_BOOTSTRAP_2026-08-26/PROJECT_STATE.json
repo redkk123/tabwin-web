@@ -1,10 +1,10 @@
 {
-  "revision": "R03.1-interactive-map-classification",
+  "revision": "R03.2-statistical-analysis",
   "date": "2026-08-27",
-  "phase": "reproducible-workbench-chart-families-and-interactive-map-classification-implemented",
+  "phase": "reproducible-workbench-visualization-maps-and-statistical-analysis-implemented",
   "tests": {
-    "total": 38,
-    "passed": 38,
+    "total": 42,
+    "passed": 42,
     "failed": 0,
     "command": "npm run check"
   },
@@ -33,7 +33,11 @@
     "recipe-chart-view-persistence",
     "map-continuous-equal-interval-and-quantile-classification",
     "map-class-count-and-palette-recipe-persistence",
-    "map-zoom-pan-reset-and-polygon-hit-testing"
+    "map-zoom-pan-reset-and-polygon-hit-testing",
+    "descriptive-statistics-over-result-columns",
+    "pearson-correlation-and-simple-linear-regression",
+    "histogram-analysis",
+    "recipe-statistics-view-persistence"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",

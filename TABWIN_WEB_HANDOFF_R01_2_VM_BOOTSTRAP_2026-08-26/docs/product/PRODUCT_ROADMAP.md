@@ -43,6 +43,10 @@ classification, class counts, palettes, zoom/pan/reset and local area
 identification. Manual breaks, layer composition, flow maps and geodata export
 remain pending.
 
+The four cataloged statistical operations now have an initial Web surface over
+result columns: descriptive measures, Pearson correlation, simple regression
+and histograms. Golden numerical compatibility cases remain pending.
+
 ### 4. Audit
 
 Every result should expose:

@@ -20,6 +20,10 @@ export interface AnalysisRecipeV1 {
     mapClassification?: 'continuous' | 'equal-interval' | 'quantile';
     mapClassCount?: number;
     mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
+    statisticsOperation?: 'descriptive' | 'correlation' | 'regression' | 'histogram';
+    statisticsXColumnKey?: string;
+    statisticsYColumnKey?: string;
+    histogramBins?: number;
   };
 }
 
@@ -98,6 +102,14 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   const allowedMapPalettes = new Set(['green', 'blue', 'orange', 'purple']);
   if (parsed.view?.mapPalette && !allowedMapPalettes.has(parsed.view.mapPalette)) {
     throw new Error('invalid map palette in TabWin Web recipe');
+  }
+  const allowedStatisticsOperations = new Set(['descriptive', 'correlation', 'regression', 'histogram']);
+  if (parsed.view?.statisticsOperation && !allowedStatisticsOperations.has(parsed.view.statisticsOperation)) {
+    throw new Error('invalid statistics operation in TabWin Web recipe');
+  }
+  if (parsed.view?.histogramBins !== undefined
+    && (!Number.isInteger(parsed.view.histogramBins) || parsed.view.histogramBins < 1 || parsed.view.histogramBins > 50)) {
+    throw new Error('invalid histogram bin count in TabWin Web recipe');
   }
   return parsed as AnalysisRecipeV1;
 }

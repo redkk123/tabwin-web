@@ -171,6 +171,19 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .legend-class { display: grid; grid-template-columns: 12px 1fr; gap: 6px; align-items: center; }
 .legend-swatch { width: 12px; height: 8px; border-radius: 2px; }
 .map-tooltip { position: absolute; z-index: 2; max-width: 230px; padding: 8px 10px; pointer-events: none; border-radius: 8px; color: #fff; background: rgba(8,32,38,.9); box-shadow: 0 7px 20px rgba(8,32,38,.25); font-size: 10px; line-height: 1.4; }
+.statistics-toolbar { display: grid; grid-template-columns: repeat(4, minmax(120px, 1fr)); gap: 10px; }
+.statistics-toolbar label { display: grid; gap: 5px; color: #60757b; font-size: 10px; font-weight: 700; }
+.statistics-toolbar select,.statistics-toolbar input { min-height: 38px; padding: 7px 9px; border: 1px solid #d5e0dd; border-radius: 8px; color: var(--ink); background: #fff; }
+.statistics-result { min-height: 185px; margin-top: 15px; padding: 18px; border: 1px solid #dce7e3; border-radius: 12px; background: #f9fcfb; }
+.statistics-grid { display: grid; grid-template-columns: repeat(auto-fit,minmax(135px,1fr)); gap: 10px; }
+.stat-card { padding: 12px; border-radius: 9px; background: #fff; box-shadow: 0 3px 13px rgba(20,60,55,.06); }
+.stat-card span { display: block; color: #71827e; font-size: 9px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
+.stat-card strong { display: block; margin-top: 5px; color: var(--ink); font-size: 17px; font-variant-numeric: tabular-nums; }
+.histogram-bars { display: grid; gap: 7px; }
+.histogram-row { display: grid; grid-template-columns: minmax(145px,auto) 1fr 55px; gap: 10px; align-items: center; color: #536b6c; font-size: 10px; }
+.histogram-track { height: 13px; overflow: hidden; border-radius: 4px; background: #e8f0ed; }
+.histogram-fill { height: 100%; border-radius: 4px; background: #178b71; }
+.compatibility-note { margin: 10px 2px 0; color: #788986; font-size: 9px; }
 .audit-intro { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 5px 2px 13px; font-size: 11px; }
 .audit-intro p { margin: 0; color: #738489; }
 .audit-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px #dcf7ee; }
@@ -237,6 +250,7 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .bar-row { grid-template-columns: 90px 1fr 62px; gap: 8px; }
   .chart-toolbar { align-items: stretch; flex-direction: column; }
   .chart-toolbar label { width: 100%; min-width: 0; }
+  .statistics-toolbar { grid-template-columns: 1fr 1fr; }
   #map-canvas { height: 420px; }
   .audit-intro { display: block; }
   .audit-intro p { margin-top: 8px; }
