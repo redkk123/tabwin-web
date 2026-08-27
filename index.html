@@ -8,8 +8,8 @@
     <meta property="og:title" content="TabWin Web" />
     <meta property="og:description" content="Análise local, moderna e auditável de microdados DATASUS." />
     <title>TabWin Web — análise DATASUS local</title>
-    <script type="module" crossorigin src="./assets/index-DR3fwG8Z.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-Bia-UH82.css">
+    <script type="module" crossorigin src="./assets/index-Bg1mspeA.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-BCtUL_dc.css">
   </head>
   <body>
     <div class="app-shell">
@@ -82,10 +82,20 @@
               <span>Campo do filtro</span>
               <select id="filter-field" disabled><option value="">Sem filtro</option></select>
             </label>
+            <div class="filter-rule-row">
+              <label><span>Regra</span><select id="filter-mode"><option value="include">Incluir correspondentes</option><option value="exclude">Excluir correspondentes</option></select></label>
+              <label><span>Tipo</span><select id="filter-kind"><option value="categories">Valores/categorias</option><option value="numeric-range">Intervalo numérico</option></select></label>
+            </div>
             <div class="filter-info" id="filter-info">Escolha um campo para selecionar valores.</div>
             <div class="filter-values" id="filter-values"></div>
+            <div class="filter-range" id="filter-range" hidden>
+              <label><span>Mínimo</span><input id="filter-minimum" type="number" step="any" placeholder="Sem limite"></label>
+              <label><span>Máximo</span><input id="filter-maximum" type="number" step="any" placeholder="Sem limite"></label>
+              <label class="check-label"><input id="filter-include-minimum" type="checkbox" checked><span>Incluir mínimo</span></label>
+              <label class="check-label"><input id="filter-include-maximum" type="checkbox" checked><span>Incluir máximo</span></label>
+            </div>
             <div class="filter-actions">
-              <button class="text-button" id="clear-filter-button" type="button" disabled>Limpar seleção</button>
+              <div><button class="text-button" id="select-all-filter-button" type="button" disabled>Selecionar tudo</button><button class="text-button" id="clear-filter-button" type="button" disabled>Limpar</button></div>
               <button class="secondary-button" id="add-filter-button" type="button" disabled>Adicionar filtro</button>
             </div>
             <div class="active-filter-list" id="active-filter-list"></div>
@@ -98,6 +108,10 @@
             <label class="check-label">
               <input id="suppress-zero" type="checkbox" checked disabled />
               <span>Ocultar zerados</span>
+            </label>
+            <label class="check-label">
+              <input id="discriminate-unclassified" type="checkbox" disabled />
+              <span>Discriminar não classificados</span>
             </label>
           </div>
           <button class="primary-button" id="run-button" type="submit" disabled>
