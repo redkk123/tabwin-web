@@ -26,6 +26,10 @@ export interface AnalysisRecipeV1 {
     statisticsXColumnKey?: string;
     statisticsYColumnKey?: string;
     histogramBins?: number;
+    tableSortColumnKey?: string;
+    tableSortDirection?: 'original' | 'ascending' | 'descending';
+    tableDecimalPlaces?: number;
+    tableKeyVisible?: boolean;
   };
 }
 
@@ -116,6 +120,20 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   if (parsed.view?.histogramBins !== undefined
     && (!Number.isInteger(parsed.view.histogramBins) || parsed.view.histogramBins < 1 || parsed.view.histogramBins > 50)) {
     throw new Error('invalid histogram bin count in TabWin Web recipe');
+  }
+  if (parsed.view?.tableSortColumnKey !== undefined && typeof parsed.view.tableSortColumnKey !== 'string') {
+    throw new Error('invalid table sort column in TabWin Web recipe');
+  }
+  if (parsed.view?.tableSortDirection !== undefined
+    && !new Set(['original', 'ascending', 'descending']).has(parsed.view.tableSortDirection)) {
+    throw new Error('invalid table sort direction in TabWin Web recipe');
+  }
+  if (parsed.view?.tableDecimalPlaces !== undefined
+    && (!Number.isInteger(parsed.view.tableDecimalPlaces) || parsed.view.tableDecimalPlaces < -1 || parsed.view.tableDecimalPlaces > 6)) {
+    throw new Error('invalid table decimal places in TabWin Web recipe');
+  }
+  if (parsed.view?.tableKeyVisible !== undefined && typeof parsed.view.tableKeyVisible !== 'boolean') {
+    throw new Error('invalid table key visibility in TabWin Web recipe');
   }
   return parsed as AnalysisRecipeV1;
 }

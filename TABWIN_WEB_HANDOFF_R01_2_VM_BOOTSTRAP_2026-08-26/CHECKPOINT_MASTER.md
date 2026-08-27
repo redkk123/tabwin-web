@@ -1,12 +1,29 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.1-auditable-table-operations
+**Revision:** R04.2-table-presentation-and-clipboard
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; auditable post-tabulation operation workbench implemented
+**Status:** G001 exact golden passed; table operations and first presentation workbench implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.2 table-presentation update
+
+The table now supports stable non-mutating sorting by key or numeric column,
+accent-insensitive category location, automatic or 0–6 fixed decimals,
+show/hide key, spreadsheet-ready TSV clipboard copying and a print stylesheet.
+Sorting, decimal and key settings persist in `.twrecipe` and appear in Audit;
+the locate query remains deliberately transient. Portable verification is
+54/54 plus browser typecheck and production build. Real-DBC browser testing
+verified descending sort, exact location, key visibility and clipboard output.
+Evidence is in `docs/handoffs/R04_2_TABLE_PRESENTATION_REPORT.md`.
+
+After the named functional matrix is substantially closed, the oracle phase
+will generate short (target 2–5 minute) seeded and pairwise-selected TabWin
+4.15 cases in batches of five. Reproducible randomized failures become
+immutable goldens; no reference output is edited to make the Web candidate
+pass.
 
 ## 2026-08-27 R04.1 table-operation update
 

@@ -66,6 +66,7 @@ import {
   calculateColumnTotal,
   replayTableOperations,
 } from '../../../packages/analysis/src/table-operations.ts';
+import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
 type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'audit';
@@ -145,6 +146,14 @@ const tableOperationApply = element<HTMLButtonElement>('#table-operation-apply')
 const tableOperationUndo = element<HTMLButtonElement>('#table-operation-undo');
 const tableOperationReset = element<HTMLButtonElement>('#table-operation-reset');
 const tableOperationHistory = element<HTMLOListElement>('#table-operation-history');
+const tablePresentation = element<HTMLElement>('#table-presentation');
+const tableLocate = element<HTMLInputElement>('#table-locate');
+const tableSortColumn = element<HTMLSelectElement>('#table-sort-column');
+const tableSortDirection = element<HTMLSelectElement>('#table-sort-direction');
+const tableDecimals = element<HTMLSelectElement>('#table-decimals');
+const tableKeyVisible = element<HTMLInputElement>('#table-key-visible');
+const tableCopy = element<HTMLButtonElement>('#table-copy');
+const tablePrint = element<HTMLButtonElement>('#table-print');
 const chart = element<HTMLElement>('#chart');
 const auditOutput = element<HTMLElement>('#audit-output');
 const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
@@ -643,6 +652,8 @@ function renderResult(): void {
   emptyState.hidden = true;
   tableWrap.hidden = false;
   tableOperationsPanel.hidden = false;
+  tablePresentation.hidden = false;
+  updateTablePresentationControls();
   renderTable(currentResult);
   updateTableOperationControls();
   renderChart(currentResult);
@@ -752,6 +763,39 @@ function restoreTableOperations(count: number): void {
   renderResult();
 }
 
+function updateTablePresentationControls(): void {
+  const previous = tableSortColumn.value;
+  tableSortColumn.replaceChildren();
+  const rowOption = document.createElement('option');
+  rowOption.value = '__row_key__';
+  rowOption.textContent = 'Chave/linha';
+  tableSortColumn.append(rowOption);
+  for (const column of currentResult?.columns ?? []) {
+    const option = document.createElement('option');
+    option.value = column.key;
+    option.textContent = column.label;
+    tableSortColumn.append(option);
+  }
+  if ([...tableSortColumn.options].some((option) => option.value === previous)) tableSortColumn.value = previous;
+}
+
+function currentTableRowIndexes(): number[] {
+  if (!currentResult) return [];
+  return tableRowIndexes(currentResult, {
+    columnKey: tableSortColumn.value,
+    direction: tableSortDirection.value as 'original' | 'ascending' | 'descending',
+  }, tableLocate.value);
+}
+
+function tableNumber(value: number): string {
+  const decimals = Number(tableDecimals.value);
+  if (decimals < 0) return numberFormat.format(value);
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(value);
+}
+
 function renderTable(result: TabulationResult): void {
   const head = resultTable.tHead ?? resultTable.createTHead();
   const body = resultTable.tBodies[0] ?? resultTable.createTBody();
@@ -761,10 +805,12 @@ function renderTable(result: TabulationResult): void {
   foot.replaceChildren();
 
   const headerRow = document.createElement('tr');
-  const dimension = document.createElement('th');
-  dimension.scope = 'col';
-  dimension.textContent = fieldLabel(rowField.value);
-  headerRow.append(dimension);
+  if (tableKeyVisible.checked) {
+    const dimension = document.createElement('th');
+    dimension.scope = 'col';
+    dimension.textContent = fieldLabel(rowField.value);
+    headerRow.append(dimension);
+  }
   for (const column of result.columns) {
     const th = document.createElement('th');
     th.scope = 'col';
@@ -773,39 +819,51 @@ function renderTable(result: TabulationResult): void {
   }
   head.append(headerRow);
 
+  const indexes = currentTableRowIndexes();
   const limit = 500;
-  for (let rowIndex = 0; rowIndex < Math.min(result.rows.length, limit); rowIndex++) {
+  for (const rowIndex of indexes.slice(0, limit)) {
     const row = result.rows[rowIndex]!;
     const tr = document.createElement('tr');
-    const label = document.createElement('th');
-    label.scope = 'row';
-    label.textContent = row.label;
-    tr.append(label);
+    if (tableKeyVisible.checked) {
+      const label = document.createElement('th');
+      label.scope = 'row';
+      label.textContent = row.label;
+      tr.append(label);
+    }
     for (const value of result.cells[rowIndex] ?? []) {
       const td = document.createElement('td');
-      td.textContent = numberFormat.format(value);
+      td.textContent = tableNumber(value);
       tr.append(td);
     }
     body.append(tr);
   }
-  if (result.rows.length > limit) {
+  if (!indexes.length) {
     const tr = document.createElement('tr');
     const td = document.createElement('td');
-    td.colSpan = result.columns.length + 1;
-    td.textContent = `Exibindo 500 de ${integerFormat.format(result.rows.length)} linhas. O CSV contém o resultado completo.`;
+    td.colSpan = result.columns.length + (tableKeyVisible.checked ? 1 : 0);
+    td.textContent = 'Nenhuma categoria corresponde à busca.';
+    tr.append(td);
+    body.append(tr);
+  } else if (indexes.length > limit) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = result.columns.length + (tableKeyVisible.checked ? 1 : 0);
+    td.textContent = `Exibindo 500 de ${integerFormat.format(indexes.length)} linhas localizadas. O CSV contém o resultado completo.`;
     tr.append(td);
     body.append(tr);
   }
   const totalRow = document.createElement('tr');
-  const totalLabel = document.createElement('th');
-  totalLabel.scope = 'row';
-  totalLabel.textContent = 'Total';
-  totalRow.append(totalLabel);
+  if (tableKeyVisible.checked) {
+    const totalLabel = document.createElement('th');
+    totalLabel.scope = 'row';
+    totalLabel.textContent = 'Total';
+    totalRow.append(totalLabel);
+  }
   for (const column of result.columns) {
     const cell = document.createElement('td');
     const policy = column.totalPolicy ?? 'sum';
     const total = policy === 'precalculated' ? undefined : calculateColumnTotal(result, column.key, policy);
-    cell.textContent = total === undefined ? '—' : numberFormat.format(total);
+    cell.textContent = total === undefined ? '—' : tableNumber(total);
     totalRow.append(cell);
   }
   foot.append(totalRow);
@@ -950,6 +1008,13 @@ function renderAudit(): void {
     } : null,
     queryPlan: currentPlan,
     resultOperations: tableOperations,
+    tablePresentation: currentResult ? {
+      sortColumnKey: tableSortColumn.value,
+      sortDirection: tableSortDirection.value,
+      decimalPlaces: Number(tableDecimals.value),
+      keyVisible: tableKeyVisible.checked,
+      locateQuery: tableLocate.value || null,
+    } : null,
     result: currentResult ? {
       recordsSeen: currentResult.recordsSeen,
       recordsAccepted: currentResult.recordsAccepted,
@@ -1408,6 +1473,10 @@ function saveRecipe(): void {
         ? { statisticsYColumnKey: currentResult.columns[Number(statisticsY.value)]!.key }
         : {}),
       histogramBins: Math.min(50, Math.max(1, Math.round(Number(histogramBins.value) || 8))),
+      tableSortColumnKey: tableSortColumn.value,
+      tableSortDirection: tableSortDirection.value as 'original' | 'ascending' | 'descending',
+      tableDecimalPlaces: Number(tableDecimals.value),
+      tableKeyVisible: tableKeyVisible.checked,
     },
   };
   downloadBlob(
@@ -1440,6 +1509,9 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
   if (recipe.view?.statisticsOperation) statisticsOperation.value = recipe.view.statisticsOperation;
   if (recipe.view?.histogramBins) histogramBins.value = String(recipe.view.histogramBins);
+  if (recipe.view?.tableSortDirection) tableSortDirection.value = recipe.view.tableSortDirection;
+  if (recipe.view?.tableDecimalPlaces !== undefined) tableDecimals.value = String(recipe.view.tableDecimalPlaces);
+  if (recipe.view?.tableKeyVisible !== undefined) tableKeyVisible.checked = recipe.view.tableKeyVisible;
   mapClassCount.disabled = mapClassification.value === 'continuous';
   rowConversion.value = '';
   if (recipe.spec.rows.conversionId) {
@@ -1461,6 +1533,11 @@ async function openRecipe(file: File): Promise<void> {
     tableOperations = recipe.resultOperations.map((operation) => structuredClone(operation));
     currentResult = replayTableOperations(baseResult, tableOperations);
     renderResult();
+  }
+  if (recipe.view?.tableSortColumnKey
+    && [...tableSortColumn.options].some((option) => option.value === recipe.view?.tableSortColumnKey)) {
+    tableSortColumn.value = recipe.view.tableSortColumnKey;
+    if (currentResult) renderTable(currentResult);
   }
   if (currentResult) {
     const xIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsXColumnKey);
@@ -1491,6 +1568,16 @@ function exportXml(): void {
     rowLabel: fieldLabel(rowField.value),
   });
   downloadBlob(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${exportBaseName()}.xml`);
+}
+
+async function copyPresentedTable(): Promise<void> {
+  if (!currentResult) return;
+  const tsv = tableRowsToTsv(currentResult, currentTableRowIndexes(), {
+    rowLabel: fieldLabel(rowField.value),
+    includeKey: tableKeyVisible.checked,
+  });
+  await navigator.clipboard.writeText(tsv);
+  showToast(`${integerFormat.format(currentTableRowIndexes().length)} linhas copiadas`);
 }
 
 function exportMapPng(): void {
@@ -1638,6 +1725,18 @@ tableOperationApply.addEventListener('click', () => {
 });
 tableOperationUndo.addEventListener('click', () => restoreTableOperations(tableOperations.length - 1));
 tableOperationReset.addEventListener('click', () => restoreTableOperations(0));
+for (const control of [tableSortColumn, tableSortDirection, tableDecimals, tableKeyVisible]) {
+  control.addEventListener('change', () => {
+    if (currentResult) renderTable(currentResult);
+    renderAudit();
+  });
+}
+tableLocate.addEventListener('input', () => {
+  if (currentResult) renderTable(currentResult);
+});
+tableCopy.addEventListener('click', () => void copyPresentedTable().catch((error) =>
+  showToast(error instanceof Error ? error.message : String(error), true)));
+tablePrint.addEventListener('click', () => window.print());
 chartType.addEventListener('change', () => {
   if (currentResult) renderChart(currentResult);
 });

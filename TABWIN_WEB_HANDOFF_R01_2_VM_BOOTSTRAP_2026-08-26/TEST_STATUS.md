@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.1 auditable-table-operations milestone.
+Verified on 2026-08-27 through the R04.2 table-presentation milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 51 tests;
-- 51 passed;
+- 54 tests;
+- 54 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -30,6 +30,12 @@ documented total policy and invalid column references. Recipe parsing now
 validates persisted operation payloads. A local browser run against the real
 G001 DBC verified factor application, totals, history, undo and a 390 px mobile
 layout without horizontal document overflow.
+
+R04.2 adds three pure presentation tests covering stable numeric/key sorting
+without source mutation, accent-insensitive key/label location and exact TSV
+clipboard output in presented order. Browser verification over the real G001
+DBC checked descending frequency order, locating municipality `120040`, key
+visibility, Audit state and clipboard content.
 
 ## Live official-source verification
 

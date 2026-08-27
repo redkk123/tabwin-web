@@ -143,6 +143,12 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .table-operation-apply { min-height: 36px; margin: 0; }
 .table-operation-history { display: flex; flex-wrap: wrap; gap: 6px; margin: 11px 0 0; padding: 0; list-style: none; }
 .table-operation-history li { padding: 5px 8px; border-radius: 999px; color: #24594e; background: #e1f3ed; font-size: 9px; }
+.table-presentation { display: grid; grid-template-columns: minmax(150px,1.4fr) repeat(3,minmax(100px,1fr)) auto auto; gap: 8px; align-items: end; margin-bottom: 9px; }
+.table-presentation label { display: grid; gap: 4px; color: #60757b; font-size: 9px; font-weight: 750; }
+.table-presentation input,.table-presentation select { min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #d5e0dd; border-radius: 8px; color: var(--ink); background: #fff; }
+.table-presentation .table-key-toggle { min-height: 34px; display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.table-presentation .table-key-toggle input { min-height: 0; }
+.table-presentation-actions { display: flex; gap: 6px; }
 table { width: 100%; border-collapse: collapse; font-size: 12px; }
 th, td { padding: 10px 13px; border-bottom: 1px solid #e7eeeb; text-align: right; white-space: nowrap; }
 th:first-child, td:first-child { position: sticky; left: 0; text-align: left; background: inherit; }
@@ -242,6 +248,7 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .hero { align-items: flex-end; }
   .hero-metric { width: 112px; height: 112px; }
   .table-operation-grid { grid-template-columns: repeat(2,minmax(125px,1fr)); }
+  .table-presentation { grid-template-columns: repeat(3,minmax(120px,1fr)); }
 }
 
 @media (max-width: 620px) {
@@ -266,7 +273,19 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .statistics-toolbar { grid-template-columns: 1fr 1fr; }
   .table-operation-heading { align-items: flex-start; }
   .table-operation-grid { grid-template-columns: 1fr; }
+  .table-presentation { grid-template-columns: 1fr 1fr; }
   #map-canvas { height: 420px; }
   .audit-intro { display: block; }
   .audit-intro p { margin-top: 8px; }
+}
+
+@media print {
+  .topbar,.workspace,.hero,.dataset-stats,.view-tabs,.table-operations,.table-presentation,.export-actions { display: none !important; }
+  .app-shell,.results { display: block; }
+  .results { padding: 0; }
+  .result-card { max-width: none; padding: 0; border: 0; box-shadow: none; }
+  .view-panel { display: none !important; }
+  #table-view { display: block !important; padding: 0; }
+  .table-wrap { max-height: none; overflow: visible; border: 0; }
+  thead,tfoot { position: static; }
 }

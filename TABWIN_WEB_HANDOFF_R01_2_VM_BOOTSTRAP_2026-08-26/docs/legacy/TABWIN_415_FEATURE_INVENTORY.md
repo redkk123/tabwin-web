@@ -51,7 +51,7 @@ Status vocabulary:
 | Open/save table | **Web recipe / Cataloged `.TAB`** | Portable `.twrecipe` save/open is usable; legacy `.TAB` parsing and exact table-state recovery remain pending. |
 | Print | **Cataloged** | Print table. Browser print stylesheet pending. |
 | Export | **Web (CSV/XML)** | Complete result matrix and provenance-aware XML; XLSX, DBF, Parquet and legacy formats pending. |
-| Copy/paste/include table | **Cataloged** | Clipboard and table inclusion semantics pending. |
+| Copy/paste/include table | **Web copy / Cataloged paste+include** | Current presented rows copy as spreadsheet-ready TSV; paste and table inclusion semantics pending. |
 | Save selected records as DBF | **Cataloged** | Local download adapter pending. |
 | Audit/recipe | **Web / Kernel** | QueryPlan and hashes visible; deterministic recipe save/open validates plans and fingerprints. |
 
@@ -82,13 +82,23 @@ focused TabWin 4.15 reference cases establish defaults, rounding and edge cases.
 
 ## 4. Table presentation
 
-Confirmed topics: sort values; alter column header, width and decimal places;
-delete and move columns; suppress/aggregate rows; show/hide key; fix key
-length; edit two table headers; insert footnote; locate a row category.
+| Presentation capability | Status |
+| --- | --- |
+| Sort values | **Web / modern presentation** — original, ascending and descending by key or numeric column; stable and non-mutating. |
+| Decimal places | **Web / modern presentation** — automatic or 0–6 fixed decimal places. |
+| Show/hide key | **Web / modern presentation** — sticky key remains the default. |
+| Locate row/category | **Web / modern presentation** — accent-insensitive key and label search. |
+| Print table | **Web / modern presentation** — dedicated browser print stylesheet. |
+| Alter column header and width | **Cataloged** |
+| Delete and move columns | **Cataloged** |
+| Suppress/aggregate rows | **Cataloged** |
+| Fix key length | **Cataloged** |
+| Edit two table headers / insert footnote | **Cataloged** |
 
-These are **Cataloged**. Modern table presentation may differ visually, but
-every operation that changes data must be represented separately from purely
-visual sorting or formatting.
+Sorting, decimals and key visibility persist in recipes and appear in Audit.
+The locate query intentionally does not persist because it is transient UI
+state. Modern presentation may differ visually, but every operation that
+changes data remains separate from purely visual sorting or formatting.
 
 ## 5. Charts
 

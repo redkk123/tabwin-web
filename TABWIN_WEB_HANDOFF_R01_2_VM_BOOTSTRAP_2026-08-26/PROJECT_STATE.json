@@ -1,10 +1,10 @@
 {
-  "revision": "R04.1-auditable-table-operations",
+  "revision": "R04.2-table-presentation-and-clipboard",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 51,
-    "passed": 51,
+    "total": 54,
+    "passed": 54,
     "failed": 0,
     "command": "npm run check"
   },
@@ -51,6 +51,12 @@
     ,"explicit-derived-column-total-policies"
     ,"recipe-persisted-table-operation-replay"
     ,"table-operation-undo-reset-and-audit-ui"
+    ,"stable-nonmutating-table-sort"
+    ,"accent-insensitive-row-location"
+    ,"table-decimal-and-key-visibility-controls"
+    ,"spreadsheet-ready-table-tsv-clipboard"
+    ,"browser-table-print-stylesheet"
+    ,"recipe-persisted-table-presentation"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -76,7 +82,7 @@
     "xlsx-parquet-svg-geojson-kml-exports",
     "golden-cases-beyond-g001"
     ,"golden-equivalence-for-post-tabulation-operations"
-    ,"advanced-table-expression-parser-normalization-sort-and-presentation"
+    ,"advanced-table-expression-parser-normalization-column-and-row-editing"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -101,5 +107,6 @@
     "surface-DEF-driven-increments-and-selections",
     "continue-TAB-archaeology-against-portable-recipe-model",
     "expand-chart-and-map-families"
+    ,"after-functional-matrix-generate-short-seeded-pairwise-oracle-corpus"
   ]
 }
