@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+.DS_Store
+*.log
+.env
+.env.*
+# Private legacy documentation retained only for local compatibility archaeology.
+.legacy-inspect/
+# Never commit supplied TabWin binaries or private/raw fixture data by default.
+legacy-binaries/
+private-fixtures/
