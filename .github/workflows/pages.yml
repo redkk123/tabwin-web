@@ -1,8 +1,8 @@
 name: Verify and deploy TabWin Web
 
 on:
-  push:
-    branches: [main]
+  # Temporarily manual: the account currently rejects ordinary runners for a
+  # billing lock. GitHub Pages is published from the isolated gh-pages branch.
   workflow_dispatch:
 
 permissions:

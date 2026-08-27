@@ -1,6 +1,6 @@
-# TabWin Web — working title
+# TabWin Web
 
-> **Status:** R01.1-dev — DEF-aware semantic compatibility kernel; first real golden capture pending.
+> **Status:** R03.2 — functional browser workbench; first real golden capture pending.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -17,7 +17,7 @@ Immutable/working snapshots currently include:
 
 ## What already runs
 
-R01 contains a dependency-light TypeScript semantic kernel with automated tests:
+The current browser application and TypeScript packages provide:
 
 - legacy fixed-column `.CNV` parser;
 - documented `.DEF` parser for A/S/L/C/Q/D/T/I/G/R;
@@ -34,6 +34,12 @@ R01 contains a dependency-light TypeScript semantic kernel with automated tests:
 - rows, columns and filters;
 - zero-row suppression;
 - deterministic analysis recipes and run-manifest models.
+- real browser DBC/DBF ingestion;
+- official DATASUS catalog/acquisition adapter (server-verified; static-host CORS proxy pending);
+- CSV/XML, chart PNG/SVG and map PNG export;
+- eight chart families;
+- legacy `.MAP` parsing and interactive thematic maps;
+- descriptive statistics, Pearson correlation, simple regression and histograms.
 
 Run:
 
@@ -41,14 +47,19 @@ Run:
 npm test
 ```
 
-Current checkpoint: **22 passing tests**.
+Current checkpoint: **44 passing tests**, browser typecheck and production build.
 
 ## Repository layout
 
 ```text
-apps/web/              production web app shell (next phases)
+apps/web/              production browser workbench
+apps/datasus-proxy/    allowlisted optional proxy for static public hosting
+packages/acquisition/  official source discovery/request contracts
+packages/analysis/     modern statistical calculations
 packages/core/         tabulation semantics, QueryPlan, executor, recipes
-packages/formats/      legacy format adapters (.CNV + DEF; DBC/TAB next)
+packages/formats/      legacy format adapters (.CNV, .DEF and .MAP)
+packages/export/       deterministic exports
+packages/visualization/ chart/map presentation models
 tests/                 semantic compatibility tests
 docs/architecture/     ADRs
 docs/testing/          golden-equivalence methodology
@@ -73,4 +84,6 @@ No generic “TabWin compatible” claim should be made until the corresponding 
 
 ## Handoff / current plan
 
-For the complete current project memory and roadmap, read `CHECKPOINT_MASTER.md` first. Cloud-credit and AI-worker policy is documented in `docs/infrastructure/CLOUD_CREDITS_STRATEGY.md`.
+For the complete current project memory and roadmap, read `CHECKPOINT_MASTER.md`
+first. The compatibility claim still depends on G001 and subsequent exact
+Windows TabWin 4.15 golden captures.

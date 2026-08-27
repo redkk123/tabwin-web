@@ -12,12 +12,21 @@ O código ativo e toda a documentação de compatibilidade estão em
 ## Estado atual
 
 - leitura local de DBC e DBF;
-- tabulação automática por frequência;
-- linhas, colunas, CNV e supressão de zeros;
-- tabela, gráfico de barras, mapa temático e auditoria;
+- frequência, soma e múltiplos filtros;
+- DEF/CNV, linhas, colunas e supressão de zeros;
+- receitas reproduzíveis `.twrecipe` com fingerprints;
+- tabela e oito famílias de gráficos com PNG/SVG;
+- mapas temáticos com classes, paletas, zoom, pan e identificação de áreas;
+- estatística descritiva, correlação, regressão e histograma;
+- exportação CSV/XML e auditoria do plano;
 - leitura de mapas binários `.MAP` do TabWin;
 - mapas brasileiros de UF e município incluídos;
-- 25 testes automatizados e build verificado em cada publicação.
+- 44 testes automatizados, typecheck e build de produção verificados.
+
+A busca oficial do DATASUS foi validada do lado do servidor, mas o portal
+oficial devolve cabeçalhos CORS incompatíveis quando chamado diretamente pelo
+site estático. Até a implantação do pequeno proxy oficial/institucional já
+especificado no projeto, use o download manual e abra o DBC localmente.
 
 O projeto ainda não declara equivalência completa com o TabWin 4.15. Casos
 golden só são aceitos após captura pareada no programa de referência.

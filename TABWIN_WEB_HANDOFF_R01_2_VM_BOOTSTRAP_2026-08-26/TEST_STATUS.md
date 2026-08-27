@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R03.2 statistical-analysis milestone.
+Verified on 2026-08-27 through the R03.3 public-release/oracle-ready milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 42 tests;
-- 42 passed;
+- 44 tests;
+- 44 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -70,3 +70,9 @@ R03.2 adds tests for descriptive sample measures without input mutation, exact
 Pearson/regression behavior, histogram maximum-endpoint inclusion and explicit
 constant-series errors. Browser typechecking, production build and local visual
 inspection cover the new Statistics tab shell.
+
+R03.3 adds two tests proving that the optional DATASUS proxy exposes only the
+fixed official catalog/prepare routes and accepts archive streaming only for
+the official prepared `zipupload/.../arquivo.zip` envelope. The published site
+shell and official catalog dialog were inspected in GitHub Pages; the static
+origin correctly surfaces the unresolved official CORS blocker.

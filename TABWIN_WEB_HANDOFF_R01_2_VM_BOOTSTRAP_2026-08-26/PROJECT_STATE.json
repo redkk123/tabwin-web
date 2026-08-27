@@ -1,10 +1,10 @@
 {
-  "revision": "R03.2-statistical-analysis",
+  "revision": "R03.3-public-release-and-g001-oracle-ready",
   "date": "2026-08-27",
   "phase": "reproducible-workbench-visualization-maps-and-statistical-analysis-implemented",
   "tests": {
-    "total": 42,
-    "passed": 42,
+    "total": 44,
+    "passed": 44,
     "failed": 0,
     "command": "npm run check"
   },
@@ -37,7 +37,10 @@
     "descriptive-statistics-over-result-columns",
     "pearson-correlation-and-simple-linear-regression",
     "histogram-analysis",
-    "recipe-statistics-view-persistence"
+    "recipe-statistics-view-persistence",
+    "public-github-pages-static-release",
+    "allowlisted-datasus-proxy-contract",
+    "reproducible-g001-asset-materializer"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -53,6 +56,7 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
+    "public-datasus-proxy-deployment",
     "filter-exclusion-and-range-dialogs",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
@@ -69,7 +73,7 @@
     "vite": "8.2.2"
   },
   "g001": {
-    "status": "web-candidate-complete-windows-tabwin-415-reference-capture-pending",
+    "status": "assets-and-tabwin415-oracle-prepared-reference-ui-capture-pending",
     "row": "Complexidade do Procedimento / COMPLEX / COMPLEX2.CNV",
     "comparison_tolerance": 0,
     "golden_modified": false

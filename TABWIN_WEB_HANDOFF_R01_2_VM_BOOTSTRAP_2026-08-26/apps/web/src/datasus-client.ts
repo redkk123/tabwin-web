@@ -20,18 +20,34 @@ const SUPPORTED_EXTENSIONS = new Set(['DBC', 'DBF', 'DEF', 'CNV', 'MAP']);
 const MAX_ARCHIVE_ENTRIES = 5_000;
 const MAX_EXPANDED_BYTES = 512 * 1024 * 1024;
 const MAX_FILE_BYTES = 256 * 1024 * 1024;
+const DATASUS_PROXY_BASE = (import.meta.env.VITE_DATASUS_PROXY_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+
+function endpointFor(endpoint: string): string {
+  if (!DATASUS_PROXY_BASE) return endpoint;
+  if (endpoint === DATASUS_TRANSFER_ENDPOINT) return `${DATASUS_PROXY_BASE}/catalog`;
+  if (endpoint === DATASUS_DOWNLOAD_ENDPOINT) return `${DATASUS_PROXY_BASE}/prepare`;
+  return endpoint;
+}
 
 function extensionOf(name: string): string {
   return name.includes('.') ? (name.split('.').pop() ?? '').toUpperCase() : '';
 }
 
 async function postForm(endpoint: string, body: URLSearchParams, signal?: AbortSignal): Promise<string> {
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    body,
-    ...(signal ? { signal } : {}),
-    headers: { Accept: 'application/json, text/plain, */*' },
-  });
+  let response: Response;
+  try {
+    response = await fetch(endpointFor(endpoint), {
+      method: 'POST',
+      body,
+      ...(signal ? { signal } : {}),
+      headers: { Accept: 'application/json, text/plain, */*' },
+    });
+  } catch (error) {
+    if (!DATASUS_PROXY_BASE && error instanceof TypeError) {
+      throw new Error('O portal DATASUS bloqueou a consulta direta deste domínio. Abra um DBC local ou use uma implantação com proxy DATASUS configurado.');
+    }
+    throw error;
+  }
   if (!response.ok) throw new Error(`DATASUS retornou HTTP ${response.status}`);
   return response.text();
 }
@@ -49,7 +65,10 @@ export async function prepareOfficialDownload(files: readonly DatasusRemoteFile[
 }
 
 export async function fetchOfficialArchive(url: string, signal?: AbortSignal): Promise<Uint8Array> {
-  const response = await fetch(url, signal ? { signal } : {});
+  const downloadUrl = DATASUS_PROXY_BASE
+    ? `${DATASUS_PROXY_BASE}/archive?url=${encodeURIComponent(url)}`
+    : url;
+  const response = await fetch(downloadUrl, signal ? { signal } : {});
   if (!response.ok) throw new Error(`Download DATASUS retornou HTTP ${response.status}`);
   const length = Number(response.headers.get('content-length') ?? 0);
   if (length > MAX_ARCHIVE_ENTRIES * MAX_FILE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');
