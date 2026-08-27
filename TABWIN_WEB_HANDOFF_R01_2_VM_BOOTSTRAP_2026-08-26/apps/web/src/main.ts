@@ -21,6 +21,25 @@ import {
   type DefDefinition,
   type TabwinMapDefinition,
 } from '../../../packages/formats/src/index.ts';
+import {
+  DATASUS_SYSTEMS,
+  fileTypesForSystem,
+  systemIsAnnual,
+  type DatasusRemoteFile,
+  type DatasusSearchQuery,
+} from '../../../packages/acquisition/src/datasus.ts';
+import { tabulationToCsv, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
+import {
+  chooseCurrentAuxiliaryBundle,
+  extractSupportedArchiveFiles,
+  fetchOfficialArchive,
+  prepareOfficialDownload,
+  searchOfficialAuxiliaries,
+  searchOfficialFiles,
+  suggestedDefinitionName,
+  type ExtractedArchiveFile,
+} from './datasus-client.ts';
+import { readCachedArchive, writeCachedArchive } from './archive-cache.ts';
 import './styles.css';
 
 type ViewName = 'table' | 'chart' | 'map' | 'audit';
@@ -30,6 +49,7 @@ interface LoadedSource {
   extension: string;
   size: number;
   sha256: string;
+  origin?: string;
 }
 
 const numberFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
@@ -52,7 +72,10 @@ const rowConversion = element<HTMLSelectElement>('#row-conversion');
 const startPosition = element<HTMLInputElement>('#start-position');
 const suppressZero = element<HTMLInputElement>('#suppress-zero');
 const runButton = element<HTMLButtonElement>('#run-button');
-const exportButton = element<HTMLButtonElement>('#export-button');
+const exportCsvButton = element<HTMLButtonElement>('#export-csv-button');
+const exportXmlButton = element<HTMLButtonElement>('#export-xml-button');
+const chartPngButton = element<HTMLButtonElement>('#chart-png-button');
+const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const resultKicker = element<HTMLElement>('#result-kicker');
 const resultTitle = element<HTMLElement>('#result-title');
 const datasetStats = element<HTMLElement>('#dataset-stats');
@@ -66,6 +89,19 @@ const mapMessage = element<HTMLElement>('#map-message');
 const mapLegend = element<HTMLElement>('#map-legend');
 const toast = element<HTMLElement>('#toast');
 const aboutDialog = element<HTMLDialogElement>('#about-dialog');
+const catalogDialog = element<HTMLDialogElement>('#catalog-dialog');
+const catalogForm = element<HTMLFormElement>('#catalog-form');
+const catalogSystem = element<HTMLSelectElement>('#catalog-system');
+const catalogFileType = element<HTMLSelectElement>('#catalog-file-type');
+const catalogYear = element<HTMLSelectElement>('#catalog-year');
+const catalogMonth = element<HTMLSelectElement>('#catalog-month');
+const catalogUf = element<HTMLSelectElement>('#catalog-uf');
+const catalogMonthLabel = element<HTMLElement>('#catalog-month-label');
+const catalogUfLabel = element<HTMLElement>('#catalog-uf-label');
+const catalogAuxiliary = element<HTMLInputElement>('#catalog-auxiliary');
+const catalogSearchButton = element<HTMLButtonElement>('#catalog-search-button');
+const catalogStatus = element<HTMLElement>('#catalog-status');
+const catalogResults = element<HTMLElement>('#catalog-results');
 
 let records: DbfRecord[] = [];
 let dbfHeader: DbfHeader | null = null;
@@ -118,7 +154,8 @@ function rememberSource(source: LoadedSource): void {
 
 function renderFileList(): void {
   fileList.replaceChildren();
-  for (const source of loadedSources) {
+  const visible = loadedSources.slice(-8);
+  for (const source of visible) {
     const chip = document.createElement('div');
     chip.className = 'file-chip ok';
     const name = document.createElement('b');
@@ -127,6 +164,12 @@ function renderFileList(): void {
     meta.textContent = `${source.extension} · ${formatBytes(source.size)}`;
     chip.append(name, meta);
     fileList.append(chip);
+  }
+  if (loadedSources.length > visible.length) {
+    const summary = document.createElement('div');
+    summary.className = 'file-chip';
+    summary.textContent = `+ ${integerFormat.format(loadedSources.length - visible.length)} auxiliares carregados`;
+    fileList.prepend(summary);
   }
 }
 
@@ -331,7 +374,9 @@ async function runAnalysis(): Promise<void> {
     resultKicker.textContent = `${datasetName} · frequência`;
     resultTitle.textContent = fieldLabel(rowField.value).replace(` · ${rowField.value}`, '');
     renderResult();
-    exportButton.disabled = false;
+    exportCsvButton.disabled = false;
+    exportXmlButton.disabled = false;
+    chartPngButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map') await ensureMap();
   } catch (error) {
@@ -433,7 +478,7 @@ function renderChart(result: TabulationResult): void {
 
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.2.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.3.0-dev', compatibilityProfile: 'tabwin-4.15' },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -548,6 +593,7 @@ function renderMap(): void {
   high.textContent = numberFormat.format(max);
   range.append(low, high);
   mapLegend.append(title, gradient, range);
+  mapPngButton.disabled = matched === 0;
   renderAudit();
 }
 
@@ -565,6 +611,7 @@ async function ensureMap(): Promise<void> {
     mapMessage.hidden = false;
     mapMessage.textContent = 'Escolha uma variável de município ou UF, ou abra um arquivo MAP do TabWin.';
     mapLegend.hidden = true;
+    mapPngButton.disabled = true;
     return;
   }
 
@@ -579,6 +626,197 @@ async function ensureMap(): Promise<void> {
   } catch (error) {
     mapMessage.textContent = `Não foi possível abrir o mapa incluído: ${error instanceof Error ? error.message : String(error)}`;
     mapLegend.hidden = true;
+    mapPngButton.disabled = true;
+  }
+}
+
+function displayBaseName(path: string): string {
+  return path.replace(/\\/g, '/').split('/').pop() ?? path;
+}
+
+function archiveFile(entry: ExtractedArchiveFile): File {
+  const bytes = entry.bytes.buffer.slice(
+    entry.bytes.byteOffset,
+    entry.bytes.byteOffset + entry.bytes.byteLength,
+  ) as ArrayBuffer;
+  return new File([bytes], displayBaseName(entry.name), { type: 'application/octet-stream' });
+}
+
+function setCatalogStatus(message: string, isError = false): void {
+  catalogStatus.textContent = message;
+  catalogStatus.classList.toggle('error', isError);
+}
+
+function setCatalogBusy(busy: boolean): void {
+  catalogSearchButton.disabled = busy;
+  for (const button of catalogResults.querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
+}
+
+function populateCatalogFileTypes(): void {
+  const previous = catalogFileType.value;
+  const types = fileTypesForSystem(catalogSystem.value);
+  catalogFileType.replaceChildren();
+  for (const item of types) catalogFileType.add(new Option(`${item.code} · ${item.label}`, item.code));
+  if (types.some((item) => item.code === previous)) catalogFileType.value = previous;
+  updateCatalogGeography();
+}
+
+function updateCatalogGeography(): void {
+  const type = fileTypesForSystem(catalogSystem.value).find((item) => item.code === catalogFileType.value);
+  const annual = systemIsAnnual(catalogSystem.value);
+  catalogMonthLabel.hidden = annual;
+  catalogUf.replaceChildren();
+  const ufs = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
+  if (type?.coverage !== 'UF') catalogUf.add(new Option('Brasil', 'BR'));
+  if (type?.coverage !== 'BR') for (const uf of ufs) catalogUf.add(new Option(uf, uf));
+  catalogUfLabel.hidden = type?.coverage === 'BR';
+}
+
+function initializeCatalog(): void {
+  for (const system of DATASUS_SYSTEMS) catalogSystem.add(new Option(system.label, system.code));
+  for (let year = new Date().getFullYear(); year >= 1979; year--) catalogYear.add(new Option(String(year), String(year)));
+  const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+  monthNames.forEach((name, index) => catalogMonth.add(new Option(name, String(index + 1).padStart(2, '0'))));
+  populateCatalogFileTypes();
+}
+
+async function downloadCatalogEntries(
+  files: readonly DatasusRemoteFile[],
+  signal?: AbortSignal,
+  maxCacheAgeMs = 24 * 60 * 60 * 1000,
+): Promise<ExtractedArchiveFile[]> {
+  const cacheKey = `official-v1:${files.map((file) => file.address).sort().join('|')}`;
+  let archive: Uint8Array | null = null;
+  try {
+    archive = await readCachedArchive(cacheKey, maxCacheAgeMs);
+  } catch {
+    // Private browsing or storage policies may disable IndexedDB; acquisition remains usable.
+  }
+  if (!archive) {
+    const preparedUrl = await prepareOfficialDownload(files, signal);
+    archive = await fetchOfficialArchive(preparedUrl, signal);
+    try {
+      await writeCachedArchive(cacheKey, archive);
+    } catch {
+      // Cache failure is non-fatal and must never block opening public data.
+    }
+  }
+  return extractSupportedArchiveFiles(archive);
+}
+
+async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: AbortSignal): Promise<number> {
+  const definitionName = suggestedDefinitionName(query.system, query.fileType);
+  if (!definitionName) return 0;
+  setCatalogStatus('Procurando arquivos DEF e CNV oficiais…');
+  const remoteAuxiliaries = await searchOfficialAuxiliaries(query.system, signal);
+  const bundle = chooseCurrentAuxiliaryBundle(remoteAuxiliaries, query.system);
+  if (!bundle) throw new Error('O DATASUS não listou um pacote auxiliar atual para este sistema');
+  const extracted = await downloadCatalogEntries([bundle], signal, 7 * 24 * 60 * 60 * 1000);
+  const definitionEntry = extracted.find(
+    (entry) => displayBaseName(entry.name).toUpperCase() === definitionName.toUpperCase(),
+  );
+  if (!definitionEntry) throw new Error(`${definitionName} não foi encontrado no pacote auxiliar oficial`);
+
+  const definition = parseDef(textDecoder.decode(definitionEntry.bytes));
+  const wanted = new Set([definitionName.toUpperCase()]);
+  for (const option of definition.options) {
+    const resource = option.kind === 'conversion'
+      ? option.conversionFile
+      : option.kind === 'external-lookup' ? option.resourceFile : '';
+    if (extensionOf(resource) === 'CNV') wanted.add(displayBaseName(resource).toUpperCase());
+  }
+  const selected = extracted.filter((entry) => wanted.has(displayBaseName(entry.name).toUpperCase()));
+  await loadFiles(selected.map(archiveFile));
+  for (const entry of selected) {
+    const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(entry.name).toLowerCase());
+    if (source) source.origin = bundle.address;
+  }
+  return selected.length;
+}
+
+async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQuery): Promise<void> {
+  setCatalogBusy(true);
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 120_000);
+  try {
+    let auxiliaryCount = 0;
+    if (catalogAuxiliary.checked) {
+      try {
+        auxiliaryCount = await loadVerifiedAuxiliaries(query, controller.signal);
+      } catch (error) {
+        showToast(`Auxiliares não carregados: ${error instanceof Error ? error.message : String(error)}`, true);
+      }
+    }
+    setCatalogStatus(`Baixando ${remote.name} do DATASUS…`);
+    const extracted = await downloadCatalogEntries([remote], controller.signal);
+    const wanted = extracted.find((entry) => displayBaseName(entry.name).toLowerCase() === remote.name.toLowerCase())
+      ?? extracted.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
+    if (!wanted) throw new Error('O pacote oficial não contém um DBC ou DBF reconhecido');
+    await loadFiles([archiveFile(wanted)]);
+    const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
+    if (source) source.origin = remote.address;
+    renderAudit();
+    setCatalogStatus(`${remote.name} aberto${auxiliaryCount ? ` com ${integerFormat.format(auxiliaryCount)} auxiliares` : ''}.`);
+    catalogDialog.close();
+    showToast(`${remote.name} carregado diretamente do DATASUS`);
+  } catch (error) {
+    const message = error instanceof DOMException && error.name === 'AbortError'
+      ? 'O DATASUS demorou mais de 2 minutos para responder'
+      : error instanceof Error ? error.message : String(error);
+    setCatalogStatus(message, true);
+  } finally {
+    window.clearTimeout(timer);
+    setCatalogBusy(false);
+  }
+}
+
+async function searchCatalog(): Promise<void> {
+  const type = fileTypesForSystem(catalogSystem.value).find((item) => item.code === catalogFileType.value);
+  if (!type) return;
+  const query: DatasusSearchQuery = {
+    system: catalogSystem.value,
+    fileType: catalogFileType.value,
+    year: catalogYear.value,
+    ...(!systemIsAnnual(catalogSystem.value) ? { month: catalogMonth.value } : {}),
+    ...(catalogUf.value ? { uf: catalogUf.value } : {}),
+  };
+  setCatalogBusy(true);
+  catalogResults.replaceChildren();
+  setCatalogStatus('Consultando o catálogo oficial…');
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), 60_000);
+  try {
+    const files = await searchOfficialFiles(query, controller.signal);
+    if (!files.length) {
+      setCatalogStatus('Nenhum arquivo encontrado para essa combinação. O período pode ainda não ter sido publicado.');
+      return;
+    }
+    setCatalogStatus(`${integerFormat.format(files.length)} arquivo(s) encontrado(s).`);
+    for (const remote of files) {
+      const item = document.createElement('div');
+      item.className = 'catalog-result';
+      const details = document.createElement('div');
+      const name = document.createElement('b');
+      const meta = document.createElement('small');
+      name.textContent = remote.name;
+      meta.textContent = `${remote.source} · ${remote.modality}`;
+      details.append(name, meta);
+      const button = document.createElement('button');
+      button.className = 'secondary-button';
+      button.type = 'button';
+      button.textContent = 'Baixar e abrir';
+      button.addEventListener('click', () => void openOfficialFile(remote, query));
+      item.append(details, button);
+      catalogResults.append(item);
+    }
+  } catch (error) {
+    const message = error instanceof DOMException && error.name === 'AbortError'
+      ? 'O catálogo DATASUS demorou para responder. Tente novamente.'
+      : error instanceof Error ? error.message : String(error);
+    setCatalogStatus(message, true);
+  } finally {
+    window.clearTimeout(timer);
+    setCatalogBusy(false);
   }
 }
 
@@ -595,20 +833,85 @@ function showView(view: ViewName): void {
   if (view === 'map') void ensureMap();
 }
 
-function exportCsv(): void {
-  if (!currentResult) return;
-  const quote = (value: string | number) => `"${String(value).replace(/"/g, '""')}"`;
-  const lines = [
-    [fieldLabel(rowField.value), ...currentResult.columns.map((column) => column.label)].map(quote).join(','),
-    ...currentResult.rows.map((row, index) =>
-      [row.label, ...(currentResult?.cells[index] ?? [])].map(quote).join(',')),
-  ];
-  const blob = new Blob([`\uFEFF${lines.join('\r\n')}`], { type: 'text/csv;charset=utf-8' });
+function exportBaseName(): string {
+  return `${datasetName.replace(/\.[^.]+$/, '')}-${rowField.value.toLowerCase()}`;
+}
+
+function downloadBlob(blob: Blob, filename: string): void {
   const link = document.createElement('a');
   link.href = URL.createObjectURL(blob);
-  link.download = `${datasetName.replace(/\.[^.]+$/, '')}-${rowField.value.toLowerCase()}.csv`;
+  link.download = filename;
   link.click();
   window.setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+}
+
+function exportCsv(): void {
+  if (!currentResult) return;
+  const csv = tabulationToCsv(currentResult, {
+    sourceName: datasetName,
+    rowLabel: fieldLabel(rowField.value),
+  });
+  downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${exportBaseName()}.csv`);
+}
+
+function exportXml(): void {
+  if (!currentResult) return;
+  const xml = tabulationToXml(currentResult, {
+    sourceName: datasetName,
+    rowLabel: fieldLabel(rowField.value),
+  });
+  downloadBlob(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${exportBaseName()}.xml`);
+}
+
+function exportMapPng(): void {
+  if (!activeMap || !currentResult) return;
+  mapCanvas.toBlob((blob) => {
+    if (blob) downloadBlob(blob, `${exportBaseName()}-mapa.png`);
+  }, 'image/png');
+}
+
+function exportChartPng(): void {
+  if (!currentResult) return;
+  const ranked = currentResult.rows
+    .map((row, index) => ({ label: row.label, value: cellValue(currentResult!, index) }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 24);
+  const width = 1400;
+  const rowHeight = 48;
+  const height = 130 + ranked.length * rowHeight;
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext('2d');
+  if (!context) return;
+  context.fillStyle = '#ffffff';
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = '#102c39';
+  context.font = '700 28px system-ui, sans-serif';
+  context.fillText(resultTitle.textContent ?? rowField.value, 42, 48);
+  context.fillStyle = '#63767d';
+  context.font = '16px system-ui, sans-serif';
+  context.fillText(`${datasetName} · ${new Date().toLocaleString('pt-BR')}`, 42, 78);
+  const max = Math.max(...ranked.map((item) => item.value), 1);
+  ranked.forEach((item, index) => {
+    const y = 112 + index * rowHeight;
+    const label = item.label.length > 34 ? `${item.label.slice(0, 33)}…` : item.label;
+    context.fillStyle = '#3c5861';
+    context.font = '15px system-ui, sans-serif';
+    context.fillText(label, 42, y + 21);
+    context.fillStyle = '#eff4f2';
+    context.fillRect(360, y, 850, 28);
+    context.fillStyle = '#178b71';
+    context.fillRect(360, y, Math.max(2, (item.value / max) * 850), 28);
+    context.fillStyle = '#102c39';
+    context.font = '700 15px system-ui, sans-serif';
+    context.textAlign = 'right';
+    context.fillText(numberFormat.format(item.value), 1355, y + 20);
+    context.textAlign = 'left';
+  });
+  canvas.toBlob((blob) => {
+    if (blob) downloadBlob(blob, `${exportBaseName()}-grafico.png`);
+  }, 'image/png');
 }
 
 fileInput.addEventListener('change', () => void loadFiles([...fileInput.files ?? []]));
@@ -642,12 +945,27 @@ suppressZero.addEventListener('change', () => void runAnalysis());
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
   button.addEventListener('click', () => showView(button.dataset.view as ViewName));
 }
-exportButton.addEventListener('click', exportCsv);
+exportCsvButton.addEventListener('click', exportCsv);
+exportXmlButton.addEventListener('click', exportXml);
+chartPngButton.addEventListener('click', exportChartPng);
+mapPngButton.addEventListener('click', exportMapPng);
 element<HTMLButtonElement>('#about-button').addEventListener('click', () => aboutDialog.showModal());
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());
 aboutDialog.addEventListener('click', (event) => {
   if (event.target === aboutDialog) aboutDialog.close();
 });
+element<HTMLButtonElement>('#catalog-button').addEventListener('click', () => catalogDialog.showModal());
+element<HTMLButtonElement>('#catalog-close').addEventListener('click', () => catalogDialog.close());
+catalogDialog.addEventListener('click', (event) => {
+  if (event.target === catalogDialog) catalogDialog.close();
+});
+catalogSystem.addEventListener('change', populateCatalogFileTypes);
+catalogFileType.addEventListener('change', updateCatalogGeography);
+catalogForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  void searchCatalog();
+});
 window.addEventListener('resize', () => {
   if (currentView === 'map' && activeMap) renderMap();
 });
+initializeCatalog();

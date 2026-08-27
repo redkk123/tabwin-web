@@ -1,6 +1,6 @@
 {
   "name": "tabwin-web",
-  "version": "0.2.0-dev",
+  "version": "0.3.0-dev",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,10 +11,12 @@
     "web:dev": "vite --config vite.config.ts",
     "web:build": "vite build --config vite.config.ts",
     "web:preview": "vite preview --config vite.config.ts",
+    "verify:datasus-live": "npm run build && node scripts/verify-datasus-live.mjs",
     "check": "npm run test && npm run typecheck:web && npm run web:build"
   },
   "dependencies": {
-    "@precisa-saude/datasus-dbc": "2.0.2"
+    "@precisa-saude/datasus-dbc": "2.0.2",
+    "fflate": "0.8.2"
   },
   "devDependencies": {
     "typescript": "5.8.3",

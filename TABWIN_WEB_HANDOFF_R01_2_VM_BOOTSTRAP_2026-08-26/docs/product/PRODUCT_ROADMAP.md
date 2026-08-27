@@ -12,7 +12,7 @@ A user can open official DATASUS microdata locally, reproduce a familiar TabWin 
 - inspect source metadata and SHA-256;
 - schema preview;
 - multi-file period selection;
-- official-source catalog later;
+- official-source catalog for system/type/year/month/UF (**initial Web slice complete**);
 - local persistence optional, explicit and revocable.
 
 ### 2. Tabulation builder
@@ -33,7 +33,7 @@ A user can open official DATASUS microdata locally, reproduce a familiar TabWin 
 - charts;
 - map;
 - origin–destination flows;
-- export CSV/XLSX/Parquet/PNG/SVG as appropriate.
+- export CSV/XML/PNG (**initial Web slice complete**), then XLSX/Parquet/SVG as appropriate.
 
 ### 4. Audit
 

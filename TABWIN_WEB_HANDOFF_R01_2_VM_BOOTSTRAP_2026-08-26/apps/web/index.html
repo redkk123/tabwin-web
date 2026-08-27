@@ -37,6 +37,11 @@
           <input id="file-input" type="file" accept=".dbc,.dbf,.def,.cnv,.map" multiple />
         </label>
 
+        <button class="catalog-button" id="catalog-button" type="button">
+          <span><b>Buscar no DATASUS</b><small>Encontre DBC por sistema e período</small></span>
+          <span aria-hidden="true">⌕</span>
+        </button>
+
         <div class="file-list" id="file-list" aria-live="polite"></div>
 
         <form id="analysis-form" class="analysis-form">
@@ -92,7 +97,10 @@
               <span class="eyebrow" id="result-kicker">Pronto para começar</span>
               <h2 id="result-title">Abra um arquivo para explorar</h2>
             </div>
-            <button class="secondary-button" id="export-button" type="button" disabled>Exportar CSV</button>
+            <div class="export-actions" aria-label="Exportar resultado">
+              <button class="secondary-button" id="export-csv-button" type="button" disabled>CSV</button>
+              <button class="secondary-button" id="export-xml-button" type="button" disabled>XML</button>
+            </div>
           </div>
 
           <div class="dataset-stats" id="dataset-stats" hidden></div>
@@ -120,10 +128,12 @@
           </div>
 
           <div class="view-panel" id="chart-view" data-panel="chart" hidden>
+            <div class="panel-actions"><button class="secondary-button" id="chart-png-button" type="button" disabled>Baixar gráfico PNG</button></div>
             <div class="chart" id="chart"></div>
           </div>
 
           <div class="view-panel map-panel" id="map-view" data-panel="map" hidden>
+            <div class="panel-actions"><button class="secondary-button" id="map-png-button" type="button" disabled>Baixar mapa PNG</button></div>
             <div class="map-stage">
               <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
               <div class="map-message" id="map-message">Escolha uma variável geográfica para criar o mapa.</div>
@@ -148,6 +158,27 @@
       <h2>TabWin Web</h2>
       <p>Uma reimplementação moderna, local e auditável dos fluxos analíticos do TabWin. Projeto independente; os resultados de compatibilidade são validados contra o TabWin 4.15.</p>
       <p class="dialog-note">Esta versão inicial já lê DBC/DBF reais, tabula campos, aplica CNV legada e abre mapas MAP no navegador.</p>
+    </dialog>
+
+    <dialog id="catalog-dialog" class="catalog-dialog">
+      <button class="dialog-close" id="catalog-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Fonte oficial</span>
+      <h2>Buscar dados no DATASUS</h2>
+      <p>Escolha o conjunto e o período. O portal oficial prepara o arquivo e o TabWin Web abre o DBC diretamente neste aparelho, com cache local para evitar downloads repetidos.</p>
+      <form id="catalog-form" class="catalog-form">
+        <label><span>Sistema</span><select id="catalog-system"></select></label>
+        <label><span>Tipo de dados</span><select id="catalog-file-type"></select></label>
+        <div class="catalog-grid">
+          <label><span>Ano</span><select id="catalog-year"></select></label>
+          <label id="catalog-month-label"><span>Mês</span><select id="catalog-month"></select></label>
+          <label id="catalog-uf-label"><span>UF</span><select id="catalog-uf"></select></label>
+        </div>
+        <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar DEF e CNV automaticamente quando houver regra verificada</span></label>
+        <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
+      </form>
+      <div class="catalog-status" id="catalog-status" aria-live="polite"></div>
+      <div class="catalog-results" id="catalog-results"></div>
+      <p class="catalog-source">Catálogo e downloads fornecidos por <a href="https://datasus.saude.gov.br/transferencia-de-arquivos/" target="_blank" rel="noreferrer">DATASUS · Ministério da Saúde</a>.</p>
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>

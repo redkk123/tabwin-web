@@ -1,99 +1,69 @@
 {
-  "revision": "R01.2-vm-bootstrap",
-  "date": "2026-08-26",
-  "phase": "def-semantics-implemented-g001-capture-ready-dbc-integration-pending",
+  "revision": "R02.1-official-acquisition-exports",
+  "date": "2026-08-27",
+  "phase": "official-datasus-search-download-and-modern-exports-implemented",
   "tests": {
-    "total": 22,
-    "passed": 22,
+    "total": 31,
+    "passed": 31,
     "failed": 0,
-    "command": "npm test"
+    "command": "npm run check"
   },
+  "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
-    "legacy-fixed-column-cnv-parser",
-    "cnv-source-order-preservation",
-    "short-code-last-match-precedence",
-    "literal-first-match-precedence-provisional",
-    "numeric-range-cnv",
-    "row-subtotal-propagation",
-    "hash-marker-metadata",
-    "documented-def-parser-a-s-l-c-q-d-t-i-g-r",
-    "def-a-optional-sql-query",
-    "def-related-dbf-lookup-recognition",
-    "def-source-order-preservation",
-    "def-start-position-for-dimensions",
-    "def-start-position-for-filters",
-    "def-grouped-frequency-weighting",
-    "def-to-query-plan-bridge",
-    "def-x-detection-without-guessed-semantics",
-    "query-plan-validation",
-    "in-memory-count-and-sum-executor",
-    "row-column-filters",
-    "zero-row-suppression",
-    "deterministic-analysis-recipe-serialization",
-    "run-manifest-model",
-    "golden-table-v1-structural-comparator",
-    "g001-capture-protocol",
-    "github-actions-ci-with-install-step"
+    "browser-dbc-dbf-ingestion",
+    "official-datasus-catalog-search-by-system-type-year-month-uf",
+    "official-datasus-https-download-preparation",
+    "safe-nested-zip-extraction-with-limits",
+    "indexeddb-official-archive-cache-with-retention",
+    "verified-sih-rd-def-cnv-auxiliary-resolution",
+    "csv-tabulation-export",
+    "xml-tabulation-export-with-provenance",
+    "horizontal-chart-png-export",
+    "choropleth-map-png-export",
+    "legacy-cnv-and-def-kernel",
+    "tabwin-map-parser-and-choropleth",
+    "query-plan-audit"
   ],
-  "explicitly_unsupported": [
+  "live_verification": {
+    "catalog_file": "RDAC2401.dbc",
+    "system": "SIHSUS",
+    "period": "2024-01",
+    "uf": "AC",
+    "bytes": 313213,
+    "record_count": 4315,
+    "record_size": 702,
+    "auxiliary_bundle": "TAB_SIH.zip",
+    "auxiliary_entries": 886,
+    "verified_auxiliaries": ["RD2008.DEF", "COMPLEX2.CNV"]
+  },
+  "explicitly_partial_or_unsupported": [
+    "automatic-auxiliary-rules-outside-verified-sih-rd",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
-    "DEF-related-DBF-lookup-execution",
     "TAB-replay",
-    "real-DBC-ingestion-in-this-repo-runtime",
+    "all-chart-families",
+    "legacy-map-classification-and-interaction",
+    "xlsx-parquet-svg-geojson-kml-exports",
     "golden-equivalence-claim"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
-    "typescript": "5.8.3"
-  },
-  "r01_fixture_candidate": {
-    "name": "RDAC2401.dbc",
-    "system": "SIH-RD",
-    "period": "2024-01",
-    "uf": "AC",
-    "upstream_record_count": 4315,
-    "upstream_record_size": 702,
-    "materialized_locally": false
+    "fflate": "0.8.2",
+    "typescript": "5.8.3",
+    "vite": "8.2.2"
   },
   "g001": {
-    "status": "capture-protocol-ready-assets-missing",
-    "preferred_analysis": "single RDAC2401.dbc; simplest low-cardinality CNV-backed row (prefer Sexo after real RD2008.DEF validation); no column; frequency; no filters",
-    "comparison_tolerance": 0
+    "status": "web-candidate-complete-windows-tabwin-415-reference-capture-pending",
+    "row": "Complexidade do Procedimento / COMPLEX / COMPLEX2.CNV",
+    "comparison_tolerance": 0,
+    "golden_modified": false
   },
   "next": [
-    "materialize @precisa-saude/datasus-dbc 2.0.2 in a networked environment",
-    "acquire RDAC2401.dbc",
-    "acquire official SIH Auxiliar bundle with RD2008.DEF and required CNVs",
-    "parse real RD2008.DEF and inventory directives",
-    "implement DBC record adapter",
-    "capture original TabWin 4.15 G001 output and log",
-    "normalize G001 oracle and run structural comparator",
-    "resolve only concrete mismatches by semantic layer"
-  ],
-  "cloud_policy": "cloud-credits-are-acceleration-capital-not-architecture",
-  "ai_worker_policy": "secondary-models-allowed-only-with-bounded-tasks-tests-and-evidence",
-  "codex_policy": "contingency-only-remaining-budget-approximately-7-percent",
-  "development_environment": {
-    "provider": "Google Compute Engine",
-    "instance": "tabwin",
-    "region": "southamerica-east1",
-    "zone_observed": "southamerica-east1-a",
-    "machine_type": "e2-standard-2",
-    "vcpu": 2,
-    "memory_gb": 8,
-    "os": "Ubuntu 26.04 LTS Minimal",
-    "disk_gb": 100,
-    "disk_type": "balanced persistent disk",
-    "service_account": "none",
-    "ssh": "browser SSH / IAP"
-  },
-  "ai_workflow": {
-    "worker": "Gemini on VM",
-    "supervisor": "ChatGPT main conversation",
-    "oracle": "TabWin 4.15 on user local Windows PC",
-    "interchange": "GitHub / review packet / artifacts",
-    "claude_status": "configured but global Anthropic quotas zero; wait/resubmit later"
-  },
-  "next_milestone": "R01.2 real-data pipeline toward G001 exact golden equivalence"
+    "capture-G001-in-original-TabWin-4.15",
+    "move-DBC-processing-to-cancellable-Web-Worker",
+    "add-offline-recent-files-screen-and-cache-controls",
+    "surface-DEF-driven-increments-and-selections",
+    "add-recipe-save-open-and-TAB-archaeology",
+    "expand-chart-and-map-families"
+  ]
 }

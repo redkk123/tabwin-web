@@ -27,6 +27,8 @@ Status vocabulary:
 | TabWin capability | Web status | Notes |
 | --- | --- | --- |
 | Open `.DBC` and `.DBF` | **Web** | Browser-compatible decoder; no upload. |
+| Search/download official microdata | **Web / modern extension** | Official DATASUS catalog, system/type/year/month/UF filters, official HTTPS preparation and local opening. Not a claimed 4.15 compatibility behavior. |
+| Resolve official DEF/CNV auxiliaries | **Web / partial** | Verified SIH-RD rule downloads current `TAB_SIH.zip` and loads `RD2008.DEF` plus referenced CNVs. Other systems remain explicit pending rules. |
 | Select `.DEF` | **Web / Parsed** | `A`, `R`, `S/L/C/Q/D/T`, `I`, `G`; unknown directives retained. |
 | Apply `.CNV` | **Web / Kernel** | Legacy short, literal and numeric-range forms; source-order precedence retained. New `N` layout remains guarded. |
 | Row and column dimensions | **Web** | Raw rows/columns; row CNV in the current UI. |
@@ -47,7 +49,7 @@ Status vocabulary:
 | --- | --- | --- |
 | Open/save table | **Cataloged** | Open table, save table, associate `.TAB`, recover selections. |
 | Print | **Cataloged** | Print table. Browser print stylesheet pending. |
-| Export | **Web (CSV)** | General export confirmed; XLSX, DBF, Parquet and legacy formats pending. |
+| Export | **Web (CSV/XML)** | Complete result matrix and provenance-aware XML; XLSX, DBF, Parquet and legacy formats pending. |
 | Copy/paste/include table | **Cataloged** | Clipboard and table inclusion semantics pending. |
 | Save selected records as DBF | **Cataloged** | Local download adapter pending. |
 | Audit/recipe | **Web / Kernel** | QueryPlan and hashes visible; deterministic recipe serializer exists in kernel. |
@@ -99,7 +101,7 @@ visual sorting or formatting.
 | Edit axes, zoom and zoom reset | **Cataloged** | Touch/keyboard behavior required on web. |
 | 3D effect | **Cataloged / likely historical** | Compatibility option only if it changes an exported artifact users still need. |
 | Background image | **Cataloged** | Local-only image input if retained. |
-| Copy, print and save chart | **Cataloged** | PNG/SVG and browser print are modern targets; EMF/WMF are legacy-only. |
+| Copy, print and save chart | **Web (PNG) / Cataloged** | Current horizontal bar chart exports PNG; SVG, print and other chart families remain pending. |
 
 ## 6. Maps and geographic analysis
 
@@ -117,7 +119,7 @@ visual sorting or formatting.
 | Distance column | **Cataloged** | Geographic formula and projection handling require oracle evidence. |
 | Origin–destination flows | **Cataloged** | Help confirms flow table, arrows, origin/destination totals and sector charts. |
 | Import E00, SHP, BNA, BND, MIF/MID, XY, WPT, GPX, MME, SPRING | **Cataloged** | Demand-driven adapters; modern GeoJSON/GeoPackage may be offered alongside them. |
-| Copy, print, bitmap and KML-related export | **Cataloged** | PNG/GeoJSON are preferred modern outputs; compatibility formats remain explicit. |
+| Copy, print, bitmap and KML-related export | **Web (PNG) / Cataloged** | Current canvas map exports PNG; GeoJSON/KML, print and compatibility formats remain explicit future work. |
 
 ## 7. Statistical analysis
 

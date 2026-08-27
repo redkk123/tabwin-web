@@ -1,12 +1,33 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R01.1-dev  
-**Date:** 2026-08-26  
-**Status:** DEF-aware R01 semantic kernel implemented; G001 real DBC golden capture/ingestion still pending  
+**Revision:** R02.1-dev
+**Date:** 2026-08-27
+**Status:** Browser workbench, official DATASUS acquisition and modern exports implemented; G001 Windows golden capture still pending
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 implementation update
+
+The repository now contains a static Vite browser workbench that opens real
+DBC/DBF files locally, tabulates through the preserved
+`AnalysisSpec -> QueryPlan -> Executor -> TabulationResult` pipeline, applies
+supported DEF/CNV metadata, displays tables/charts/maps/audit and exports CSV,
+XML and PNG.
+
+R02.1 added a separate official-source acquisition adapter. The browser can
+search the public DATASUS Transferencia de Arquivos service by system, type,
+year, month and UF, ask DATASUS to prepare the selected FTP resource as an
+official HTTPS ZIP, expand it locally and open its DBC. The live verifier
+confirmed `RDAC2401.dbc` (313,213 bytes; 4,315 records) and current
+`TAB_SIH.zip` (886 entries including `RD2008.DEF` and `COMPLEX2.CNV`).
+
+Current portable verification is 31/31 tests plus web typecheck and production
+build. Full evidence and limitations are in
+`docs/handoffs/R02_1_OFFICIAL_DATASUS_ACQUISITION_AND_EXPORT_REPORT.md`.
+No compatibility golden was changed. The Windows TabWin 4.15 G001 capture
+remains the next external-oracle requirement.
 
 ---
 
