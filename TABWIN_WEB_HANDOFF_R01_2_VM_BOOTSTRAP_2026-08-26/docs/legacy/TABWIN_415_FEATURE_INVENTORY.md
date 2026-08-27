@@ -48,7 +48,7 @@ Status vocabulary:
 
 | Capability family | Web status | Named 4.15 topics |
 | --- | --- | --- |
-| Open/save table | **Web recipe / Cataloged `.TAB`** | Portable `.twrecipe` save/open is usable; legacy `.TAB` parsing and exact table-state recovery remain pending. |
+| Open/save table | **Web `.twtable` + recipe / Cataloged `.TAB`** | Portable results reopen without the source DBC and retain operations/presentation; `.twrecipe` re-executes against data. Legacy `.TAB` parsing remains pending. |
 | Print | **Cataloged** | Print table. Browser print stylesheet pending. |
 | Export | **Web (CSV/XML/XLSX)** | Complete result matrix, provenance-aware XML and two-sheet XLSX with audit metadata; DBF, Parquet and legacy formats pending. |
 | Copy/paste/include table | **Web copy / Cataloged paste+include** | Current presented rows copy as spreadsheet-ready TSV; paste and table inclusion semantics pending. |

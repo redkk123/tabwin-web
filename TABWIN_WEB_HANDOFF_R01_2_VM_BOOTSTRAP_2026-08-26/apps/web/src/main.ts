@@ -9,11 +9,14 @@ import {
 import {
   compileQueryPlan,
   executeInMemory,
+  parsePortableTable,
   parseRecipe,
+  serializePortableTable,
   serializeRecipe,
   type AnalysisRecipeV1,
   type FilterSpec,
   type QueryPlan,
+  type PortableTableV1,
   type TableOperation,
   type TabulationResult,
   type TotalPolicy,
@@ -118,6 +121,9 @@ const activeFilterList = element<HTMLElement>('#active-filter-list');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
 const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
 const recipeInput = element<HTMLInputElement>('#recipe-input');
+const openTableButton = element<HTMLButtonElement>('#open-table-button');
+const saveTableButton = element<HTMLButtonElement>('#save-table-button');
+const tableInput = element<HTMLInputElement>('#table-input');
 const startPosition = element<HTMLInputElement>('#start-position');
 const suppressZero = element<HTMLInputElement>('#suppress-zero');
 const discriminateUnclassified = element<HTMLInputElement>('#discriminate-unclassified');
@@ -218,6 +224,7 @@ let currentPlan: QueryPlan | null = null;
 let baseResult: TabulationResult | null = null;
 let currentResult: TabulationResult | null = null;
 let tableOperations: TableOperation[] = [];
+let currentRowLabel = '';
 let currentView: ViewName = 'table';
 let toastTimer = 0;
 const cnvByName = new Map<string, CnvDefinition>();
@@ -311,6 +318,10 @@ function fieldLabel(fieldName: string): string {
   const match = activeDef.options.find((option) =>
     option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes('row'));
   return match ? `${match.label} · ${fieldName}` : fieldName;
+}
+
+function activeRowLabel(): string {
+  return currentRowLabel || fieldLabel(rowField.value) || currentPlan?.spec.rows.field || 'Linha';
 }
 
 function incrementLabel(fieldName: string): string {
@@ -692,6 +703,7 @@ async function runAnalysis(): Promise<void> {
     baseResult = result;
     currentResult = result;
     tableOperations = [];
+    currentRowLabel = fieldLabel(rowField.value);
     resultKicker.textContent = measureKind.value === 'sum'
       ? `${datasetName} · soma de ${measureField.value}`
       : `${datasetName} · frequência`;
@@ -703,6 +715,7 @@ async function runAnalysis(): Promise<void> {
     chartPngButton.disabled = false;
     chartSvgButton.disabled = false;
     saveRecipeButton.disabled = false;
+    saveTableButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map') await ensureMap();
   } catch (error) {
@@ -928,7 +941,7 @@ function renderTable(result: TabulationResult): void {
   if (tableKeyVisible.checked) {
     const dimension = document.createElement('th');
     dimension.scope = 'col';
-    dimension.textContent = fieldLabel(rowField.value);
+    dimension.textContent = activeRowLabel();
     headerRow.append(dimension);
   }
   for (const column of result.columns) {
@@ -1542,7 +1555,8 @@ function showView(view: ViewName): void {
 }
 
 function exportBaseName(): string {
-  return `${datasetName.replace(/\.[^.]+$/, '')}-${rowField.value.toLowerCase()}`;
+  const field = currentPlan?.spec.rows.field || 'tabela';
+  return `${datasetName.replace(/\.[^.]+$/, '')}-${field.toLowerCase()}`;
 }
 
 function downloadBlob(blob: Blob, filename: string): void {
@@ -1603,6 +1617,107 @@ function saveRecipe(): void {
     new Blob([serializeRecipe(recipe)], { type: 'application/json;charset=utf-8' }),
     `${exportBaseName()}.twrecipe`,
   );
+}
+
+function savePortableTable(): void {
+  if (!currentPlan || !baseResult || !currentResult) return;
+  const table: PortableTableV1 = {
+    schema: 'tabwin-web.table',
+    version: 1,
+    title: resultTitle.textContent?.trim() || `Tabela ${currentPlan.spec.rows.field}`,
+    rowLabel: activeRowLabel(),
+    createdAt: new Date().toISOString(),
+    ...(datasetFingerprint ? { source: {
+      name: datasetFingerprint.name,
+      sha256: datasetFingerprint.sha256,
+      size: datasetFingerprint.size,
+    } } : {}),
+    plan: currentPlan,
+    baseResult,
+    operations: tableOperations,
+    presentation: {
+      sortColumnKey: tableSortColumn.value,
+      sortDirection: tableSortDirection.value as 'original' | 'ascending' | 'descending',
+      decimalPlaces: Number(tableDecimals.value),
+      keyVisible: tableKeyVisible.checked,
+    },
+  };
+  downloadBlob(
+    new Blob([serializePortableTable(table)], { type: 'application/json;charset=utf-8' }),
+    `${exportBaseName()}.twtable`,
+  );
+}
+
+function renderPortableTableStats(table: PortableTableV1): void {
+  const values: Array<readonly [string, string]> = [
+    [integerFormat.format(table.baseResult.recordsAccepted), 'registros aceitos'],
+    [integerFormat.format(table.baseResult.rows.length), 'linhas salvas'],
+    [integerFormat.format(table.baseResult.columns.length), 'colunas base'],
+    [integerFormat.format(table.operations.length), 'operações reproduzidas'],
+  ];
+  datasetStats.replaceChildren();
+  for (const [value, label] of values) {
+    const item = document.createElement('div');
+    const strong = document.createElement('b');
+    const caption = document.createElement('span');
+    strong.textContent = value;
+    caption.textContent = label;
+    item.append(strong, caption);
+    datasetStats.append(item);
+  }
+  datasetStats.style.display = 'grid';
+  datasetStats.hidden = false;
+}
+
+async function openPortableTable(file: File): Promise<void> {
+  const table = parsePortableTable(await file.text());
+  records = [];
+  dbfHeader = null;
+  configuredFilters = [];
+  activeDef = null;
+  activeMap = null;
+  activeMapSource = '';
+  cnvByName.clear();
+  loadedSources.splice(0, loadedSources.length);
+  datasetName = table.source?.name ?? file.name;
+  datasetFingerprint = table.source ? {
+    ...table.source,
+    extension: extensionOf(table.source.name) || 'SOURCE',
+    origin: `Tabela portátil ${file.name}`,
+  } : null;
+  if (datasetFingerprint) rememberSource(datasetFingerprint);
+  else renderFileList();
+  currentPlan = table.plan;
+  baseResult = structuredClone(table.baseResult);
+  tableOperations = table.operations.map((operation) => structuredClone(operation));
+  currentResult = replayTableOperations(baseResult, tableOperations);
+  currentRowLabel = table.rowLabel;
+  rowField.replaceChildren(new Option(table.rowLabel, table.plan.spec.rows.field));
+  rowField.value = table.plan.spec.rows.field;
+  columnField.replaceChildren(new Option('Resultado salvo', ''));
+  resultKicker.textContent = `${file.name} · tabela portátil`;
+  resultTitle.textContent = table.title;
+  if (table.presentation) {
+    tableSortDirection.value = table.presentation.sortDirection;
+    tableDecimals.value = String(table.presentation.decimalPlaces);
+    tableKeyVisible.checked = table.presentation.keyVisible;
+  }
+  renderResult();
+  if (table.presentation?.sortColumnKey
+    && [...tableSortColumn.options].some((option) => option.value === table.presentation?.sortColumnKey)) {
+    tableSortColumn.value = table.presentation.sortColumnKey;
+    renderTable(currentResult);
+  }
+  renderPortableTableStats(table);
+  setControlsEnabled(false);
+  saveRecipeButton.disabled = true;
+  saveTableButton.disabled = false;
+  exportCsvButton.disabled = false;
+  exportXlsxButton.disabled = false;
+  exportXmlButton.disabled = false;
+  chartPngButton.disabled = false;
+  chartSvgButton.disabled = false;
+  showToast(`${file.name}: tabela aberta sem precisar do DBC original`);
 }
 
 async function openRecipe(file: File): Promise<void> {
@@ -1678,7 +1793,7 @@ function exportCsv(): void {
   if (!currentResult) return;
   const csv = tabulationToCsv(currentResult, {
     sourceName: datasetName,
-    rowLabel: fieldLabel(rowField.value),
+    rowLabel: activeRowLabel(),
   });
   downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${exportBaseName()}.csv`);
 }
@@ -1687,7 +1802,7 @@ function exportXml(): void {
   if (!currentResult) return;
   const xml = tabulationToXml(currentResult, {
     sourceName: datasetName,
-    rowLabel: fieldLabel(rowField.value),
+    rowLabel: activeRowLabel(),
   });
   downloadBlob(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${exportBaseName()}.xml`);
 }
@@ -1696,7 +1811,7 @@ function exportXlsx(): void {
   if (!currentResult) return;
   const bytes = tabulationToXlsx(currentResult, {
     sourceName: datasetName,
-    rowLabel: fieldLabel(rowField.value),
+    rowLabel: activeRowLabel(),
   });
   downloadBlob(new Blob([bytes as BlobPart], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -1706,7 +1821,7 @@ function exportXlsx(): void {
 async function copyPresentedTable(): Promise<void> {
   if (!currentResult) return;
   const tsv = tableRowsToTsv(currentResult, currentTableRowIndexes(), {
-    rowLabel: fieldLabel(rowField.value),
+    rowLabel: activeRowLabel(),
     includeKey: tableKeyVisible.checked,
   });
   await navigator.clipboard.writeText(tsv);
@@ -1839,6 +1954,7 @@ clearFilterButton.addEventListener('click', () => {
   void runAnalysis();
 });
 openRecipeButton.addEventListener('click', () => recipeInput.click());
+openTableButton.addEventListener('click', () => tableInput.click());
 saveRecipeButton.addEventListener('click', () => {
   try {
     saveRecipe();
@@ -1851,6 +1967,16 @@ recipeInput.addEventListener('change', () => {
   if (!file) return;
   void openRecipe(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
   recipeInput.value = '';
+});
+saveTableButton.addEventListener('click', () => {
+  try { savePortableTable(); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableInput.addEventListener('change', () => {
+  const file = tableInput.files?.[0];
+  if (!file) return;
+  void openPortableTable(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
+  tableInput.value = '';
 });
 suppressZero.addEventListener('change', () => void runAnalysis());
 discriminateUnclassified.addEventListener('change', () => void runAnalysis());

@@ -138,7 +138,7 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   return parsed as AnalysisRecipeV1;
 }
 
-function validateTableOperation(value: unknown): asserts value is TableOperation {
+export function validateTableOperation(value: unknown): asserts value is TableOperation {
   if (!value || typeof value !== 'object') throw new Error('invalid table operation in TabWin Web recipe');
   const operation = value as Partial<TableOperation> & Record<string, unknown> & { output?: Record<string, unknown> };
   const stringField = (key: string): boolean => typeof operation[key] === 'string' && String(operation[key]).length > 0;

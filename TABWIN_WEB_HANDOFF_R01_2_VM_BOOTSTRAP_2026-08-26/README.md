@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R04.6 — G001 exact golden passed; advanced filters, table editing and XLSX export are usable in the browser.
+> **Status:** R04.7 — G001 exact golden passed; portable tables can be saved, shared and reopened without the source DBC.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -34,6 +34,7 @@ The current browser application and TypeScript packages provide:
 - rows, columns and filters;
 - zero-row suppression;
 - deterministic analysis recipes and run-manifest models.
+- portable `.twtable` result snapshots with validated plans and replayable operations;
 - real browser DBC/DBF ingestion;
 - official DATASUS catalog/acquisition adapter (server-verified; static-host CORS proxy pending);
 - CSV/XML/XLSX, chart PNG/SVG and map PNG export;
@@ -47,7 +48,7 @@ Run:
 npm test
 ```
 
-Current checkpoint: **66 passing tests**, browser typecheck, production build
+Current checkpoint: **69 passing tests**, browser typecheck, production build
 and G001 zero-tolerance equivalence.
 
 ## Repository layout

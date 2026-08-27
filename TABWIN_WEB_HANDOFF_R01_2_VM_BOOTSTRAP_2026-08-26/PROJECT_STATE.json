@@ -1,10 +1,10 @@
 {
-  "revision": "R04.6-xlsx-export",
+  "revision": "R04.7-portable-tables",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 66,
-    "passed": 66,
+    "total": 69,
+    "passed": 69,
     "failed": 0,
     "command": "npm run check"
   },
@@ -19,6 +19,8 @@
     "csv-tabulation-export",
     "xml-tabulation-export-with-provenance",
     "deterministic-xlsx-table-and-audit-export",
+    "portable-result-table-save-open-without-source-dataset",
+    "portable-table-plan-operation-and-presentation-validation",
     "horizontal-chart-png-export",
     "choropleth-map-png-export",
     "legacy-cnv-and-def-kernel",

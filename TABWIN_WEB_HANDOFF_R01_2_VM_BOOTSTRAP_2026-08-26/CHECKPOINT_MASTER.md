@@ -1,12 +1,28 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.6-xlsx-export
+**Revision:** R04.7-portable-tables
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; XLSX table/audit export implemented
+**Status:** G001 exact golden passed; portable result-table save/open implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.7 portable-table update
+
+The browser can save and reopen a versioned `.twtable` containing the base
+`TabulationResult`, compiled QueryPlan, source fingerprint, ordered table
+operations and presentation settings. Reopening does not require the original
+DBC and still supports charts, statistics, exports, further table editing,
+Undo and Restore. The file is deterministic except for its explicit creation
+timestamp and is treated as data, with strict structural validation.
+
+Portable verification is 69/69 plus browser typecheck and production build.
+A browser workflow opened a two-row snapshot without a dataset, restored its
+title, row label and descending sort, then calculated `12 -> 24` through a
+replayable factor operation. This modern format does not claim legacy `.TAB`
+compatibility. Evidence is in
+`docs/handoffs/R04_7_PORTABLE_TABLES_REPORT.md`.
 
 ## 2026-08-27 R04.6 XLSX-export update
 

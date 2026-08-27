@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.6 XLSX-export milestone.
+Verified on 2026-08-27 through the R04.7 portable-table milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 66 tests;
-- 66 passed;
+- 69 tests;
+- 69 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -60,6 +60,12 @@ checks both `Tabela` and `Auditoria` worksheets, verifies numeric result cells,
 escaped provenance, a fixed workbook timestamp and byte-identical repeated
 generation. Browser typecheck and production build include the local XLSX
 download button without introducing a spreadsheet runtime dependency.
+
+R04.7 adds three portable-table tests covering deterministic serialization and
+round-trip parsing, exact result matrix shape, finite numeric cells, unique
+axis keys, record counts, QueryPlan compilation, operation validation and
+presentation bounds. Browser verification opened a `.twtable` without a DBC,
+restored its title/row label/sort, then applied a factor column (`12 -> 24`).
 
 ## Live official-source verification
 
