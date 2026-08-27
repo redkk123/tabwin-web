@@ -50,7 +50,7 @@ Status vocabulary:
 | --- | --- | --- |
 | Open/save table | **Web recipe / Cataloged `.TAB`** | Portable `.twrecipe` save/open is usable; legacy `.TAB` parsing and exact table-state recovery remain pending. |
 | Print | **Cataloged** | Print table. Browser print stylesheet pending. |
-| Export | **Web (CSV/XML)** | Complete result matrix and provenance-aware XML; XLSX, DBF, Parquet and legacy formats pending. |
+| Export | **Web (CSV/XML/XLSX)** | Complete result matrix, provenance-aware XML and two-sheet XLSX with audit metadata; DBF, Parquet and legacy formats pending. |
 | Copy/paste/include table | **Web copy / Cataloged paste+include** | Current presented rows copy as spreadsheet-ready TSV; paste and table inclusion semantics pending. |
 | Save selected records as DBF | **Cataloged** | Local download adapter pending. |
 | Audit/recipe | **Web / Kernel** | QueryPlan and hashes visible; deterministic recipe save/open validates plans and fingerprints. |

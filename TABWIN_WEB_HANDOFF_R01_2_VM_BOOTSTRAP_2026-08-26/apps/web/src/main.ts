@@ -37,6 +37,7 @@ import {
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
 import { tabulationToCsv, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
+import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import {
   chooseCurrentAuxiliaryBundle,
   extractSupportedArchiveFiles,
@@ -122,6 +123,7 @@ const suppressZero = element<HTMLInputElement>('#suppress-zero');
 const discriminateUnclassified = element<HTMLInputElement>('#discriminate-unclassified');
 const runButton = element<HTMLButtonElement>('#run-button');
 const exportCsvButton = element<HTMLButtonElement>('#export-csv-button');
+const exportXlsxButton = element<HTMLButtonElement>('#export-xlsx-button');
 const exportXmlButton = element<HTMLButtonElement>('#export-xml-button');
 const chartPngButton = element<HTMLButtonElement>('#chart-png-button');
 const chartSvgButton = element<HTMLButtonElement>('#chart-svg-button');
@@ -696,6 +698,7 @@ async function runAnalysis(): Promise<void> {
     resultTitle.textContent = fieldLabel(rowField.value).replace(` · ${rowField.value}`, '');
     renderResult();
     exportCsvButton.disabled = false;
+    exportXlsxButton.disabled = false;
     exportXmlButton.disabled = false;
     chartPngButton.disabled = false;
     chartSvgButton.disabled = false;
@@ -1689,6 +1692,17 @@ function exportXml(): void {
   downloadBlob(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${exportBaseName()}.xml`);
 }
 
+function exportXlsx(): void {
+  if (!currentResult) return;
+  const bytes = tabulationToXlsx(currentResult, {
+    sourceName: datasetName,
+    rowLabel: fieldLabel(rowField.value),
+  });
+  downloadBlob(new Blob([bytes as BlobPart], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  }), `${exportBaseName()}.xlsx`);
+}
+
 async function copyPresentedTable(): Promise<void> {
   if (!currentResult) return;
   const tsv = tableRowsToTsv(currentResult, currentTableRowIndexes(), {
@@ -1844,6 +1858,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')
   button.addEventListener('click', () => showView(button.dataset.view as ViewName));
 }
 exportCsvButton.addEventListener('click', exportCsv);
+exportXlsxButton.addEventListener('click', exportXlsx);
 exportXmlButton.addEventListener('click', exportXml);
 tableOperationKind.addEventListener('change', updateTableOperationControls);
 tableOperationApply.addEventListener('click', () => {

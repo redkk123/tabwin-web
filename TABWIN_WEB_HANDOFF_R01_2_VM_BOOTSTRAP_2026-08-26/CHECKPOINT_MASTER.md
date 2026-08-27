@@ -1,12 +1,26 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.5-structural-table-editing
+**Revision:** R04.6-xlsx-export
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; advanced selections and structural table editing implemented
+**Status:** G001 exact golden passed; XLSX table/audit export implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R04.6 XLSX-export update
+
+The result workbench now creates a standards-based `.xlsx` entirely in the
+browser. The first worksheet contains the full row/column matrix as genuine
+numeric cells; the second records source name, generation time, records seen
+and accepted, result shape and warnings. Headers are bold, the first row is
+frozen and filters are enabled. The workbook is deterministic for a fixed
+export context and uses only the already-pinned `fflate` ZIP dependency.
+
+Portable verification is 66/66 plus browser typecheck and production build.
+The test deserializes the OOXML package and verifies worksheet relationships,
+numeric cells, escaping, provenance and byte-identical generation. Evidence is
+in `docs/handoffs/R04_6_XLSX_EXPORT_REPORT.md`.
 
 ## 2026-08-27 R04.5 structural-table-editing update
 

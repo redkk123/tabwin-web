@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R04.5 — G001 exact golden passed; advanced filters and structural table editing are usable in the browser.
+> **Status:** R04.6 — G001 exact golden passed; advanced filters, table editing and XLSX export are usable in the browser.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -36,7 +36,7 @@ The current browser application and TypeScript packages provide:
 - deterministic analysis recipes and run-manifest models.
 - real browser DBC/DBF ingestion;
 - official DATASUS catalog/acquisition adapter (server-verified; static-host CORS proxy pending);
-- CSV/XML, chart PNG/SVG and map PNG export;
+- CSV/XML/XLSX, chart PNG/SVG and map PNG export;
 - eight chart families;
 - legacy `.MAP` parsing and interactive thematic maps;
 - descriptive statistics, Pearson correlation, simple regression and histograms.
@@ -47,7 +47,7 @@ Run:
 npm test
 ```
 
-Current checkpoint: **46 passing tests**, browser typecheck, production build
+Current checkpoint: **66 passing tests**, browser typecheck, production build
 and G001 zero-tolerance equivalence.
 
 ## Repository layout
