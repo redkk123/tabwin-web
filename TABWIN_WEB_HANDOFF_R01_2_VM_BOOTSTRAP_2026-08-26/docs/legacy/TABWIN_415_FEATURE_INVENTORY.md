@@ -52,7 +52,7 @@ Status vocabulary:
 | Print | **Cataloged** | Print table. Browser print stylesheet pending. |
 | Export | **Web (CSV/XML/XLSX)** | Complete result matrix, provenance-aware XML and two-sheet XLSX with audit metadata; DBF, Parquet and legacy formats pending. |
 | Copy/paste/include table | **Web copy / Cataloged paste+include** | Current presented rows copy as spreadsheet-ready TSV; paste and table inclusion semantics pending. |
-| Save selected records as DBF | **Cataloged** | Local download adapter pending. |
+| Save selected records as DBF | **Web / golden-pending** | The executor's accepted record set is written as standard local xBase DBF; exact 4.15 dialog/schema defaults need an oracle artifact. |
 | Audit/recipe | **Web / Kernel** | QueryPlan and hashes visible; deterministic recipe save/open validates plans and fingerprints. |
 
 ## 3. Table calculations
@@ -155,10 +155,9 @@ policy, before compatibility claims.
 
 Confirmed topics include concepts, edit and create flows for DEF/CNV; DBF
 viewer; DBF compression to DBC; DBC expansion; CRC test; accent conversion;
-and saving records to a new DBF. Reading/parsing is **Web / Parsed** and DBC
-expansion to a validated downloadable DBF is now **Web**. DBF-to-DBC encoding,
-authoring, record-subset writing, CRC reporting and accent conversion remain
-**Cataloged**.
+and saving records to a new DBF. Reading/parsing, DBC expansion and
+executor-selected record writing are now **Web**. DBF-to-DBC encoding,
+authoring, CRC reporting and accent conversion remain **Cataloged**.
 
 ## 9. Integrations and historical mechanisms
 
@@ -166,7 +165,7 @@ authoring, record-subset writing, CRC reporting and accent conversion remain
 | --- | --- |
 | TabWin + R analysis schemes | **Cataloged** as an expert workflow. A browser-safe recipe/plugin boundary is preferred; arbitrary local R cannot run on GitHub Pages. |
 | TabWin + SQL saved queries | **Cataloged**. DuckDB/WASM may execute compiled plans later but must not define legacy semantics. |
-| XML/SDF/CSV/DBF import | **Cataloged**; CSV is a likely early adapter. |
+| XML/SDF/CSV/DBF import | **Web CSV/TSV / Cataloged others**; delimited input runs under the modern profile and does not claim legacy importer defaults. |
 | Wine instructions | **Replaced** by the native browser application. |
 | BDE, WinHelp, Registry discovery, WMF-first graphics, FTP browser assumptions | **Replaced**; do not recreate. |
 

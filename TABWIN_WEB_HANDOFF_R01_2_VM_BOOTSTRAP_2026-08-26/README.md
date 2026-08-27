@@ -1,6 +1,6 @@
 # TabWin Web
 
-> **Status:** R05.0 — G001 exact golden passed; DBC files can be analyzed or expanded to standard DBF entirely in the browser.
+> **Status:** R05.1 — G001 exact golden passed; CSV/TSV sources and filtered DBF record exports now run entirely in the browser.
 >
 > Independent, non-official modernization/reimplementation effort. It is not affiliated with or endorsed by DATASUS or the Brazilian Ministry of Health.
 
@@ -36,7 +36,9 @@ The current browser application and TypeScript packages provide:
 - deterministic analysis recipes and run-manifest models.
 - portable `.twtable` result snapshots with validated plans and replayable operations;
 - real browser DBC/DBF ingestion;
+- strict CSV/TSV ingestion with conservative numeric inference;
 - validated local DBC-to-DBF expansion and download;
+- selected-record DBF writing through the executor's exact acceptance boundary;
 - official DATASUS catalog/acquisition adapter (server-verified; static-host CORS proxy pending);
 - CSV/XML/XLSX, chart PNG/SVG and map PNG export;
 - eight chart families;
@@ -49,7 +51,7 @@ Run:
 npm test
 ```
 
-Current checkpoint: **71 passing tests**, browser typecheck, production build
+Current checkpoint: **77 passing tests**, browser typecheck, production build
 and G001 zero-tolerance equivalence.
 
 ## Repository layout

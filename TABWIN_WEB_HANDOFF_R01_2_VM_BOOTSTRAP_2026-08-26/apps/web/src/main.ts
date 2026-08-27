@@ -11,6 +11,7 @@ import {
   executeInMemory,
   parsePortableTable,
   parseRecipe,
+  resolvePlanRecord,
   serializePortableTable,
   serializeRecipe,
   type AnalysisRecipeV1,
@@ -24,6 +25,7 @@ import {
 import {
   optionsForRole,
   parseCnv,
+  parseDelimited,
   parseDef,
   parseTabwinMap,
   type CnvDefinition,
@@ -42,6 +44,7 @@ import {
 import { tabulationToCsv, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
+import { writeDbf } from '../../../packages/export/src/dbf-writer.ts';
 import {
   chooseCurrentAuxiliaryBundle,
   extractSupportedArchiveFiles,
@@ -98,6 +101,7 @@ const fileInput = element<HTMLInputElement>('#file-input');
 const dropZone = element<HTMLElement>('#drop-zone');
 const fileList = element<HTMLElement>('#file-list');
 const sourceDbfButton = element<HTMLButtonElement>('#source-dbf-button');
+const selectedDbfButton = element<HTMLButtonElement>('#selected-dbf-button');
 const form = element<HTMLFormElement>('#analysis-form');
 const rowField = element<HTMLSelectElement>('#row-field');
 const columnField = element<HTMLSelectElement>('#column-field');
@@ -218,6 +222,7 @@ const catalogResults = element<HTMLElement>('#catalog-results');
 let records: DbfRecord[] = [];
 let dbfHeader: DbfHeader | null = null;
 let currentDatasetFile: File | null = null;
+let currentCompatibilityProfile: 'tabwin-4.15' | 'modern' = 'tabwin-4.15';
 let datasetName = '';
 let datasetFingerprint: LoadedSource | null = null;
 let activeDef: DefDefinition | null = null;
@@ -602,6 +607,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean): Promise
   records = nextRecords;
   dbfHeader = header;
   currentDatasetFile = file;
+  currentCompatibilityProfile = 'tabwin-4.15';
   sourceDbfButton.disabled = false;
   configuredFilters = [];
   renderConfiguredFilters();
@@ -612,9 +618,38 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean): Promise
   await runAnalysis();
 }
 
+async function decodeDelimitedFile(bytes: Uint8Array, file: File): Promise<void> {
+  setBusy(`Lendo ${file.name}…`);
+  let text: string;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { text = textDecoder.decode(bytes); }
+  const dataset = parseDelimited(text, extensionOf(file.name) === 'TSV' ? { delimiter: '\t' } : {});
+  records = dataset.records as DbfRecord[];
+  const fields = dataset.fields;
+  dbfHeader = {
+    version: 0x03,
+    dateOfLastUpdate: new Date(file.lastModified || Date.now()),
+    recordCount: records.length,
+    headerLength: 32 + fields.length * 32 + 1,
+    recordLength: 1 + fields.reduce((sum, field) => sum + field.length, 0),
+    fields,
+  };
+  currentDatasetFile = null;
+  currentCompatibilityProfile = 'modern';
+  sourceDbfButton.disabled = true;
+  configuredFilters = [];
+  renderConfiguredFilters();
+  datasetName = file.name;
+  datasetFingerprint = loadedSources.find((source) => source.name === file.name) ?? null;
+  populateControls(chooseDefaultField(fields));
+  updateDatasetStats();
+  await runAnalysis();
+  showToast(`${file.name}: ${integerFormat.format(records.length)} linhas CSV carregadas`);
+}
+
 async function loadFile(file: File): Promise<void> {
   const extension = extensionOf(file.name);
-  if (!['DBC', 'DBF', 'DEF', 'CNV', 'MAP'].includes(extension)) {
+  if (!['DBC', 'DBF', 'CSV', 'TSV', 'DEF', 'CNV', 'MAP'].includes(extension)) {
     throw new Error(`${file.name}: formato ainda não suportado`);
   }
   const bytes = new Uint8Array(await file.arrayBuffer());
@@ -629,6 +664,11 @@ async function loadFile(file: File): Promise<void> {
   if (extension === 'DBC' || extension === 'DBF') {
     datasetFingerprint = source;
     await decodeDbf(bytes, file, extension === 'DBC');
+    return;
+  }
+  if (extension === 'CSV' || extension === 'TSV') {
+    datasetFingerprint = source;
+    await decodeDelimitedFile(bytes, file);
     return;
   }
   if (extension === 'CNV') {
@@ -667,13 +707,35 @@ async function downloadSourceDbf(): Promise<void> {
   }
 }
 
+async function downloadSelectedDbf(): Promise<void> {
+  if (!dbfHeader || !currentPlan || !currentResult) return;
+  const label = selectedDbfButton.textContent;
+  selectedDbfButton.disabled = true;
+  selectedDbfButton.textContent = 'Filtrando registros…';
+  try {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const conversions = conversionsForPlan(currentPlan);
+    const selected = records.filter((record) => resolvePlanRecord(record, currentPlan!, conversions) !== undefined);
+    if (selected.length !== currentResult.recordsAccepted) {
+      throw new Error('A seleção DBF divergiu da contagem aceita; exportação interrompida');
+    }
+    const bytes = writeDbf(selected, dbfHeader.fields, { dateOfLastUpdate: dbfHeader.dateOfLastUpdate });
+    const filename = `${datasetName.replace(/\.[^.]+$/, '')}-selecionados.dbf`;
+    downloadBlob(new Blob([bytes as BlobPart], { type: 'application/x-dbf' }), filename);
+    showToast(`${filename}: ${integerFormat.format(selected.length)} registros`);
+  } finally {
+    selectedDbfButton.textContent = label;
+    selectedDbfButton.disabled = false;
+  }
+}
+
 async function loadFiles(files: File[]): Promise<void> {
   if (!files.length) return;
   try {
     // Metadata first lets a DEF/CNV influence the automatic first analysis even
     // when the user selected all files in one gesture.
     const ordered = [...files].sort((a, b) => {
-      const rank = (file: File) => ({ DEF: 0, CNV: 1, MAP: 2, DBC: 3, DBF: 3 })[extensionOf(file.name)] ?? 9;
+      const rank = (file: File) => ({ DEF: 0, CNV: 1, MAP: 2, DBC: 3, DBF: 3, CSV: 3, TSV: 3 } as Record<string, number>)[extensionOf(file.name)] ?? 9;
       return rank(a) - rank(b);
     });
     for (const file of ordered) await loadFile(file);
@@ -699,7 +761,7 @@ function buildPlan(): QueryPlan {
     ? { kind: 'sum' as const, field: measureField.value }
     : { kind: 'count' as const };
   const spec = {
-    compatibilityProfile: 'tabwin-4.15' as const,
+    compatibilityProfile: currentCompatibilityProfile,
     rows: row,
     ...(columnField.value ? { columns: { field: columnField.value } } : {}),
     measure,
@@ -709,17 +771,22 @@ function buildPlan(): QueryPlan {
   return compileQueryPlan(spec);
 }
 
+function conversionsForPlan(plan: QueryPlan): Record<string, CnvDefinition> {
+  const conversions: Record<string, CnvDefinition> = {};
+  for (const id of [plan.spec.rows.conversionId, plan.spec.columns?.conversionId,
+    ...plan.spec.filters.map((filter) => filter.conversionId)]) {
+    if (id) conversions[id] = cnvByName.get(id)!;
+  }
+  return conversions;
+}
+
 async function runAnalysis(): Promise<void> {
   if (!dbfHeader || !records.length || !rowField.value) return;
   setBusy('Montando a tabela…');
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   try {
     const plan = buildPlan();
-    const conversions: Record<string, CnvDefinition> = {};
-    if (rowConversion.value) conversions[rowConversion.value] = cnvByName.get(rowConversion.value)!;
-    for (const filter of configuredFilters) {
-      if (filter.conversionId) conversions[filter.conversionId] = cnvByName.get(filter.conversionId)!;
-    }
+    const conversions = conversionsForPlan(plan);
     const result = executeInMemory(records, plan, conversions);
     currentPlan = plan;
     baseResult = result;
@@ -738,6 +805,7 @@ async function runAnalysis(): Promise<void> {
     chartSvgButton.disabled = false;
     saveRecipeButton.disabled = false;
     saveTableButton.disabled = false;
+    selectedDbfButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map') await ensureMap();
   } catch (error) {
@@ -1144,7 +1212,7 @@ function renderStatistics(): void {
 
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.8.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.8.0-dev', compatibilityProfile: currentCompatibilityProfile },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -1696,7 +1764,9 @@ async function openPortableTable(file: File): Promise<void> {
   records = [];
   dbfHeader = null;
   currentDatasetFile = null;
+  currentCompatibilityProfile = table.plan.spec.compatibilityProfile;
   sourceDbfButton.disabled = true;
+  selectedDbfButton.disabled = true;
   configuredFilters = [];
   activeDef = null;
   activeMap = null;
@@ -1930,6 +2000,8 @@ async function exportChartPng(): Promise<void> {
 
 fileInput.addEventListener('change', () => void loadFiles([...fileInput.files ?? []]));
 sourceDbfButton.addEventListener('click', () => void downloadSourceDbf().catch((error) =>
+  showToast(error instanceof Error ? error.message : String(error), true)));
+selectedDbfButton.addEventListener('click', () => void downloadSelectedDbf().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
 for (const eventName of ['dragenter', 'dragover']) {
   dropZone.addEventListener(eventName, (event) => {

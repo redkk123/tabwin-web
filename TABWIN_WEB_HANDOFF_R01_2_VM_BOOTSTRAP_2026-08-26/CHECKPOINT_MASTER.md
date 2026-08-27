@@ -1,12 +1,31 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R05.0-dbc-to-dbf-expansion
+**Revision:** R05.1-csv-import-and-selected-dbf
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; local DBC-to-DBF expansion implemented
+**Status:** G001 exact golden passed; CSV ingestion and selected-record DBF export implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R05.1 CSV-import and selected-DBF update
+
+CSV and TSV files can now enter the normal records -> AnalysisSpec -> QueryPlan
+-> Executor pipeline. The strict parser handles quoted fields/newlines,
+comma/semicolon/tab delimiters, UTF-8 with Windows-1252 fallback and decimal
+comma, while preserving leading-zero identifiers as text. CSV analysis uses
+the explicit `modern` compatibility profile.
+
+The new selected-record DBF writer does not duplicate filter logic. The
+executor exports one record-resolution boundary used both for tabulation and
+record export; output is aborted if the selected count differs from
+`recordsAccepted`. Standard xBase character, numeric, date, logical and
+32-bit integer fields are written locally in Windows-1252.
+
+Portable verification is 77/77 plus browser typecheck and production build.
+A browser case loaded three CSV records, selected `UF = AC`, observed two
+accepted records and generated a two-record DBF. Evidence is in
+`docs/handoffs/R05_1_CSV_IMPORT_SELECTED_DBF_REPORT.md`.
 
 ## 2026-08-27 R05.0 DBC-to-DBF expansion update
 

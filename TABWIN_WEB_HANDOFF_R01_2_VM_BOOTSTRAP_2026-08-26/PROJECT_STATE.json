@@ -1,10 +1,10 @@
 {
-  "revision": "R05.0-dbc-to-dbf-expansion",
+  "revision": "R05.1-csv-import-and-selected-dbf",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 71,
-    "passed": 71,
+    "total": 77,
+    "passed": 77,
     "failed": 0,
     "command": "npm run check"
   },
@@ -12,6 +12,9 @@
   "implemented": [
     "browser-dbc-dbf-ingestion",
     "browser-dbc-to-validated-dbf-file-expansion",
+    "browser-csv-and-tsv-source-ingestion",
+    "executor-shared-record-acceptance-boundary",
+    "selected-record-standard-dbf-writing",
     "official-datasus-catalog-search-by-system-type-year-month-uf",
     "official-datasus-https-download-preparation",
     "safe-nested-zip-extraction-with-limits",
@@ -95,7 +98,7 @@
     "TAB-replay",
     "advanced-chart-editing-axes-zoom-and-print",
     "legacy-map-manual-breaks-label-layers-and-selection-bridge",
-    "parquet-geojson-kml-and-legacy-data-exports",
+    "parquet-geojson-kml-and-legacy-table-exports",
     "golden-cases-beyond-g001"
     ,"golden-equivalence-for-post-tabulation-operations"
     ,"table-normalization-and-advanced-header-footnote-editing"

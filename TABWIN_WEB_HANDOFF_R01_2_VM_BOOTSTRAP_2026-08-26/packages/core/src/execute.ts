@@ -16,6 +16,13 @@ interface ResolvedDimension {
   label?: string;
 }
 
+export interface ResolvedPlanRecord {
+  rowKey: string;
+  rowLabel: string;
+  columnKey: string;
+  columnLabel: string;
+}
+
 const UNCLASSIFIED_KEY = '__tabwin_web_unclassified__';
 const UNCLASSIFIED_LABEL = 'Não classificados';
 
@@ -167,6 +174,26 @@ function measureValue(record: DataRecord, plan: QueryPlan, warnings: Set<string>
   return numericFieldValue(record, field, warnings, 'sum');
 }
 
+/**
+ * Resolves the exact record-acceptance boundary shared by tabulation and
+ * record-level exports. A record rejected by filters or omitted dimensions
+ * returns undefined.
+ */
+export function resolvePlanRecord(
+  record: DataRecord,
+  plan: QueryPlan,
+  conversions: ConversionRegistry = {},
+): ResolvedPlanRecord | undefined {
+  if (!plan.spec.filters.every((filter) => acceptsFilter(record, filter, conversions))) return undefined;
+  const row = resolveDimension(record, plan.spec.rows, conversions);
+  if (!row.key || row.label === undefined) return undefined;
+  const column = plan.spec.columns
+    ? resolveDimension(record, plan.spec.columns, conversions)
+    : { key: '__single__', label: singleColumnLabel(plan) };
+  if (!column.key || column.label === undefined) return undefined;
+  return { rowKey: row.key, rowLabel: row.label, columnKey: column.key, columnLabel: column.label };
+}
+
 function propagateRowSubtotals(rows: ResultAxisItem[], cells: number[][]): void {
   const indexByKey = new Map(rows.map((row, index) => [row.key, index]));
   const rowByKey = new Map(rows.map((row) => [row.key, row]));
@@ -215,18 +242,12 @@ export function executeInMemory(
 
   for (const record of records) {
     recordsSeen++;
-    if (!plan.spec.filters.every((filter) => acceptsFilter(record, filter, conversions))) continue;
+    const resolved = resolvePlanRecord(record, plan, conversions);
+    if (!resolved) continue;
 
-    const row = resolveDimension(record, plan.spec.rows, conversions);
-    if (!row.key || row.label === undefined) continue;
-    const column = plan.spec.columns
-      ? resolveDimension(record, plan.spec.columns, conversions)
-      : { key: '__single__', label: singleColumnLabel(plan) };
-    if (!column.key || column.label === undefined) continue;
-
-    observedRows.set(row.key, row.label);
-    observedColumns.set(column.key, column.label);
-    accepted.push({ rowKey: row.key, columnKey: column.key, value: measureValue(record, plan, warnings) });
+    observedRows.set(resolved.rowKey, resolved.rowLabel);
+    observedColumns.set(resolved.columnKey, resolved.columnLabel);
+    accepted.push({ rowKey: resolved.rowKey, columnKey: resolved.columnKey, value: measureValue(record, plan, warnings) });
     recordsAccepted++;
   }
 

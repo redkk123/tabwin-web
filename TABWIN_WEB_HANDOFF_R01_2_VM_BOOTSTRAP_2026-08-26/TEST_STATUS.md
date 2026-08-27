@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R05.0 DBC-to-DBF expansion milestone.
+Verified on 2026-08-27 through the R05.1 CSV-import and selected-DBF milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 71 tests;
-- 71 passed;
+- 77 tests;
+- 77 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -71,6 +71,13 @@ R05.0 adds two DBF-source tests covering validated pass-through copies,
 metadata retention, safe local filenames and extension rejection. Browser
 verification expanded the real 313,213-byte `RDAC2401.dbc`, revalidated its
 xBase header and reported `RDAC2401.dbf` with all 4,315 declared records.
+
+R05.1 adds six tests for UTF-8 BOM, CSV/semicolon/TSV delimiters, quoted
+delimiters and line breaks, decimal comma, leading-zero preservation, malformed
+row/header rejection, Windows-1252 DBF writing, character/numeric/date/logical/
+integer round trips, explicit width errors and CSV -> QueryPlan selection -> DBF
+decoding. Browser verification loaded three CSV rows, applied `UF = AC`, showed
+two accepted records and produced a two-record selected DBF.
 
 ## Live official-source verification
 

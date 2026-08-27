@@ -33,8 +33,8 @@
           <span class="upload-icon" aria-hidden="true">＋</span>
           <strong>Abra seu arquivo DBC</strong>
           <span>Toque para escolher ou arraste aqui</span>
-          <small>DBC, DBF, DEF, CNV e MAP</small>
-          <input id="file-input" type="file" accept=".dbc,.dbf,.def,.cnv,.map" multiple />
+          <small>DBC, DBF, CSV, DEF, CNV e MAP</small>
+          <input id="file-input" type="file" accept=".dbc,.dbf,.csv,.tsv,.def,.cnv,.map" multiple />
         </label>
 
         <button class="catalog-button" id="catalog-button" type="button">
@@ -44,9 +44,10 @@
 
         <div class="file-list" id="file-list" aria-live="polite"></div>
 
-        <button class="secondary-button source-dbf-button" id="source-dbf-button" type="button" disabled>
-          Extrair DBF do arquivo aberto
-        </button>
+        <div class="source-actions">
+          <button class="secondary-button" id="source-dbf-button" type="button" disabled>Extrair DBF original</button>
+          <button class="secondary-button" id="selected-dbf-button" type="button" disabled>Salvar seleção em DBF</button>
+        </div>
 
         <div class="recipe-actions" aria-label="Análise reproduzível">
           <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>
