@@ -8,8 +8,8 @@
     <meta property="og:title" content="TabWin Web" />
     <meta property="og:description" content="Análise local, moderna e auditável de microdados DATASUS." />
     <title>TabWin Web — análise DATASUS local</title>
-    <script type="module" crossorigin src="./assets/index-B5HG-cD6.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BKMeoG-3.css">
+    <script type="module" crossorigin src="./assets/index-DR3fwG8Z.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-Bia-UH82.css">
   </head>
   <body>
     <div class="app-shell">
@@ -185,6 +185,14 @@
               <ol class="table-operation-history" id="table-operation-history" hidden></ol>
               <p class="compatibility-note">Políticas modernas explícitas. A equivalência dessas transformações com o TabWin 4.15 será promovida operação por operação após casos-oráculo.</p>
             </section>
+            <div class="table-presentation" id="table-presentation" hidden aria-label="Apresentação da tabela">
+              <label>Localizar<input id="table-locate" type="search" placeholder="Código ou categoria"></label>
+              <label>Ordenar por<select id="table-sort-column"><option value="__row_key__">Chave/linha</option></select></label>
+              <label>Ordem<select id="table-sort-direction"><option value="original">Original</option><option value="ascending">Crescente</option><option value="descending">Decrescente</option></select></label>
+              <label>Casas<select id="table-decimals"><option value="-1">Automático</option><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5">5</option><option value="6">6</option></select></label>
+              <label class="table-key-toggle"><input id="table-key-visible" type="checkbox" checked> Mostrar chave</label>
+              <div class="table-presentation-actions"><button class="secondary-button" id="table-copy" type="button">Copiar</button><button class="secondary-button" id="table-print" type="button">Imprimir</button></div>
+            </div>
             <div class="table-wrap" id="table-wrap" hidden>
               <table id="result-table">
                 <thead></thead>
