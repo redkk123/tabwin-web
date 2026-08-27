@@ -1,16 +1,17 @@
 {
-  "revision": "R04.7-portable-tables",
+  "revision": "R05.0-dbc-to-dbf-expansion",
   "date": "2026-08-27",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 69,
-    "passed": 69,
+    "total": 71,
+    "passed": 71,
     "failed": 0,
     "command": "npm run check"
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
     "browser-dbc-dbf-ingestion",
+    "browser-dbc-to-validated-dbf-file-expansion",
     "official-datasus-catalog-search-by-system-type-year-month-uf",
     "official-datasus-https-download-preparation",
     "safe-nested-zip-extraction-with-limits",

@@ -1,12 +1,26 @@
 # CHECKPOINT MASTER — TabWin Web
 
-**Revision:** R04.7-portable-tables
+**Revision:** R05.0-dbc-to-dbf-expansion
 **Date:** 2026-08-27
-**Status:** G001 exact golden passed; portable result-table save/open implemented
+**Status:** G001 exact golden passed; local DBC-to-DBF expansion implemented
 **Working name:** TabWin Web  
 **Canonical role of this file:** project memory, context handoff, decision ledger, risk register and roadmap.  
 
 > **Rule for future work:** do not rely on chat history as the only source of project state. Every meaningful decision, discovered behavior, test result, blocker, dependency change, compatibility finding, data-format discovery or roadmap change must be reflected here (or in a linked ADR) before a revision is considered closed.
+
+## 2026-08-27 R05.0 DBC-to-DBF expansion update
+
+An opened DBC can now be expanded and downloaded as a validated standard xBase
+DBF without leaving the browser. The adapter performs the same DCL expansion
+used for analysis, reparses the resulting header and exposes the original
+record-level bytes; it does not transform the data through QueryPlan or export
+an aggregated table. Existing DBF inputs are validated and copied safely.
+
+Portable verification is 71/71 plus browser typecheck and production build.
+The real G001 `RDAC2401.dbc` produced `RDAC2401.dbf` with 4,315 declared
+records. DBF-to-DBC compression remains explicitly pending because the pinned
+library supplies a decoder, not a DCL encoder. Evidence is in
+`docs/handoffs/R05_0_DBC_TO_DBF_EXPANSION_REPORT.md`.
 
 ## 2026-08-27 R04.7 portable-table update
 

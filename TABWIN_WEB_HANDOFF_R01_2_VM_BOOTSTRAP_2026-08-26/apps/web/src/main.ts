@@ -41,6 +41,7 @@ import {
 } from '../../../packages/acquisition/src/datasus.ts';
 import { tabulationToCsv, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
+import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import {
   chooseCurrentAuxiliaryBundle,
   extractSupportedArchiveFiles,
@@ -96,6 +97,7 @@ function element<T extends Element>(selector: string): T {
 const fileInput = element<HTMLInputElement>('#file-input');
 const dropZone = element<HTMLElement>('#drop-zone');
 const fileList = element<HTMLElement>('#file-list');
+const sourceDbfButton = element<HTMLButtonElement>('#source-dbf-button');
 const form = element<HTMLFormElement>('#analysis-form');
 const rowField = element<HTMLSelectElement>('#row-field');
 const columnField = element<HTMLSelectElement>('#column-field');
@@ -215,6 +217,7 @@ const catalogResults = element<HTMLElement>('#catalog-results');
 
 let records: DbfRecord[] = [];
 let dbfHeader: DbfHeader | null = null;
+let currentDatasetFile: File | null = null;
 let datasetName = '';
 let datasetFingerprint: LoadedSource | null = null;
 let activeDef: DefDefinition | null = null;
@@ -598,6 +601,8 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean): Promise
 
   records = nextRecords;
   dbfHeader = header;
+  currentDatasetFile = file;
+  sourceDbfButton.disabled = false;
   configuredFilters = [];
   renderConfiguredFilters();
   datasetName = file.name;
@@ -643,6 +648,23 @@ async function loadFile(file: File): Promise<void> {
   activeMapSource = file.name;
   showToast(`${file.name}: ${integerFormat.format(activeMap.objects.length)} áreas carregadas`);
   if (currentView === 'map') renderMap();
+}
+
+async function downloadSourceDbf(): Promise<void> {
+  if (!currentDatasetFile) return;
+  const label = sourceDbfButton.textContent;
+  sourceDbfButton.disabled = true;
+  sourceDbfButton.textContent = 'Preparando DBF…';
+  try {
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+    const source = new Uint8Array(await currentDatasetFile.arrayBuffer());
+    const extraction = extractSourceDbf(source, currentDatasetFile.name);
+    downloadBlob(new Blob([extraction.bytes as BlobPart], { type: 'application/x-dbf' }), extraction.filename);
+    showToast(`${extraction.filename}: ${integerFormat.format(extraction.header.recordCount)} registros`);
+  } finally {
+    sourceDbfButton.textContent = label;
+    sourceDbfButton.disabled = false;
+  }
 }
 
 async function loadFiles(files: File[]): Promise<void> {
@@ -1673,6 +1695,8 @@ async function openPortableTable(file: File): Promise<void> {
   const table = parsePortableTable(await file.text());
   records = [];
   dbfHeader = null;
+  currentDatasetFile = null;
+  sourceDbfButton.disabled = true;
   configuredFilters = [];
   activeDef = null;
   activeMap = null;
@@ -1905,6 +1929,8 @@ async function exportChartPng(): Promise<void> {
 }
 
 fileInput.addEventListener('change', () => void loadFiles([...fileInput.files ?? []]));
+sourceDbfButton.addEventListener('click', () => void downloadSourceDbf().catch((error) =>
+  showToast(error instanceof Error ? error.message : String(error), true)));
 for (const eventName of ['dragenter', 'dragover']) {
   dropZone.addEventListener(eventName, (event) => {
     event.preventDefault();

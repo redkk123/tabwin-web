@@ -155,8 +155,10 @@ policy, before compatibility claims.
 
 Confirmed topics include concepts, edit and create flows for DEF/CNV; DBF
 viewer; DBF compression to DBC; DBC expansion; CRC test; accent conversion;
-and saving records to a new DBF. Reading/parsing is **Web / Parsed**; authoring,
-writing and utility operations are **Cataloged**.
+and saving records to a new DBF. Reading/parsing is **Web / Parsed** and DBC
+expansion to a validated downloadable DBF is now **Web**. DBF-to-DBC encoding,
+authoring, record-subset writing, CRC reporting and accent conversion remain
+**Cataloged**.
 
 ## 9. Integrations and historical mechanisms
 

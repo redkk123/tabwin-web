@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 through the R04.7 portable-table milestone.
+Verified on 2026-08-27 through the R05.0 DBC-to-DBF expansion milestone.
 
 ## Portable check
 
@@ -12,8 +12,8 @@ npm run check
 
 Result:
 
-- 69 tests;
-- 69 passed;
+- 71 tests;
+- 71 passed;
 - 0 failed or skipped;
 - TypeScript kernel build passed;
 - browser typecheck passed;
@@ -66,6 +66,11 @@ round-trip parsing, exact result matrix shape, finite numeric cells, unique
 axis keys, record counts, QueryPlan compilation, operation validation and
 presentation bounds. Browser verification opened a `.twtable` without a DBC,
 restored its title/row label/sort, then applied a factor column (`12 -> 24`).
+
+R05.0 adds two DBF-source tests covering validated pass-through copies,
+metadata retention, safe local filenames and extension rejection. Browser
+verification expanded the real 313,213-byte `RDAC2401.dbc`, revalidated its
+xBase header and reported `RDAC2401.dbf` with all 4,315 declared records.
 
 ## Live official-source verification
 
