@@ -1,6 +1,6 @@
 # Test Status
 
-Verified on 2026-08-27 for the R02.1 official acquisition/export milestone.
+Verified on 2026-08-27 through the R02.2 measure/selection UI milestone.
 
 ## Portable check
 
@@ -45,3 +45,7 @@ Observed against the public DATASUS service:
 This verifies acquisition and format envelopes. It does **not** constitute
 TabWin 4.15 golden equivalence; the exact Windows reference capture for G001
 is still pending and no golden expected output was changed.
+
+R02.2 reuses the already tested sum, raw/CNV filter, DEF start-position and
+DEF bridge behavior. Browser typechecking and the production build cover its
+new controls; dedicated interaction tests remain future browser-test work.

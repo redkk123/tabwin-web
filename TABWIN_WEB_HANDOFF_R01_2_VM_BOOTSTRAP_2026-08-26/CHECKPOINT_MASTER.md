@@ -29,6 +29,12 @@ build. Full evidence and limitations are in
 No compatibility golden was changed. The Windows TabWin 4.15 G001 capture
 remains the next external-oracle requirement.
 
+R02.2 subsequently surfaced tested frequency/sum measures and one raw or
+DEF/CNV-backed inclusion filter in the browser UI. These controls compile to
+the existing QueryPlan model and are visible in audit output. Multiple filters,
+exclusion/range dialogs and legacy total policies remain pending. Evidence is
+in `docs/handoffs/R02_2_MEASURE_AND_SELECTION_UI_REPORT.md`.
+
 ---
 
 # 0. Executive summary

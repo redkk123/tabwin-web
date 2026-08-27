@@ -1,7 +1,7 @@
 {
-  "revision": "R02.1-official-acquisition-exports",
+  "revision": "R02.2-measure-selection-ui",
   "date": "2026-08-27",
-  "phase": "official-datasus-search-download-and-modern-exports-implemented",
+  "phase": "official-acquisition-exports-and-initial-def-driven-controls-implemented",
   "tests": {
     "total": 31,
     "passed": 31,
@@ -22,7 +22,9 @@
     "choropleth-map-png-export",
     "legacy-cnv-and-def-kernel",
     "tabwin-map-parser-and-choropleth",
-    "query-plan-audit"
+    "query-plan-audit",
+    "frequency-and-sum-measure-ui",
+    "single-raw-or-cnv-backed-inclusion-filter-ui"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -38,6 +40,7 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
+    "multiple-simultaneous-ui-filters",
     "new-N-format-CNV-row-layout",
     "DEF-X-directive-semantics",
     "TAB-replay",

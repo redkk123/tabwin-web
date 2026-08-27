@@ -19,8 +19,8 @@ A user can open official DATASUS microdata locally, reproduce a familiar TabWin 
 
 - row;
 - column;
-- increment/measure;
-- selections;
+- increment/measure (**frequency and sum Web slice complete**);
+- selections (**single inclusion filter Web slice complete; multi-filter pending**);
 - search inside category lists;
 - zero suppression;
 - compatibility/modern mode indicator;

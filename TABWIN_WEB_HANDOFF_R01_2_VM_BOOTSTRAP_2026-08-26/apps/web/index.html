@@ -57,6 +57,27 @@
             <span>Conversão da linha</span>
             <select id="row-conversion" disabled><option value="">Valores originais</option></select>
           </label>
+          <label>
+            <span>Medida</span>
+            <select id="measure-kind" disabled>
+              <option value="count">Frequência</option>
+              <option value="sum">Somar um campo</option>
+            </select>
+          </label>
+          <label id="measure-field-label" hidden>
+            <span>Campo para somar</span>
+            <select id="measure-field" disabled></select>
+          </label>
+          <details class="filter-builder">
+            <summary>Filtros e seleções <span id="filter-count">nenhum</span></summary>
+            <label>
+              <span>Campo do filtro</span>
+              <select id="filter-field" disabled><option value="">Sem filtro</option></select>
+            </label>
+            <div class="filter-info" id="filter-info">Escolha um campo para selecionar valores.</div>
+            <div class="filter-values" id="filter-values"></div>
+            <button class="text-button" id="clear-filter-button" type="button" disabled>Limpar seleção</button>
+          </details>
           <div class="form-row">
             <label>
               <span>Posição inicial</span>

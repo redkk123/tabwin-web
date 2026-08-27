@@ -33,8 +33,8 @@ Status vocabulary:
 | Apply `.CNV` | **Web / Kernel** | Legacy short, literal and numeric-range forms; source-order precedence retained. New `N` layout remains guarded. |
 | Row and column dimensions | **Web** | Raw rows/columns; row CNV in the current UI. |
 | Frequency | **Web** | Ordinary and `G` weighted frequency in kernel. |
-| Increment / sum | **Kernel** | UI selector pending. |
-| Selections / filters | **Kernel** | Raw and CNV category filters tested; UI pending. |
+| Increment / sum | **Web / Kernel** | Numeric and DEF increment labels surfaced; compiled as explicit sum measure. Total policies remain pending. |
+| Selections / filters | **Web / Kernel** | One active raw or DEF/CNV-backed inclusion filter is available; multiple simultaneous selections remain pending. |
 | Suppress zero rows | **Web** | Applied after materializing CNV categories. |
 | Row subtotals | **Kernel** | CNV subtotal propagation tested. |
 | Tabulate list of files | **Cataloged** | Multi-period ingestion/merge semantics pending oracle cases. |

@@ -69,6 +69,14 @@ const form = element<HTMLFormElement>('#analysis-form');
 const rowField = element<HTMLSelectElement>('#row-field');
 const columnField = element<HTMLSelectElement>('#column-field');
 const rowConversion = element<HTMLSelectElement>('#row-conversion');
+const measureKind = element<HTMLSelectElement>('#measure-kind');
+const measureField = element<HTMLSelectElement>('#measure-field');
+const measureFieldLabel = element<HTMLElement>('#measure-field-label');
+const filterField = element<HTMLSelectElement>('#filter-field');
+const filterValues = element<HTMLElement>('#filter-values');
+const filterInfo = element<HTMLElement>('#filter-info');
+const filterCount = element<HTMLElement>('#filter-count');
+const clearFilterButton = element<HTMLButtonElement>('#clear-filter-button');
 const startPosition = element<HTMLInputElement>('#start-position');
 const suppressZero = element<HTMLInputElement>('#suppress-zero');
 const runButton = element<HTMLButtonElement>('#run-button');
@@ -116,6 +124,8 @@ let currentView: ViewName = 'table';
 let toastTimer = 0;
 const cnvByName = new Map<string, CnvDefinition>();
 const loadedSources: LoadedSource[] = [];
+let activeFilterConversion = '';
+let activeFilterStartPosition: number | undefined;
 
 function showToast(message: string, isError = false): void {
   window.clearTimeout(toastTimer);
@@ -180,9 +190,11 @@ function setBusy(message: string): void {
 }
 
 function setControlsEnabled(enabled: boolean): void {
-  for (const control of [rowField, columnField, rowConversion, startPosition, suppressZero, runButton]) {
+  for (const control of [rowField, columnField, rowConversion, measureKind, measureField, filterField, startPosition, suppressZero, runButton]) {
     control.disabled = !enabled;
   }
+  if (enabled) updateMeasureControls();
+  clearFilterButton.disabled = !enabled || !filterField.value;
 }
 
 function fieldLabel(fieldName: string): string {
@@ -190,6 +202,17 @@ function fieldLabel(fieldName: string): string {
   const match = activeDef.options.find((option) =>
     option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes('row'));
   return match ? `${match.label} · ${fieldName}` : fieldName;
+}
+
+function incrementLabel(fieldName: string): string {
+  const increment = activeDef?.increments.find((item) => item.field.toUpperCase() === fieldName.toUpperCase());
+  return increment ? `${increment.label} · ${fieldName}` : fieldName;
+}
+
+function selectionLabel(fieldName: string): string {
+  const option = activeDef?.options.find((item) =>
+    item.field.toUpperCase() === fieldName.toUpperCase() && item.roles.includes('selection'));
+  return option ? `${option.label} · ${fieldName}` : fieldName;
 }
 
 function chooseDefaultField(fields: DbfHeader['fields']): string {
@@ -214,8 +237,99 @@ function populateControls(preferredField?: string): void {
   const available = new Set(dbfHeader.fields.map((field) => field.name));
   rowField.value = available.has(previousRow) ? previousRow : chooseDefaultField(dbfHeader.fields);
   columnField.value = available.has(previousColumn) ? previousColumn : '';
+  populateMeasureFields();
+  populateFilterFields();
   populateConversions();
   setControlsEnabled(true);
+}
+
+function populateMeasureFields(): void {
+  if (!dbfHeader) return;
+  const previous = measureField.value;
+  measureField.replaceChildren();
+  const incrementNames = new Set(activeDef?.increments.map((item) => item.field.toUpperCase()) ?? []);
+  const numericTypes = new Set(['N', 'F', 'I', 'B', 'Y']);
+  const candidates = dbfHeader.fields.filter((field) =>
+    numericTypes.has(field.type) || incrementNames.has(field.name.toUpperCase()));
+  for (const field of candidates) measureField.add(new Option(incrementLabel(field.name), field.name));
+  if (candidates.some((field) => field.name === previous)) measureField.value = previous;
+  const sumOption = measureKind.querySelector<HTMLOptionElement>('option[value="sum"]');
+  if (sumOption) sumOption.disabled = candidates.length === 0;
+  if (!candidates.length) measureKind.value = 'count';
+  updateMeasureControls();
+}
+
+function populateFilterFields(): void {
+  if (!dbfHeader) return;
+  const previous = filterField.value;
+  filterField.replaceChildren(new Option('Sem filtro', ''));
+  for (const field of dbfHeader.fields) filterField.add(new Option(selectionLabel(field.name), field.name));
+  filterField.value = dbfHeader.fields.some((field) => field.name === previous) ? previous : '';
+  populateFilterValues();
+}
+
+function updateMeasureControls(): void {
+  const isSum = measureKind.value === 'sum';
+  measureFieldLabel.hidden = !isSum;
+  measureField.disabled = !dbfHeader || !isSum;
+}
+
+function populateFilterValues(): void {
+  filterValues.replaceChildren();
+  activeFilterConversion = '';
+  activeFilterStartPosition = undefined;
+  filterCount.textContent = 'nenhum';
+  const field = filterField.value;
+  clearFilterButton.disabled = !field;
+  if (!field) {
+    filterInfo.textContent = 'Escolha um campo para selecionar valores.';
+    return;
+  }
+
+  const option = activeDef?.options.find((candidate) =>
+    candidate.field.toUpperCase() === field.toUpperCase() && candidate.roles.includes('selection'));
+  if (option?.kind === 'conversion') {
+    const wanted = baseName(option.conversionFile);
+    const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === wanted);
+    if (loadedName) {
+      activeFilterConversion = loadedName;
+      activeFilterStartPosition = option.startPosition;
+      const definition = cnvByName.get(loadedName)!;
+      for (const category of definition.categories.slice(0, 500)) {
+        addFilterOption(String(category.sequence), category.label || String(category.sequence));
+      }
+      filterInfo.textContent = `${definition.categories.length} categorias de ${loadedName}. Marque os valores que deseja incluir.`;
+      return;
+    }
+  }
+
+  const values = new Set<string>();
+  for (const record of records) {
+    const raw = record[field];
+    if (raw !== null && raw !== undefined) values.add(String(raw));
+    if (values.size >= 500) break;
+  }
+  const sorted = [...values].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
+  for (const value of sorted) addFilterOption(value, value || '(em branco)');
+  filterInfo.textContent = `${sorted.length}${values.size >= 500 ? '+' : ''} valores encontrados. Marque os valores que deseja incluir.`;
+}
+
+function addFilterOption(value: string, label: string): void {
+  const wrapper = document.createElement('label');
+  wrapper.className = 'filter-option';
+  const input = document.createElement('input');
+  input.type = 'checkbox';
+  input.dataset.filterValue = value;
+  input.addEventListener('change', updateFilterCount);
+  const caption = document.createElement('span');
+  caption.textContent = label;
+  wrapper.append(input, caption);
+  filterValues.append(wrapper);
+}
+
+function updateFilterCount(): void {
+  const count = filterValues.querySelectorAll<HTMLInputElement>('input:checked').length;
+  filterCount.textContent = count ? `${integerFormat.format(count)} selecionado(s)` : 'nenhum';
 }
 
 function populateConversions(): void {
@@ -227,6 +341,7 @@ function populateConversions(): void {
   }
   if (cnvByName.has(previous)) rowConversion.value = previous;
   applyDefDefaults();
+  if (filterField.value) populateFilterValues();
 }
 
 function applyDefDefaults(): void {
@@ -349,12 +464,23 @@ function buildPlan(): QueryPlan {
     field: rowField.value,
     ...(conversionName ? { conversionId: conversionName, startPosition: Number(startPosition.value) } : {}),
   };
+  const acceptedCategories = [...filterValues.querySelectorAll<HTMLInputElement>('input:checked')]
+    .map((input) => input.dataset.filterValue ?? '');
+  const filters = filterField.value && acceptedCategories.length ? [{
+    field: filterField.value,
+    acceptedCategories,
+    ...(activeFilterConversion ? { conversionId: activeFilterConversion } : {}),
+    ...(activeFilterStartPosition !== undefined ? { startPosition: activeFilterStartPosition } : {}),
+  }] : [];
+  const measure = measureKind.value === 'sum'
+    ? { kind: 'sum' as const, field: measureField.value }
+    : { kind: 'count' as const };
   const spec = {
     compatibilityProfile: 'tabwin-4.15' as const,
     rows: row,
     ...(columnField.value ? { columns: { field: columnField.value } } : {}),
-    measure: { kind: 'count' as const },
-    filters: [],
+    measure,
+    filters,
     suppressZeroRows: suppressZero.checked,
   };
   return compileQueryPlan(spec);
@@ -368,10 +494,13 @@ async function runAnalysis(): Promise<void> {
     const plan = buildPlan();
     const conversions: Record<string, CnvDefinition> = {};
     if (rowConversion.value) conversions[rowConversion.value] = cnvByName.get(rowConversion.value)!;
+    if (activeFilterConversion) conversions[activeFilterConversion] = cnvByName.get(activeFilterConversion)!;
     const result = executeInMemory(records, plan, conversions);
     currentPlan = plan;
     currentResult = result;
-    resultKicker.textContent = `${datasetName} · frequência`;
+    resultKicker.textContent = measureKind.value === 'sum'
+      ? `${datasetName} · soma de ${measureField.value}`
+      : `${datasetName} · frequência`;
     resultTitle.textContent = fieldLabel(rowField.value).replace(` · ${rowField.value}`, '');
     renderResult();
     exportCsvButton.disabled = false;
@@ -478,7 +607,7 @@ function renderChart(result: TabulationResult): void {
 
 function renderAudit(): void {
   const audit = {
-    application: { name: 'TabWin Web', version: '0.3.0-dev', compatibilityProfile: 'tabwin-4.15' },
+    application: { name: 'TabWin Web', version: '0.4.0-dev', compatibilityProfile: 'tabwin-4.15' },
     source: datasetFingerprint,
     relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
     definition: activeDef ? {
@@ -941,6 +1070,17 @@ rowField.addEventListener('change', () => {
 });
 columnField.addEventListener('change', () => void runAnalysis());
 rowConversion.addEventListener('change', () => void runAnalysis());
+measureKind.addEventListener('change', () => {
+  updateMeasureControls();
+  if (measureKind.value === 'count' || measureField.value) void runAnalysis();
+});
+measureField.addEventListener('change', () => void runAnalysis());
+filterField.addEventListener('change', populateFilterValues);
+clearFilterButton.addEventListener('click', () => {
+  for (const input of filterValues.querySelectorAll<HTMLInputElement>('input:checked')) input.checked = false;
+  updateFilterCount();
+  void runAnalysis();
+});
 suppressZero.addEventListener('change', () => void runAnalysis());
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
   button.addEventListener('click', () => showView(button.dataset.view as ViewName));

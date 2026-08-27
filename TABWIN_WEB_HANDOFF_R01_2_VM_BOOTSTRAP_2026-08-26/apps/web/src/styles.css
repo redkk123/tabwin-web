@@ -69,6 +69,17 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .check-label { min-height: 43px; display: flex; align-items: center; gap: 8px; padding: 0 5px; }
 .check-label input { accent-color: #17866e; width: 17px; height: 17px; }
 .check-label span { margin: 0 !important; text-transform: none !important; letter-spacing: 0 !important; }
+.filter-builder { padding: 11px; border: 1px solid #d5e1dd; border-radius: 11px; background: #f8fbfa; }
+.filter-builder summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; color: #38555d; font-size: 11px; font-weight: 800; cursor: pointer; }
+.filter-builder summary span { color: #6f8383; font-size: 9px; font-weight: 700; }
+.filter-builder[open] summary { margin-bottom: 12px; }
+.filter-info { margin: 9px 1px 7px; color: #74878a; font-size: 9px; line-height: 1.45; }
+.filter-values { max-height: 180px; display: grid; gap: 5px; overflow: auto; }
+.filter-option { display: flex; align-items: flex-start; gap: 7px; padding: 5px 6px; border-radius: 7px; color: #405c63; background: white; font-size: 10px; line-height: 1.35; }
+.filter-option:hover { background: #edf8f4; }
+.filter-option input { width: 15px; height: 15px; flex: 0 0 auto; accent-color: #17866e; }
+.text-button { margin-top: 8px; padding: 0; border: 0; color: var(--mint-dark); background: transparent; font-size: 10px; font-weight: 800; cursor: pointer; }
+.text-button:disabled { color: #98a5a3; cursor: not-allowed; }
 .primary-button, .secondary-button { border: 0; border-radius: 11px; font-weight: 820; cursor: pointer; }
 .primary-button { min-height: 48px; margin-top: 2px; padding: 0 17px; display: flex; align-items: center; justify-content: space-between; color: #06251c; background: var(--mint); box-shadow: 0 9px 24px rgba(45, 171, 139, .20); }
 .primary-button:hover:not(:disabled) { background: #85e9c9; transform: translateY(-1px); }
