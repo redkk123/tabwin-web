@@ -1,6 +1,7 @@
 import type { CnvDefinition } from '../../formats/src/cnv-model.js';
 import { classifyCnv } from '../../formats/src/cnv-match.js';
 import type {
+  CrossFieldRuleSpec,
   DataRecord,
   DimensionSpec,
   FilterSpec,
@@ -179,11 +180,38 @@ function measureValue(record: DataRecord, plan: QueryPlan, warnings: Set<string>
  * record-level exports. A record rejected by filters or omitted dimensions
  * returns undefined.
  */
+/**
+ * True when every condition accepts the record, i.e. the implausible
+ * combination the rule describes is present.
+ */
+export function crossFieldRuleMatches(
+  record: DataRecord,
+  rule: CrossFieldRuleSpec,
+  conversions: ConversionRegistry = {},
+): boolean {
+  return rule.conditions.every((condition) => acceptsFilter(record, condition, conversions));
+}
+
+/**
+ * Exclusion is decided here rather than in the executor so that every caller
+ * of {@link resolvePlanRecord} — tabulation, selected-record export — applies
+ * the same cleaning policy instead of diverging.
+ */
+export function excludedByCrossFieldRules(
+  record: DataRecord,
+  plan: QueryPlan,
+  conversions: ConversionRegistry = {},
+): boolean {
+  return (plan.spec.crossFieldRules ?? []).some((rule) =>
+    rule.action === 'exclude' && crossFieldRuleMatches(record, rule, conversions));
+}
+
 export function resolvePlanRecord(
   record: DataRecord,
   plan: QueryPlan,
   conversions: ConversionRegistry = {},
 ): ResolvedPlanRecord | undefined {
+  if (excludedByCrossFieldRules(record, plan, conversions)) return undefined;
   if (!plan.spec.filters.every((filter) => acceptsFilter(record, filter, conversions))) return undefined;
   const row = resolveDimension(record, plan.spec.rows, conversions);
   if (!row.key || row.label === undefined) return undefined;
@@ -240,8 +268,16 @@ export function executeInMemory(
   let recordsSeen = 0;
   let recordsAccepted = 0;
 
+  // Counted over every record seen, so the diagnostic describes the source and
+  // not the subset that survived the ordinary filters.
+  const rules = plan.spec.crossFieldRules ?? [];
+  const ruleMatches = rules.map(() => 0);
+
   for (const record of records) {
     recordsSeen++;
+    rules.forEach((rule, index) => {
+      if (crossFieldRuleMatches(record, rule, conversions)) ruleMatches[index]! += 1;
+    });
     const resolved = resolvePlanRecord(record, plan, conversions);
     if (!resolved) continue;
 
@@ -291,5 +327,13 @@ export function executeInMemory(
     warnings: [...warnings],
     recordsSeen,
     recordsAccepted,
+    ...(rules.length ? {
+      dataQuality: rules.map((rule, index) => ({
+        id: rule.id,
+        label: rule.label,
+        action: rule.action,
+        matchedRecords: ruleMatches[index] ?? 0,
+      })),
+    } : {}),
   };
 }

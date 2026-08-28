@@ -1,10 +1,10 @@
 {
-  "revision": "critical-national-catalog-uf-fix",
+  "revision": "cross-field-data-quality-rules",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 121,
-    "passed": 121,
+    "total": 132,
+    "passed": 132,
     "failed": 0,
     "command": "npm run check"
   },
@@ -142,6 +142,11 @@
     ,"batch-boundary-cooperative-stream-cancellation"
     ,"sinan-finals-catalog-audited-against-official-transfer-script"
     ,"explicit-br-token-for-national-coverage-catalog-queries"
+    ,"user-authored-cross-field-implausibility-rules"
+    ,"flag-or-exclude-action-with-per-rule-matched-record-counts"
+    ,"cross-field-conditions-validated-by-the-shared-filter-validator"
+    ,"recipe-persisted-and-replayable-cross-field-rules"
+    ,"semantics-free-rare-field-combination-profile"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -177,7 +182,6 @@
     ,"geographic-label-registries-beyond-bundled-municipalities"
     ,"raw-sentinel-code-meaning-without-def-cnv-evidence"
     ,"clinical-cleaning-presets-without-authoritative-source"
-    ,"cross-field-data-quality-rules"
     ,"multi-period-null-category-and-schema-drift-diagnostics"
     ,"large-national-dbc-streaming-and-chunked-execution"
     ,"sinan-def-cnv-and-tabnet-dimension-registry"
@@ -212,9 +216,9 @@
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
     "propagate-preliminary-modality-into-plan-audit-and-recipe",
-    "add-cross-field-data-quality-rules-for-implausible-record-combinations",
+    "surface-cross-field-rules-and-combination-profile-in-the-interface",
     "resolve-research-plan-queries-into-observed-source-manifests",
-    "extend-data-quality-to-explicit-cross-field-rules-after-catalog-core",
+    "capture-oracle-evidence-before-shipping-any-clinical-cleaning-preset",
     "close-cataloged-tabwin-415-feature-families",
     "surface-all-evidence-backed-DEF-driven-increments-and-selections",
     "continue-TAB-archaeology-against-portable-recipe-model",

@@ -45,6 +45,35 @@ export type FilterSpec = FilterSpecBase & (
     }
 );
 
+/**
+ * A record-level implausibility rule spanning more than one field.
+ *
+ * Single-field filters intersect, so they cannot express "this combination is
+ * implausible": excluding A and excluding B keeps only records that are
+ * neither, while the rule needs to reject records that are both. Conditions
+ * reuse {@link FilterSpec} verbatim, so no new matching semantics exist here —
+ * only the conjunction and the action are new.
+ *
+ * This is a modern, user-authored policy. The kernel never ships clinical
+ * meaning of its own: it evaluates exactly the combination the user wrote.
+ */
+export interface CrossFieldRuleSpec {
+  id: string;
+  label: string;
+  /** Every condition must accept the record for the rule to match. */
+  conditions: FilterSpec[];
+  /** `flag` only counts; `exclude` also removes the record from the tabulation. */
+  action: 'flag' | 'exclude';
+}
+
+/** Per-rule outcome, counted over every record seen, not over the filtered subset. */
+export interface DataQualityRuleOutcome {
+  id: string;
+  label: string;
+  action: 'flag' | 'exclude';
+  matchedRecords: number;
+}
+
 export type TotalPolicy =
   | 'none'
   | 'sum'
@@ -72,6 +101,8 @@ export interface TabulationSpec {
   filters: FilterSpec[];
   suppressZeroRows?: boolean;
   suppressZeroColumns?: boolean;
+  /** Modern, user-authored implausibility rules spanning more than one field. */
+  crossFieldRules?: CrossFieldRuleSpec[];
 }
 
 export interface QueryPlan {
@@ -97,6 +128,9 @@ export interface TabulationResult {
   warnings: string[];
   recordsSeen: number;
   recordsAccepted: number;
+  /** Present only when the spec declared cross-field rules, so existing
+   *  golden and portable-table payloads stay byte-identical. */
+  dataQuality?: DataQualityRuleOutcome[];
 }
 
 export interface DerivedColumnSpec {
