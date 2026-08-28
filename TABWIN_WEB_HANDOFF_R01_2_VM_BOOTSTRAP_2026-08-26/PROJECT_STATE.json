@@ -151,6 +151,7 @@
     ,"batched-accumulation-identical-to-one-shot-execution"
     ,"worker-tabulation-that-never-returns-records-to-the-main-thread"
     ,"streamed-tabulation-identical-to-materialized-on-real-rdac2401"
+    ,"measured-decode-cost-breakdown-locating-the-record-object-wall"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -215,6 +216,8 @@
     "run-docs-testing-r06-1-short-oracle-cases",
     "capture-focused-post-table-tabwin-415-oracles",
     "audit-include-table-and-paste-semantics-without-guessing",
+    "build-a-columnar-store-fed-by-the-chunked-stream",
+    "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
     "route-large-official-files-through-the-worker-tabulation-path-in-the-ui",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",

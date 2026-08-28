@@ -20,6 +20,7 @@
     "verify:g001": "npm run build && node scripts/verify-g001-local.mjs",
     "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
     "bench:record-stream": "npm run build && node --expose-gc --max-old-space-size=6144 scripts/measure-record-stream-memory.mjs",
+    "bench:decode-breakdown": "npm run build && node scripts/measure-decode-breakdown.mjs",
     "check": "npm run test && npm run typecheck:web && npm run web:build"
   },
   "dependencies": {
