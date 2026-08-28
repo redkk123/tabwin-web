@@ -5,6 +5,7 @@
  * usage: npm run bench:plan-projection -- <arquivo.dbc>
  */
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import { readDbcMetadata, readDbfHeader } from '@precisa-saude/datasus-dbc';
 import { streamDbcRecords } from '../dist/packages/acquisition/src/dbf-record-stream.js';
 import { implodeDecompressChunks } from '../dist/packages/acquisition/src/implode-stream.js';
@@ -22,11 +23,25 @@ const header = readDbfHeader(dbc.subarray(0, metadata.headerSize));
 const compressed = dbc.subarray(metadata.headerSize + 4);
 const expected = metadata.recordCount * metadata.recordSize + 1;
 
+// A plan built from the file's own header, so the benchmark runs on any DBC.
+// Preference goes to the named SINAN fields when the file declares them, so a
+// Dengue run stays comparable across invocations.
+const declared = new Set(header.fields.map((field) => field.name));
+const pick = (preferred, predicate) => preferred.find((name) => declared.has(name))
+  ?? header.fields.find(predicate)?.name;
+
+const rowField = pick(['ID_MUNICIP'], (field) => field.type === 'C');
+const columnField = pick(['CS_SEXO'], (field) => field.type === 'C' && field.name !== rowField);
+const numericField = pick(['NU_IDADE_N'], (field) => field.type === 'N');
+if (!rowField || !columnField) throw new Error('DBF sem dois campos de caráter para tabular');
+
 const plan = compileQueryPlan({
-  rows: { field: 'ID_MUNICIP' },
-  columns: { field: 'CS_SEXO' },
+  rows: { field: rowField },
+  columns: { field: columnField },
   measure: { kind: 'count' },
-  filters: [{ field: 'NU_IDADE_N', kind: 'numeric-range', minimum: 4000 }],
+  ...(numericField
+    ? { filters: [{ field: numericField, kind: 'numeric-range', minimum: 0 }] }
+    : { filters: [] }),
 });
 const used = fieldsUsedByPlan(plan);
 
@@ -58,7 +73,7 @@ const same = JSON.stringify(projected.value.cells) === JSON.stringify(full.value
   && JSON.stringify(projected.value.rows) === JSON.stringify(full.value.rows);
 
 console.log(JSON.stringify({
-  file: 'DENGBR25.dbc',
+  file: path.basename(dbcArgument),
   records: metadata.recordCount,
   totalFields: header.fields.length,
   planFields: used,
