@@ -13,6 +13,35 @@ export interface TableOperationAudit {
   rowCount: number;
 }
 
+export function createIncludeTableOperation(
+  source: TabulationResult,
+  included: TabulationResult,
+  sourceLabel: string,
+): Extract<TableOperation, { kind: 'include-table' }> {
+  const label = sourceLabel.trim();
+  if (!label) throw new Error('included table requires a source label');
+  const baseNamespace = label.normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'included';
+  let namespace = baseNamespace;
+  let suffix = 2;
+  while (source.columns.some((column) => column.key.startsWith(`${namespace}:`))) {
+    namespace = `${baseNamespace}-${suffix++}`;
+  }
+  return {
+    kind: 'include-table',
+    sourceLabel: label,
+    requireMatchingLabels: true,
+    rows: included.rows.map((row) => ({ key: row.key, label: row.label })),
+    columns: included.columns.map((column) => ({
+      ...column,
+      key: `${namespace}:${column.key}`,
+      label: `${label} — ${column.label}`,
+      source: 'derived',
+    })),
+    cells: included.cells.map((row) => [...row]),
+  };
+}
+
 function columnIndex(result: TabulationResult, key: string): number {
   const index = result.columns.findIndex((column) => column.key === key);
   if (index < 0) throw new Error(`table operation references missing column: ${key}`);
@@ -130,6 +159,55 @@ function cloneResult(source: TabulationResult): TabulationResult {
 }
 
 function applyStructuralOperation(source: TabulationResult, operation: TableOperation): TabulationResult | undefined {
+  if (operation.kind === 'include-table') {
+    if (!operation.sourceLabel.trim()) throw new Error('included table requires a source label');
+    if (operation.rows.length !== operation.cells.length) throw new Error('included table row/cell shape is inconsistent');
+    if (!operation.columns.length) throw new Error('included table must contain at least one column');
+    const includedByKey = new Map<string, number>();
+    operation.rows.forEach((row, index) => {
+      if (!row.key) throw new Error('included table contains an empty row key');
+      if (includedByKey.has(row.key)) throw new Error(`included table contains duplicate row key: ${row.key}`);
+      includedByKey.set(row.key, index);
+    });
+    const sourceKeys = new Set(source.rows.map((row) => row.key));
+    if (sourceKeys.size !== source.rows.length) throw new Error('source table contains duplicate row keys');
+    if (source.rows.length !== operation.rows.length
+      || operation.rows.some((row) => !sourceKeys.has(row.key))) {
+      throw new Error('included table row keys must exactly match the current table');
+    }
+    const knownColumns = new Set(source.columns.map((column) => column.key));
+    for (const column of operation.columns) {
+      if (!column.key || !column.label) throw new Error('included table contains an invalid column');
+      if (knownColumns.has(column.key)) throw new Error(`included table column key already exists: ${column.key}`);
+      knownColumns.add(column.key);
+    }
+    for (const cells of operation.cells) {
+      if (cells.length !== operation.columns.length || cells.some((value) => !Number.isFinite(value))) {
+        throw new Error('included table contains an invalid or non-finite cell');
+      }
+    }
+    const result = cloneResult(source);
+    result.columns.push(...operation.columns.map((column) => ({ ...column })));
+    result.cells = source.rows.map((row, sourceIndex) => {
+      const includedIndex = includedByKey.get(row.key);
+      if (includedIndex === undefined) throw new Error(`included table is missing row key: ${row.key}`);
+      const includedRow = operation.rows[includedIndex]!;
+      if (operation.requireMatchingLabels && includedRow.label !== row.label) {
+        throw new Error(`included table row label differs for key ${row.key}`);
+      }
+      return [...(source.cells[sourceIndex] ?? []), ...(operation.cells[includedIndex] ?? [])];
+    });
+    result.warnings.push(`Table ${operation.sourceLabel} included by exact row key using a modern explicit policy`);
+    return result;
+  }
+  if (operation.kind === 'transpose') {
+    const result = cloneResult(source);
+    result.rows = source.columns.map((column) => ({ ...column }));
+    result.columns = source.rows.map((row) => ({ ...row }));
+    result.cells = source.columns.map((_, columnIndex) =>
+      source.rows.map((_, rowIndex) => source.cells[rowIndex]?.[columnIndex] ?? 0));
+    return result;
+  }
   if (operation.kind === 'rename-column') {
     if (!operation.label.trim()) throw new Error('renamed column requires a non-empty label');
     const index = columnIndex(source, operation.columnKey);

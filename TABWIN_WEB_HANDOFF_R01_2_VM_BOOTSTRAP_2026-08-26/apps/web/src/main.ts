@@ -1,8 +1,4 @@
 import {
-  dbcToDbf,
-  readDbcMetadata,
-  readDbfHeader,
-  readDbfRecords,
   type DbfHeader,
   type DbfRecord,
 } from '@precisa-saude/datasus-dbc';
@@ -36,8 +32,16 @@ import {
 } from '../../../packages/formats/src/index.ts';
 import {
   DATASUS_SYSTEMS,
+  catalogCapabilities,
+  compareSourceManifests,
+  createSourceManifest,
+  expandDatasusSearchSelection,
   fileTypesForSystem,
+  parseSourceManifest,
+  serializeSourceManifest,
   systemIsAnnual,
+  verifiedAuxiliaryBundleName,
+  type DatasusAvailabilityManifest,
   type DatasusRemoteFile,
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
@@ -46,11 +50,12 @@ import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import { writeDbf } from '../../../packages/export/src/dbf-writer.ts';
 import {
-  chooseCurrentAuxiliaryBundle,
+  chooseVerifiedAuxiliaryBundle,
   extractSupportedArchiveFiles,
   fetchOfficialArchive,
   prepareOfficialDownload,
   searchOfficialAuxiliaries,
+  searchOfficialCatalogBatch,
   searchOfficialFiles,
   suggestedDefinitionName,
   type ExtractedArchiveFile,
@@ -77,9 +82,11 @@ import {
   pearsonCorrelation,
   simpleLinearRegression,
 } from '../../../packages/analysis/src/statistics.ts';
+import { profileNumericField } from '../../../packages/analysis/src/data-quality.ts';
 import {
   applyTableOperation,
   calculateColumnTotal,
+  createIncludeTableOperation,
   replayTableOperations,
 } from '../../../packages/analysis/src/table-operations.ts';
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
@@ -96,6 +103,8 @@ interface LoadedSource {
   retrievedAt?: string;
   archiveSha256?: string;
   cacheKey?: string;
+  /** Explicit catalog selection for an acquired official data source. */
+  catalogQuery?: DatasusSearchQuery | undefined;
 }
 
 interface OfficialArchiveProvenance {
@@ -109,6 +118,8 @@ interface DownloadedArchive {
   files: ExtractedArchiveFile[];
   provenance: OfficialArchiveProvenance;
 }
+
+type OpenOfficialFileResult = { ok: true } | { ok: false; error: string };
 
 const numberFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const integerFormat = new Intl.NumberFormat('pt-BR');
@@ -125,16 +136,21 @@ const dropZone = element<HTMLElement>('#drop-zone');
 const fileList = element<HTMLElement>('#file-list');
 const sourceDbfButton = element<HTMLButtonElement>('#source-dbf-button');
 const selectedDbfButton = element<HTMLButtonElement>('#selected-dbf-button');
+const decodeCancelButton = element<HTMLButtonElement>('#decode-cancel-button');
+const combineCompatibleFiles = element<HTMLInputElement>('#combine-compatible-files');
 const form = element<HTMLFormElement>('#analysis-form');
+const fieldSearch = element<HTMLInputElement>('#field-search');
 const rowField = element<HTMLSelectElement>('#row-field');
 const columnField = element<HTMLSelectElement>('#column-field');
 const rowConversion = element<HTMLSelectElement>('#row-conversion');
+const columnConversion = element<HTMLSelectElement>('#column-conversion');
 const measureKind = element<HTMLSelectElement>('#measure-kind');
 const measureField = element<HTMLSelectElement>('#measure-field');
 const measureFieldLabel = element<HTMLElement>('#measure-field-label');
 const filterField = element<HTMLSelectElement>('#filter-field');
 const filterMode = element<HTMLSelectElement>('#filter-mode');
 const filterKind = element<HTMLSelectElement>('#filter-kind');
+const filterValueSearch = element<HTMLInputElement>('#filter-value-search');
 const filterValues = element<HTMLElement>('#filter-values');
 const filterRange = element<HTMLElement>('#filter-range');
 const filterMinimum = element<HTMLInputElement>('#filter-minimum');
@@ -147,15 +163,26 @@ const clearFilterButton = element<HTMLButtonElement>('#clear-filter-button');
 const selectAllFilterButton = element<HTMLButtonElement>('#select-all-filter-button');
 const addFilterButton = element<HTMLButtonElement>('#add-filter-button');
 const activeFilterList = element<HTMLElement>('#active-filter-list');
+const qualityField = element<HTMLSelectElement>('#quality-field');
+const qualitySummary = element<HTMLElement>('#quality-summary');
+const qualityMinimum = element<HTMLInputElement>('#quality-minimum');
+const qualityMaximum = element<HTMLInputElement>('#quality-maximum');
+const qualitySuggestButton = element<HTMLButtonElement>('#quality-suggest-button');
+const qualityApplyButton = element<HTMLButtonElement>('#quality-apply-button');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
 const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
 const recipeInput = element<HTMLInputElement>('#recipe-input');
 const openTableButton = element<HTMLButtonElement>('#open-table-button');
+const includeTableButton = element<HTMLButtonElement>('#include-table-button');
 const saveTableButton = element<HTMLButtonElement>('#save-table-button');
 const tableInput = element<HTMLInputElement>('#table-input');
+const includeTableInput = element<HTMLInputElement>('#include-table-input');
 const startPosition = element<HTMLInputElement>('#start-position');
+const columnStartPosition = element<HTMLInputElement>('#column-start-position');
 const suppressZero = element<HTMLInputElement>('#suppress-zero');
+const suppressZeroColumns = element<HTMLInputElement>('#suppress-zero-columns');
 const discriminateUnclassified = element<HTMLInputElement>('#discriminate-unclassified');
+const discriminateColumnUnclassified = element<HTMLInputElement>('#discriminate-column-unclassified');
 const runButton = element<HTMLButtonElement>('#run-button');
 const exportCsvButton = element<HTMLButtonElement>('#export-csv-button');
 const exportXlsxButton = element<HTMLButtonElement>('#export-xlsx-button');
@@ -195,6 +222,9 @@ const tableOperationUndo = element<HTMLButtonElement>('#table-operation-undo');
 const tableOperationReset = element<HTMLButtonElement>('#table-operation-reset');
 const tableOperationHistory = element<HTMLOListElement>('#table-operation-history');
 const tablePresentation = element<HTMLElement>('#table-presentation');
+const tableTitle = element<HTMLInputElement>('#table-title');
+const tableSubtitle = element<HTMLInputElement>('#table-subtitle');
+const tableFooter = element<HTMLInputElement>('#table-footer');
 const tableLocate = element<HTMLInputElement>('#table-locate');
 const tableSortColumn = element<HTMLSelectElement>('#table-sort-column');
 const tableSortDirection = element<HTMLSelectElement>('#table-sort-direction');
@@ -211,6 +241,7 @@ const tableColumnRight = element<HTMLButtonElement>('#table-column-right');
 const tableColumnDelete = element<HTMLButtonElement>('#table-column-delete');
 const tableAggregateLabel = element<HTMLInputElement>('#table-aggregate-label');
 const tableAggregateRemove = element<HTMLInputElement>('#table-aggregate-remove');
+const tableTranspose = element<HTMLButtonElement>('#table-transpose');
 const tableRowAggregate = element<HTMLButtonElement>('#table-row-aggregate');
 const tableRowSuppress = element<HTMLButtonElement>('#table-row-suppress');
 const chart = element<HTMLElement>('#chart');
@@ -237,11 +268,14 @@ const catalogMonth = element<HTMLSelectElement>('#catalog-month');
 const catalogUf = element<HTMLSelectElement>('#catalog-uf');
 const catalogMonthLabel = element<HTMLElement>('#catalog-month-label');
 const catalogUfLabel = element<HTMLElement>('#catalog-uf-label');
+const catalogCapabilitiesOutput = element<HTMLElement>('#catalog-capabilities');
 const catalogAuxiliary = element<HTMLInputElement>('#catalog-auxiliary');
 const catalogSearchButton = element<HTMLButtonElement>('#catalog-search-button');
 const catalogCancelButton = element<HTMLButtonElement>('#catalog-cancel-button');
 const catalogStatus = element<HTMLElement>('#catalog-status');
 const catalogResults = element<HTMLElement>('#catalog-results');
+const catalogAuxiliaryPicker = element<HTMLElement>('#catalog-auxiliary-picker');
+const catalogAuxiliaryResults = element<HTMLElement>('#catalog-auxiliary-results');
 const catalogRecentSummary = element<HTMLElement>('#catalog-recent-summary');
 const catalogRecentList = element<HTMLElement>('#catalog-recent-list');
 const catalogCacheClear = element<HTMLButtonElement>('#catalog-cache-clear');
@@ -255,6 +289,7 @@ let datasetFingerprint: LoadedSource | null = null;
 let activeDef: DefDefinition | null = null;
 let activeMap: TabwinMapDefinition | null = null;
 let activeMapSource = '';
+let mapNameByGeocode = new Map<string, string>();
 let currentPlan: QueryPlan | null = null;
 let baseResult: TabulationResult | null = null;
 let currentResult: TabulationResult | null = null;
@@ -264,6 +299,7 @@ let currentView: ViewName = 'table';
 let toastTimer = 0;
 const cnvByName = new Map<string, CnvDefinition>();
 const loadedSources: LoadedSource[] = [];
+const activeDatasetSources: LoadedSource[] = [];
 let activeFilterConversion = '';
 let activeFilterStartPosition: number | undefined;
 let configuredFilters: FilterSpec[] = [];
@@ -274,6 +310,8 @@ let mapProjection: { west: number; north: number; fit: number; offsetX: number; 
 let lastMapValues = new Map<TabwinMapObject, number | undefined>();
 let mapDrag: { pointerId: number; x: number; y: number } | null = null;
 let activeCatalogController: AbortController | null = null;
+let activeDecode: { cancel: () => void } | null = null;
+const MAX_LOCAL_INPUT_BYTES = 512 * 1024 * 1024;
 
 function showToast(message: string, isError = false): void {
   window.clearTimeout(toastTimer);
@@ -298,7 +336,9 @@ function formatBytes(bytes: number): string {
 }
 
 async function sha256(bytes: Uint8Array): Promise<string> {
-  const source = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  const source = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? bytes.buffer as ArrayBuffer
+    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   const digest = await crypto.subtle.digest('SHA-256', source);
   return [...new Uint8Array(digest)].map((value) => value.toString(16).padStart(2, '0')).join('');
 }
@@ -337,22 +377,35 @@ function setBusy(message: string): void {
   runButton.disabled = true;
 }
 
+function updateColumnControls(): void {
+  const enabled = Boolean(dbfHeader && columnField.value);
+  columnConversion.disabled = !enabled;
+  columnStartPosition.disabled = !enabled;
+  discriminateColumnUnclassified.disabled = !enabled;
+}
+
 function setControlsEnabled(enabled: boolean): void {
-  for (const control of [rowField, columnField, rowConversion, measureKind, measureField, filterField, filterMode,
-    filterKind, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition,
-    suppressZero, discriminateUnclassified, runButton]) {
+  for (const control of [fieldSearch, rowField, columnField, rowConversion, columnConversion, measureKind, measureField, filterField, filterMode,
+    filterKind, filterValueSearch, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition, columnStartPosition,
+    qualityField, qualityMinimum, qualityMaximum, suppressZero, suppressZeroColumns, discriminateUnclassified,
+    discriminateColumnUnclassified, runButton]) {
     control.disabled = !enabled;
   }
   if (enabled) updateMeasureControls();
+  updateColumnControls();
   clearFilterButton.disabled = !enabled || !filterField.value;
   selectAllFilterButton.disabled = !enabled || !filterField.value || filterKind.value === 'numeric-range';
   if (!enabled) addFilterButton.disabled = true;
+  if (!enabled) {
+    qualitySuggestButton.disabled = true;
+    qualityApplyButton.disabled = true;
+  }
 }
 
-function fieldLabel(fieldName: string): string {
+function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
   if (!activeDef) return fieldName;
   const match = activeDef.options.find((option) =>
-    option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes('row'));
+    option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes(role));
   return match ? `${match.label} · ${fieldName}` : fieldName;
 }
 
@@ -381,22 +434,49 @@ function chooseDefaultField(fields: DbfHeader['fields']): string {
 
 function populateControls(preferredField?: string): void {
   if (!dbfHeader) return;
+  fieldSearch.value = '';
   const previousRow = preferredField ?? rowField.value;
   const previousColumn = columnField.value;
   rowField.replaceChildren();
   columnField.replaceChildren(new Option('Sem colunas', ''));
 
   for (const field of dbfHeader.fields) {
-    rowField.add(new Option(fieldLabel(field.name), field.name));
-    columnField.add(new Option(fieldLabel(field.name), field.name));
+    rowField.add(new Option(fieldLabel(field.name, 'row'), field.name));
+    columnField.add(new Option(fieldLabel(field.name, 'column'), field.name));
   }
   const available = new Set(dbfHeader.fields.map((field) => field.name));
   rowField.value = available.has(previousRow) ? previousRow : chooseDefaultField(dbfHeader.fields);
   columnField.value = available.has(previousColumn) ? previousColumn : '';
   populateMeasureFields();
   populateFilterFields();
+  populateQualityFields();
   populateConversions();
   setControlsEnabled(true);
+}
+
+function searchDimensionFields(): void {
+  if (!dbfHeader) return;
+  const previousRow = rowField.value;
+  const previousColumn = columnField.value;
+  const query = normalizeLabel(fieldSearch.value);
+  const matches = dbfHeader.fields.filter((field) => {
+    if (field.name === previousRow || field.name === previousColumn) return true;
+    const searchable = `${field.name} ${fieldLabel(field.name, 'row')} ${fieldLabel(field.name, 'column')}`;
+    return normalizeLabel(searchable).includes(query);
+  });
+  rowField.replaceChildren();
+  columnField.replaceChildren(new Option('Sem colunas', ''));
+  for (const field of matches) {
+    rowField.add(new Option(fieldLabel(field.name, 'row'), field.name));
+    columnField.add(new Option(fieldLabel(field.name, 'column'), field.name));
+  }
+  rowField.value = matches.some((field) => field.name === previousRow)
+    ? previousRow
+    : matches[0]?.name ?? '';
+  columnField.value = matches.some((field) => field.name === previousColumn)
+    ? previousColumn
+    : '';
+  updateColumnControls();
 }
 
 function populateMeasureFields(): void {
@@ -413,6 +493,93 @@ function populateMeasureFields(): void {
   if (sumOption) sumOption.disabled = candidates.length === 0;
   if (!candidates.length) measureKind.value = 'count';
   updateMeasureControls();
+}
+
+function populateQualityFields(): void {
+  if (!dbfHeader) return;
+  const previous = qualityField.value;
+  const numericTypes = new Set(['N', 'F', 'I', 'B', 'Y']);
+  const fields = [...dbfHeader.fields].sort((left, right) =>
+    Number(numericTypes.has(right.type)) - Number(numericTypes.has(left.type)));
+  qualityField.replaceChildren(new Option('Escolha um campo', ''));
+  for (const field of fields) {
+    qualityField.add(new Option(`${selectionLabel(field.name)} · tipo ${field.type}`, field.name));
+  }
+  qualityField.value = fields.some((field) => field.name === previous) ? previous : '';
+  qualityMinimum.value = '';
+  qualityMaximum.value = '';
+  updateQualityProfile();
+}
+
+function conciseQualityNumber(value: number | undefined): string {
+  return value === undefined ? '—' : new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 4 }).format(value);
+}
+
+function inputQualityNumber(value: number): string {
+  return Number(value.toPrecision(12)).toString();
+}
+
+function updateQualityProfile(): void {
+  if (!qualityField.value || !records.length) {
+    qualitySummary.textContent = 'Escolha um campo para ver distribuição, ausências e valores extremos.';
+    qualitySuggestButton.disabled = true;
+    qualityApplyButton.disabled = true;
+    return;
+  }
+  const profile = profileNumericField(records, qualityField.value);
+  if (!profile.numericRecords) {
+    qualitySummary.textContent = `${selectionLabel(profile.field)} não possui valores numéricos reconhecidos; ${integerFormat.format(profile.missingRecords)} ausente(s) e ${integerFormat.format(profile.invalidRecords)} inválido(s).`;
+    qualitySuggestButton.disabled = true;
+    qualityApplyButton.disabled = true;
+    return;
+  }
+  qualitySummary.textContent = [
+    `${integerFormat.format(profile.numericRecords)} numérico(s)`,
+    `${integerFormat.format(profile.missingRecords)} ausente(s)`,
+    `${integerFormat.format(profile.invalidRecords)} inválido(s)`,
+    `faixa ${conciseQualityNumber(profile.minimum)}–${conciseQualityNumber(profile.maximum)}`,
+    `mediana ${conciseQualityNumber(profile.median)}`,
+    `${integerFormat.format(profile.iqrOutlierRecords)} extremo(s) estatístico(s)`,
+  ].join(' · ');
+  qualitySuggestButton.disabled = profile.lowerIqrFence === undefined || profile.upperIqrFence === undefined;
+  updateQualityApplyState();
+}
+
+function updateQualityApplyState(): void {
+  const minimum = qualityMinimum.value.trim();
+  const maximum = qualityMaximum.value.trim();
+  qualityApplyButton.disabled = !qualityField.value || (!minimum && !maximum);
+}
+
+function suggestQualityRange(): void {
+  const profile = profileNumericField(records, qualityField.value);
+  if (profile.minimum === undefined || profile.maximum === undefined
+    || profile.lowerIqrFence === undefined || profile.upperIqrFence === undefined) return;
+  qualityMinimum.value = inputQualityNumber(Math.max(profile.minimum, profile.lowerIqrFence));
+  qualityMaximum.value = inputQualityNumber(Math.min(profile.maximum, profile.upperIqrFence));
+  updateQualityApplyState();
+  showToast('Sugestão preenchida; revise antes de aplicar');
+}
+
+function applyQualityRange(): void {
+  if (!qualityField.value) return;
+  const minimum = qualityMinimum.value.trim() === '' ? undefined : Number(qualityMinimum.value);
+  const maximum = qualityMaximum.value.trim() === '' ? undefined : Number(qualityMaximum.value);
+  if (minimum === undefined && maximum === undefined) return;
+  if ((minimum !== undefined && !Number.isFinite(minimum)) || (maximum !== undefined && !Number.isFinite(maximum))) {
+    throw new Error('Informe limites numéricos válidos');
+  }
+  if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+    throw new Error('O mínimo válido não pode ser maior que o máximo');
+  }
+  configuredFilters.push({
+    field: qualityField.value, kind: 'numeric-range', mode: 'include', origin: 'data-quality',
+    ...(minimum !== undefined ? { minimum } : {}), ...(maximum !== undefined ? { maximum } : {}),
+    includeMinimum: true, includeMaximum: true,
+  });
+  renderConfiguredFilters();
+  showToast('Regra de limpeza aplicada sem alterar o arquivo original');
+  void runAnalysis();
 }
 
 function populateFilterFields(): void {
@@ -432,6 +599,7 @@ function updateMeasureControls(): void {
 
 function populateFilterValues(): void {
   filterValues.replaceChildren();
+  filterValueSearch.value = '';
   activeFilterConversion = '';
   activeFilterStartPosition = undefined;
   addFilterButton.disabled = true;
@@ -440,6 +608,8 @@ function populateFilterValues(): void {
   const rangeMode = filterKind.value === 'numeric-range';
   filterRange.hidden = !rangeMode;
   filterValues.hidden = rangeMode;
+  filterValueSearch.hidden = rangeMode || !field;
+  filterValueSearch.disabled = rangeMode || !field;
   clearFilterButton.disabled = !field;
   selectAllFilterButton.disabled = !field || rangeMode;
   if (!field) {
@@ -485,6 +655,7 @@ function populateFilterValues(): void {
 function addFilterOption(value: string, label: string, unclassified = false): void {
   const wrapper = document.createElement('label');
   wrapper.className = 'filter-option';
+  wrapper.dataset.search = normalizeLabel(`${label} ${value}`);
   const input = document.createElement('input');
   input.type = 'checkbox';
   input.dataset.filterValue = value;
@@ -494,6 +665,13 @@ function addFilterOption(value: string, label: string, unclassified = false): vo
   caption.textContent = label;
   wrapper.append(input, caption);
   filterValues.append(wrapper);
+}
+
+function searchFilterValues(): void {
+  const query = normalizeLabel(filterValueSearch.value);
+  for (const option of filterValues.querySelectorAll<HTMLElement>('.filter-option')) {
+    option.hidden = Boolean(query) && !option.dataset.search?.includes(query);
+  }
 }
 
 function updateFilterCount(): void {
@@ -548,7 +726,8 @@ function renderConfiguredFilters(): void {
     const item = document.createElement('div');
     item.className = 'active-filter';
     const label = document.createElement('span');
-    const prefix = filter.mode === 'exclude' ? 'Excluir' : 'Incluir';
+    const prefix = filter.origin === 'data-quality' ? 'Limpeza'
+      : filter.mode === 'exclude' ? 'Excluir' : 'Incluir';
     label.textContent = filter.kind === 'numeric-range'
       ? `${prefix} ${selectionLabel(filter.field)} · ${filter.minimum ?? '−∞'} a ${filter.maximum ?? '+∞'}`
       : `${prefix} ${selectionLabel(filter.field)} · ${filter.acceptedCategories.length + (filter.includeUnclassified ? 1 : 0)} valor(es)`;
@@ -575,36 +754,54 @@ function cloneFilter(filter: FilterSpec): FilterSpec {
 }
 
 function populateConversions(): void {
-  const previous = rowConversion.value;
+  const previousRow = rowConversion.value;
+  const previousColumn = columnConversion.value;
   rowConversion.replaceChildren(new Option('Valores originais', ''));
+  columnConversion.replaceChildren(new Option('Valores originais', ''));
   for (const name of [...cnvByName.keys()].sort((a, b) => a.localeCompare(b))) {
     const definition = cnvByName.get(name)!;
-    rowConversion.add(new Option(`${name} · ${definition.categories.length} categorias`, name));
+    const label = `${name} · ${definition.categories.length} categorias`;
+    rowConversion.add(new Option(label, name));
+    columnConversion.add(new Option(label, name));
   }
-  if (cnvByName.has(previous)) rowConversion.value = previous;
+  if (cnvByName.has(previousRow)) rowConversion.value = previousRow;
+  if (cnvByName.has(previousColumn)) columnConversion.value = previousColumn;
   applyDefDefaults();
+  updateColumnControls();
   if (filterField.value) populateFilterValues();
 }
 
 function applyDefDefaults(): void {
-  if (!activeDef || !rowField.value) return;
-  const option = optionsForRole(activeDef, 'row').find(
-    (candidate) => candidate.field.toUpperCase() === rowField.value.toUpperCase(),
-  );
-  if (option?.kind !== 'conversion') return;
-  startPosition.value = String(option.startPosition);
-  const wanted = baseName(option.conversionFile);
-  const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === wanted);
-  if (loadedName) rowConversion.value = loadedName;
+  if (!activeDef) return;
+  const definition = activeDef;
+  const apply = (
+    role: 'row' | 'column',
+    field: string,
+    conversion: HTMLSelectElement,
+    position: HTMLInputElement,
+  ): void => {
+    if (!field) return;
+    const option = optionsForRole(definition, role).find(
+      (candidate) => candidate.field.toUpperCase() === field.toUpperCase(),
+    );
+    if (option?.kind !== 'conversion') return;
+    position.value = String(option.startPosition);
+    const wanted = baseName(option.conversionFile);
+    const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === wanted);
+    if (loadedName) conversion.value = loadedName;
+  };
+  apply('row', rowField.value, rowConversion, startPosition);
+  apply('column', columnField.value, columnConversion, columnStartPosition);
 }
 
 function updateDatasetStats(): void {
-  if (!dbfHeader || !datasetFingerprint) return;
+  if (!dbfHeader || !activeDatasetSources.length) return;
+  const sourceBytes = activeDatasetSources.reduce((total, source) => total + source.size, 0);
   const values: Array<readonly [string, string]> = [
     [integerFormat.format(records.length), 'registros ativos'],
     [integerFormat.format(dbfHeader.fields.length), 'campos'],
-    [formatBytes(datasetFingerprint.size), 'arquivo original'],
-    [datasetFingerprint.sha256.slice(0, 10), 'sha-256'],
+    [formatBytes(sourceBytes), activeDatasetSources.length === 1 ? 'arquivo original' : `${activeDatasetSources.length} arquivos-fonte`],
+    [datasetFingerprint?.sha256.slice(0, 10) ?? `${activeDatasetSources.length} fontes`, datasetFingerprint ? 'sha-256' : 'proveniências auditáveis'],
   ];
   datasetStats.replaceChildren();
   for (const [value, label] of values) {
@@ -620,18 +817,14 @@ function updateDatasetStats(): void {
   datasetStats.hidden = false;
 }
 
-async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean): Promise<void> {
-  setBusy(isDbc ? `Descompactando ${file.name}…` : `Lendo ${file.name}…`);
-  if (isDbc) readDbcMetadata(bytes); // validates the cheap envelope metadata first
-  const dbf = isDbc ? dbcToDbf(bytes) : bytes;
-  const header = readDbfHeader(dbf);
-  const nextRecords: DbfRecord[] = [];
-  let index = 0;
-  for await (const record of readDbfRecords(dbf)) {
-    nextRecords.push(record);
-    if (++index % 10_000 === 0) await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
-  }
+async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: LoadedSource): Promise<void> {
+  const decoded = await decodeDbfFile(bytes, file, isDbc);
+  const { header, records: nextRecords } = decoded;
 
+  // Admit the source only after decoding succeeds. Cancellation or malformed
+  // input must leave the previous dataset and its provenance intact.
+  rememberSource(source);
+  activeDatasetSources.splice(0, activeDatasetSources.length, source);
   records = nextRecords;
   dbfHeader = header;
   currentDatasetFile = file;
@@ -640,18 +833,111 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean): Promise
   configuredFilters = [];
   renderConfiguredFilters();
   datasetName = file.name;
-  datasetFingerprint = loadedSources.find((source) => source.name === file.name) ?? null;
+  datasetFingerprint = source;
   populateControls(chooseDefaultField(header.fields));
   updateDatasetStats();
   await runAnalysis();
 }
 
-async function decodeDelimitedFile(bytes: Uint8Array, file: File): Promise<void> {
+function schemaSignature(header: DbfHeader): string {
+  return header.fields
+    .map((field) => `${field.name}:${field.type}:${field.length}:${field.decimalCount}`)
+    .join('|');
+}
+
+async function decodeDbfFile(bytes: Uint8Array, file: File, isDbc: boolean): Promise<{ header: DbfHeader; records: DbfRecord[] }> {
+  if (activeDecode) throw new Error('Outra leitura DBC/DBF ainda está em andamento');
+  setBusy(isDbc ? `Descompactando ${file.name}…` : `Lendo ${file.name}…`);
+  decodeCancelButton.hidden = false;
+  try {
+    return await decodeDbfInWorker(bytes, isDbc, file.name);
+  } finally {
+    decodeCancelButton.hidden = true;
+    activeDecode = null;
+  }
+}
+
+async function appendCompatibleDbf(
+  bytes: Uint8Array,
+  file: File,
+  isDbc: boolean,
+  source: LoadedSource,
+): Promise<void> {
+  if (activeDatasetSources.some((item) => item.size === source.size && item.sha256 === source.sha256)) {
+    throw new Error(`${file.name}: este arquivo já faz parte do conjunto combinado`);
+  }
+  const decoded = await decodeDbfFile(bytes, file, isDbc);
+  if (!dbfHeader || schemaSignature(dbfHeader) !== schemaSignature(decoded.header)) {
+    throw new Error(`${file.name}: esquema incompatível; arquivos combinados precisam ter os mesmos campos, tipos, tamanhos e decimais`);
+  }
+  for (const record of decoded.records) records.push(record);
+  dbfHeader = { ...dbfHeader, recordCount: records.length };
+  rememberSource(source);
+  activeDatasetSources.push(source);
+  currentDatasetFile = null;
+  sourceDbfButton.disabled = true;
+  datasetName = activeDatasetSources.map((item) => item.name).join(' + ');
+  datasetFingerprint = null;
+  updateDatasetStats();
+  await runAnalysis();
+}
+
+async function decodeDbfInWorker(
+  bytes: Uint8Array,
+  isDbc: boolean,
+  name: string,
+): Promise<{ header: DbfHeader; records: DbfRecord[] }> {
+  const worker = new Worker(new URL('./dbf-decode-worker.ts', import.meta.url), { type: 'module' });
+  // File-backed Uint8Arrays normally span their complete ArrayBuffer. Transfer that
+  // buffer directly so large DBC/DBF inputs are not duplicated on the main thread.
+  // Only a view into a larger buffer needs an isolated copy before transfer.
+  const source = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? bytes.buffer as ArrayBuffer
+    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (action: () => void): void => {
+      if (settled) return;
+      settled = true;
+      worker.terminate();
+      action();
+    };
+    activeDecode = { cancel: () => finish(() => reject(new Error(`Leitura de ${name} cancelada`))) };
+    worker.addEventListener('message', (event: MessageEvent<
+      | { type: 'progress'; recordsRead: number; recordCount: number }
+      | { type: 'result'; header: DbfHeader; records: DbfRecord[] }
+      | { type: 'error'; message: string }
+    >) => {
+      const message = event.data;
+      if (message.type === 'progress') {
+        resultTitle.textContent = `Lendo ${name}: ${integerFormat.format(message.recordsRead)} de ${integerFormat.format(message.recordCount)} registros…`;
+        return;
+      }
+      if (message.type === 'error') finish(() => reject(new Error(message.message)));
+      else finish(() => resolve({ header: message.header, records: message.records }));
+    });
+    worker.addEventListener('error', () => {
+      finish(() => reject(new Error(`Não foi possível processar ${name} no trabalhador local`)));
+    }, { once: true });
+    worker.addEventListener('messageerror', () => {
+      finish(() => reject(new Error(`O resultado de ${name} não pôde ser transferido do trabalhador local`)));
+    }, { once: true });
+    try {
+      worker.postMessage({ type: 'decode', bytes: source, isDbc }, [source]);
+    } catch (error) {
+      finish(() => reject(error instanceof Error ? error : new Error(String(error))));
+    }
+  });
+}
+
+async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: LoadedSource): Promise<void> {
   setBusy(`Lendo ${file.name}…`);
   let text: string;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch { text = textDecoder.decode(bytes); }
   const dataset = parseDelimited(text, extensionOf(file.name) === 'TSV' ? { delimiter: '\t' } : {});
+  rememberSource(source);
+  activeDatasetSources.splice(0, activeDatasetSources.length, source);
   records = dataset.records as DbfRecord[];
   const fields = dataset.fields;
   dbfHeader = {
@@ -668,7 +954,7 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File): Promise<void>
   configuredFilters = [];
   renderConfiguredFilters();
   datasetName = file.name;
-  datasetFingerprint = loadedSources.find((source) => source.name === file.name) ?? null;
+  datasetFingerprint = source;
   populateControls(chooseDefaultField(fields));
   updateDatasetStats();
   await runAnalysis();
@@ -680,6 +966,9 @@ async function loadFile(file: File): Promise<void> {
   if (!['DBC', 'DBF', 'CSV', 'TSV', 'DEF', 'CNV', 'MAP'].includes(extension)) {
     throw new Error(`${file.name}: formato ainda não suportado`);
   }
+  if (file.size > MAX_LOCAL_INPUT_BYTES) {
+    throw new Error(`${file.name}: excede o limite local de ${formatBytes(MAX_LOCAL_INPUT_BYTES)}`);
+  }
   const bytes = new Uint8Array(await file.arrayBuffer());
   const source: LoadedSource = {
     name: file.name,
@@ -687,18 +976,20 @@ async function loadFile(file: File): Promise<void> {
     size: file.size,
     sha256: await sha256(bytes),
   };
-  rememberSource(source);
 
   if (extension === 'DBC' || extension === 'DBF') {
-    datasetFingerprint = source;
-    await decodeDbf(bytes, file, extension === 'DBC');
+    if (combineCompatibleFiles.checked && dbfHeader && records.length) {
+      await appendCompatibleDbf(bytes, file, extension === 'DBC', source);
+      return;
+    }
+    await decodeDbf(bytes, file, extension === 'DBC', source);
     return;
   }
   if (extension === 'CSV' || extension === 'TSV') {
-    datasetFingerprint = source;
-    await decodeDelimitedFile(bytes, file);
+    await decodeDelimitedFile(bytes, file, source);
     return;
   }
+  rememberSource(source);
   if (extension === 'CNV') {
     const definition = parseCnv(textDecoder.decode(bytes));
     cnvByName.set(file.name, definition);
@@ -713,8 +1004,10 @@ async function loadFile(file: File): Promise<void> {
     return;
   }
   activeMap = parseTabwinMap(bytes);
+  indexActiveMapNames();
   activeMapSource = file.name;
   showToast(`${file.name}: ${integerFormat.format(activeMap.objects.length)} áreas carregadas`);
+  if (currentResult) renderTable(currentResult);
   if (currentView === 'map') renderMap();
 }
 
@@ -780,6 +1073,7 @@ async function loadFiles(files: File[]): Promise<void> {
 
 function buildPlan(): QueryPlan {
   const conversionName = rowConversion.value;
+  const columnConversionName = columnConversion.value;
   const row = {
     field: rowField.value,
     ...(conversionName ? { conversionId: conversionName, startPosition: Number(startPosition.value) } : {}),
@@ -791,10 +1085,17 @@ function buildPlan(): QueryPlan {
   const spec = {
     compatibilityProfile: currentCompatibilityProfile,
     rows: row,
-    ...(columnField.value ? { columns: { field: columnField.value } } : {}),
+    ...(columnField.value ? { columns: {
+      field: columnField.value,
+      ...(columnConversionName
+        ? { conversionId: columnConversionName, startPosition: Number(columnStartPosition.value) }
+        : {}),
+      ...(discriminateColumnUnclassified.checked ? { unclassifiedPolicy: 'discriminate' as const } : {}),
+    } } : {}),
     measure,
     filters: configuredFilters.map(cloneFilter),
     suppressZeroRows: suppressZero.checked,
+    suppressZeroColumns: suppressZeroColumns.checked,
   };
   return compileQueryPlan(spec);
 }
@@ -825,6 +1126,9 @@ async function runAnalysis(): Promise<void> {
       ? `${datasetName} · soma de ${measureField.value}`
       : `${datasetName} · frequência`;
     resultTitle.textContent = fieldLabel(rowField.value).replace(` · ${rowField.value}`, '');
+    tableTitle.value = resultTitle.textContent;
+    tableSubtitle.value = '';
+    tableFooter.value = '';
     renderResult();
     exportCsvButton.disabled = false;
     exportXlsxButton.disabled = false;
@@ -835,7 +1139,7 @@ async function runAnalysis(): Promise<void> {
     saveTableButton.disabled = false;
     selectedDbfButton.disabled = false;
     setControlsEnabled(true);
-    if (currentView === 'map') await ensureMap();
+    if (currentView === 'map' || rowField.value.toUpperCase().includes('MUNIC')) await ensureMap();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     resultKicker.textContent = 'Análise interrompida';
@@ -856,6 +1160,7 @@ function renderResult(): void {
   tableOperationsPanel.hidden = false;
   tablePresentation.hidden = false;
   tableEditing.hidden = false;
+  includeTableButton.disabled = false;
   updateTablePresentationControls();
   renderTable(currentResult);
   updateTableOperationControls();
@@ -876,6 +1181,8 @@ function operationLabel(operation: TableOperation): string {
   if (operation.kind === 'rename-column') return `${operation.label} · renomear coluna`;
   if (operation.kind === 'move-column') return `${operation.columnKey} · mover ${operation.direction === 'left' ? 'à esquerda' : 'à direita'}`;
   if (operation.kind === 'delete-column') return `${operation.columnKey} · remover coluna`;
+  if (operation.kind === 'transpose') return 'Transpor linhas/colunas';
+  if (operation.kind === 'include-table') return `${operation.sourceLabel} · incluir tabela por chave`;
   if (operation.kind === 'suppress-rows') return `${operation.rowKeys.length} linha(s) · suprimir`;
   if (operation.kind === 'aggregate-rows') return `${operation.outputRow.label} · agregar ${operation.rowKeys.length} linha(s)`;
   return `${operation.output.label} · ${names[operation.kind === 'binary' ? operation.operator : operation.kind] ?? operation.kind}`;
@@ -1032,7 +1339,11 @@ function locatedRowKeys(): string[] {
 
 function currentTableRowIndexes(): number[] {
   if (!currentResult) return [];
-  return tableRowIndexes(currentResult, {
+  const searchableResult = mapNameByGeocode.size ? {
+    ...currentResult,
+    rows: currentResult.rows.map((row) => ({ ...row, label: displayRowLabel(row) })),
+  } : currentResult;
+  return tableRowIndexes(searchableResult, {
     columnKey: tableSortColumn.value,
     direction: tableSortDirection.value as 'original' | 'ascending' | 'descending',
   }, tableLocate.value);
@@ -1047,7 +1358,33 @@ function tableNumber(value: number): string {
   }).format(value);
 }
 
+function indexActiveMapNames(): void {
+  mapNameByGeocode = new Map(
+    (activeMap?.objects ?? [])
+      .filter((object) => object.geocode.trim() && object.name.trim())
+      .map((object) => [object.geocode.trim().toLowerCase(), object.name.trim()]),
+  );
+}
+
+function displayRowLabel(row: TabulationResult['rows'][number]): string {
+  if (!currentPlan?.spec.rows.field.toUpperCase().includes('MUNIC')) return row.label;
+  const key = row.key.trim();
+  const name = mapNameByGeocode.get(key.toLowerCase());
+  if (!name || (row.label.trim() && normalizeLabel(row.label) !== normalizeLabel(key))) return row.label;
+  return `${name} (${key})`;
+}
+
 function renderTable(result: TabulationResult): void {
+  const caption = resultTable.caption ?? resultTable.createCaption();
+  caption.replaceChildren();
+  const captionTitle = document.createElement('strong');
+  captionTitle.textContent = tableTitle.value.trim() || resultTitle.textContent || activeRowLabel();
+  caption.append(captionTitle);
+  if (tableSubtitle.value.trim()) {
+    const subtitle = document.createElement('span');
+    subtitle.textContent = tableSubtitle.value.trim();
+    caption.append(subtitle);
+  }
   const head = resultTable.tHead ?? resultTable.createTHead();
   const body = resultTable.tBodies[0] ?? resultTable.createTBody();
   const foot = resultTable.tFoot ?? resultTable.createTFoot();
@@ -1078,7 +1415,7 @@ function renderTable(result: TabulationResult): void {
     if (tableKeyVisible.checked) {
       const label = document.createElement('th');
       label.scope = 'row';
-      label.textContent = row.label;
+      label.textContent = displayRowLabel(row);
       tr.append(label);
     }
     for (const value of result.cells[rowIndex] ?? []) {
@@ -1118,6 +1455,15 @@ function renderTable(result: TabulationResult): void {
     totalRow.append(cell);
   }
   foot.append(totalRow);
+  if (tableFooter.value.trim()) {
+    const footerRow = document.createElement('tr');
+    footerRow.className = 'table-custom-footer';
+    const footerCell = document.createElement('td');
+    footerCell.colSpan = result.columns.length + (tableKeyVisible.checked ? 1 : 0);
+    footerCell.textContent = tableFooter.value.trim();
+    footerRow.append(footerCell);
+    foot.append(footerRow);
+  }
 }
 
 function renderChart(result: TabulationResult): void {
@@ -1242,7 +1588,9 @@ function renderAudit(): void {
   const audit = {
     application: { name: 'TabWin Web', version: '0.8.0-dev', compatibilityProfile: currentCompatibilityProfile },
     source: datasetFingerprint,
-    relatedFiles: loadedSources.filter((source) => source.name !== datasetFingerprint?.name),
+    datasetSources: activeDatasetSources,
+    relatedFiles: loadedSources.filter((source) => !activeDatasetSources.some((datasetSource) =>
+      datasetSource.name.toLowerCase() === source.name.toLowerCase() && datasetSource.sha256 === source.sha256)),
     definition: activeDef ? {
       description: activeDef.description,
       options: activeDef.options.length,
@@ -1264,6 +1612,9 @@ function renderAudit(): void {
       sortDirection: tableSortDirection.value,
       decimalPlaces: Number(tableDecimals.value),
       keyVisible: tableKeyVisible.checked,
+      title: tableTitle.value.trim() || null,
+      subtitle: tableSubtitle.value.trim() || null,
+      footer: tableFooter.value.trim() || null,
       locateQuery: tableLocate.value || null,
     } : null,
     result: currentResult ? {
@@ -1439,7 +1790,8 @@ function renderMap(): void {
 async function ensureMap(): Promise<void> {
   if (!currentResult) return;
   if (activeMap) {
-    renderMap();
+    renderTable(currentResult);
+    if (currentView === 'map') renderMap();
     return;
   }
   const field = rowField.value.toUpperCase();
@@ -1460,8 +1812,10 @@ async function ensureMap(): Promise<void> {
     const response = await fetch(new URL(`maps/${bundled}`, document.baseURI));
     if (!response.ok) throw new Error(`mapa retornou HTTP ${response.status}`);
     activeMap = parseTabwinMap(new Uint8Array(await response.arrayBuffer()));
+    indexActiveMapNames();
     activeMapSource = `incluído: ${bundled}`;
-    renderMap();
+    renderTable(currentResult);
+    if (currentView === 'map') renderMap();
   } catch (error) {
     mapMessage.textContent = `Não foi possível abrir o mapa incluído: ${error instanceof Error ? error.message : String(error)}`;
     mapLegend.hidden = true;
@@ -1493,6 +1847,7 @@ function isAbortError(error: unknown): boolean {
 function setCatalogBusy(busy: boolean): void {
   catalogSearchButton.disabled = busy;
   for (const button of catalogResults.querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
+  for (const button of catalogAuxiliaryResults.querySelectorAll<HTMLButtonElement>('button')) button.disabled = busy;
   catalogCancelButton.hidden = !busy || activeCatalogController === null;
   if (!busy) catalogCancelButton.disabled = false;
 }
@@ -1508,13 +1863,155 @@ function populateCatalogFileTypes(): void {
 
 function updateCatalogGeography(): void {
   const type = fileTypesForSystem(catalogSystem.value).find((item) => item.code === catalogFileType.value);
-  const annual = systemIsAnnual(catalogSystem.value);
+  const capabilities = catalogCapabilities(catalogSystem.value, catalogFileType.value);
+  const annual = capabilities.periodicity === 'annual';
   catalogMonthLabel.hidden = annual;
   catalogUf.replaceChildren();
   const ufs = ['AC', 'AL', 'AM', 'AP', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 'MG', 'MS', 'MT', 'PA', 'PB', 'PE', 'PI', 'PR', 'RJ', 'RN', 'RO', 'RR', 'RS', 'SC', 'SE', 'SP', 'TO'];
   if (type?.coverage !== 'UF') catalogUf.add(new Option('Brasil', 'BR'));
   if (type?.coverage !== 'BR') for (const uf of ufs) catalogUf.add(new Option(uf, uf));
+  if (catalogUf.options[0]) catalogUf.options[0].selected = true;
   catalogUfLabel.hidden = type?.coverage === 'BR';
+  renderCatalogCapabilities();
+}
+
+function renderCatalogCapabilities(): void {
+  const capabilities = catalogCapabilities(catalogSystem.value, catalogFileType.value);
+  const annual = capabilities.periodicity === 'annual';
+  const geography = capabilities.geographies.length === 2 ? 'Brasil ou UFs'
+    : capabilities.geographies[0] === 'BR' ? 'Brasil' : 'por UF';
+  const auxiliary = capabilities.auxiliaryResolution === 'verified-automatic'
+    ? 'auxiliares automáticos verificados' : 'auxiliares por escolha manual';
+  let requestCount = '';
+  try {
+    const queries = expandDatasusSearchSelection({
+      system: catalogSystem.value,
+      fileType: catalogFileType.value,
+      years: selectedCatalogValues(catalogYear),
+      months: selectedCatalogValues(catalogMonth),
+      ufs: selectedCatalogValues(catalogUf),
+      annual,
+    });
+    requestCount = ` · ${integerFormat.format(queries.length)} combinação(ões) a consultar`;
+  } catch {
+    requestCount = ' · selecione ao menos um período';
+  }
+  catalogCapabilitiesOutput.textContent = `${annual ? 'Anual' : 'Mensal'} · ${geography} · múltiplos períodos${capabilities.multipleUfs ? ' e UFs' : ''} · ${auxiliary}${requestCount}. A existência de cada arquivo é confirmada somente ao consultar o catálogo oficial.`;
+}
+
+function selectedCatalogValues(select: HTMLSelectElement): string[] {
+  return [...select.selectedOptions].map((option) => option.value).filter(Boolean);
+}
+
+function catalogQueryLabel(query: DatasusSearchQuery): string {
+  return [query.year, query.month, query.uf ?? 'Brasil'].filter(Boolean).join(' · ');
+}
+
+function renderAvailabilityManifest(manifest: DatasusAvailabilityManifest): void {
+  const item = document.createElement('div');
+  item.className = 'catalog-availability';
+  const summary = document.createElement('b');
+  summary.textContent = `${integerFormat.format(manifest.availableQueries)} de ${integerFormat.format(manifest.requestedQueries)} combinação(ões) retornaram arquivo`;
+  item.append(summary);
+  if (manifest.missingQueries.length) {
+    const missing = document.createElement('small');
+    const visible = manifest.missingQueries.slice(0, 12).map(catalogQueryLabel);
+    const remainder = manifest.missingQueries.length - visible.length;
+    missing.textContent = `Sem resultado oficial: ${visible.join('; ')}${remainder ? `; +${integerFormat.format(remainder)}` : ''}. Isso indica ausência na resposta atual, não prova que o dado nunca existiu.`;
+    item.append(missing);
+  }
+  catalogResults.append(item);
+}
+
+function renderSourceManifestDownload(
+  manifest: DatasusAvailabilityManifest,
+  system: string,
+  fileType: string,
+  currentFiles: readonly DatasusRemoteFile[],
+  fallbackQuery: DatasusSearchQuery,
+): void {
+  const sourceManifest = createSourceManifest(system, fileType, manifest);
+  const button = document.createElement('button');
+  button.className = 'secondary-button';
+  button.type = 'button';
+  button.textContent = 'Salvar manifesto da consulta';
+  button.title = 'Registra fontes encontradas e ausentes, sem incluir os microdados';
+  button.addEventListener('click', () => downloadBlob(
+    new Blob([serializeSourceManifest(sourceManifest)], { type: 'application/json;charset=utf-8' }),
+    `${system}-${fileType}-${sourceManifest.createdAt.slice(0, 10)}.twmanifest`,
+  ));
+  catalogResults.append(button);
+
+  const compare = document.createElement('button');
+  compare.className = 'secondary-button';
+  compare.type = 'button';
+  compare.textContent = 'Comparar manifesto anterior';
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.twmanifest,application/json';
+  input.hidden = true;
+  compare.addEventListener('click', () => input.click());
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    const output = document.createElement('div');
+    output.className = 'catalog-availability';
+    try {
+      if (file.size > 5 * 1024 * 1024) throw new Error('Manifesto maior que 5 MB recusado');
+      const diff = compareSourceManifests(parseSourceManifest(await file.text()), sourceManifest);
+      const summary = document.createElement('b');
+      summary.textContent = `${integerFormat.format(diff.addedFiles.length)} arquivo(s) novo(s) · ${integerFormat.format(diff.removedFiles.length)} removido(s) · ${integerFormat.format(diff.unchangedFiles.length)} inalterado(s)`;
+      const details = document.createElement('small');
+      details.textContent = `${integerFormat.format(diff.newlyAvailableQueries.length)} combinação(ões) passaram a retornar arquivo; ${integerFormat.format(diff.newlyMissingQueries.length)} deixaram de retornar na consulta atual. A comparação não presume a causa.`;
+      output.append(summary, details);
+      const addedKeys = new Set(diff.addedFiles.map((item) => `${item.address}\n${item.name}`));
+      const addedRemotes = currentFiles.filter((item) => addedKeys.has(`${item.address}\n${item.name}`));
+      if (addedRemotes.length) {
+        const choices = document.createElement('div');
+        choices.className = 'catalog-incremental-choices';
+        const visible = addedRemotes.slice(0, 500);
+        for (const remote of visible) {
+          const label = document.createElement('label');
+          const checkbox = document.createElement('input');
+          checkbox.type = 'checkbox';
+          checkbox.checked = true;
+          checkbox.dataset.address = remote.address;
+          label.append(checkbox, document.createTextNode(remote.name));
+          choices.append(label);
+        }
+        const download = document.createElement('button');
+        download.className = 'secondary-button';
+        download.type = 'button';
+        download.textContent = 'Baixar novos selecionados';
+        download.title = 'Inicia um conjunto novo e só combina fontes com esquema compatível';
+        download.addEventListener('click', async () => {
+          const selectedAddresses = new Set([...choices.querySelectorAll<HTMLInputElement>('input:checked')].map((item) => item.dataset.address));
+          const selected = visible.filter((item) => selectedAddresses.has(item.address));
+          if (!selected.length) {
+            setCatalogStatus('Selecione ao menos um arquivo novo para baixar.', true);
+            return;
+          }
+          download.disabled = true;
+          try {
+            await openOfficialFileBatch(selected, fallbackQuery);
+          } finally {
+            download.disabled = false;
+          }
+        });
+        output.append(choices, download);
+        if (addedRemotes.length > visible.length) {
+          const limit = document.createElement('small');
+          limit.textContent = `A revisão visual foi limitada aos primeiros ${integerFormat.format(visible.length)} arquivos.`;
+          output.append(limit);
+        }
+      }
+    } catch (error) {
+      output.textContent = error instanceof Error ? error.message : String(error);
+    }
+    catalogResults.append(output);
+  });
+  catalogResults.append(compare, input);
 }
 
 function initializeCatalog(): void {
@@ -1522,6 +2019,8 @@ function initializeCatalog(): void {
   for (let year = new Date().getFullYear(); year >= 1979; year--) catalogYear.add(new Option(String(year), String(year)));
   const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
   monthNames.forEach((name, index) => catalogMonth.add(new Option(name, String(index + 1).padStart(2, '0'))));
+  if (catalogYear.options[0]) catalogYear.options[0].selected = true;
+  if (catalogMonth.options[0]) catalogMonth.options[0].selected = true;
   populateCatalogFileTypes();
 }
 
@@ -1558,7 +2057,9 @@ async function downloadCatalogEntries(
       summary = await writeCachedArchive(cacheKey, archive, {
         sha256: archiveSha256,
         role,
-        sources: files.map(({ name, address, source, modality }) => ({ name, address, source, modality })),
+        sources: files.map(({ name, address, source, modality, catalogQuery }) => ({
+          name, address, source, modality, ...(catalogQuery ? { catalogQuery: { ...catalogQuery } } : {}),
+        })),
       });
     } catch {
       // Cache failure is non-fatal and must never block opening public data.
@@ -1569,7 +2070,9 @@ async function downloadCatalogEntries(
       size: archive.byteLength,
       sha256: archiveSha256,
       role,
-      sources: files.map(({ name, address, source, modality }) => ({ name, address, source, modality })),
+      sources: files.map(({ name, address, source, modality, catalogQuery }) => ({
+          name, address, source, modality, ...(catalogQuery ? { catalogQuery: { ...catalogQuery } } : {}),
+        })),
     };
   }
   const archiveSha256 = summary?.sha256 || await sha256(archive);
@@ -1589,8 +2092,10 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
   if (!definitionName) return 0;
   setCatalogStatus('Procurando arquivos DEF e CNV oficiais…');
   const remoteAuxiliaries = await searchOfficialAuxiliaries(query.system, signal);
-  const bundle = chooseCurrentAuxiliaryBundle(remoteAuxiliaries, query.system);
-  if (!bundle) throw new Error('O DATASUS não listou um pacote auxiliar atual para este sistema');
+  const bundle = chooseVerifiedAuxiliaryBundle(remoteAuxiliaries, query.system, query.fileType);
+  if (!bundle) {
+    throw new Error('Nenhum pacote auxiliar com associação verificada foi listado para esta seleção');
+  }
   const downloaded = await downloadCatalogEntries([bundle], signal, 7 * 24 * 60 * 60 * 1000, 'auxiliary');
   const definitionEntry = downloaded.files.find(
     (entry) => displayBaseName(entry.name).toUpperCase() === definitionName.toUpperCase(),
@@ -1606,7 +2111,7 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
     if (extensionOf(resource) === 'CNV') wanted.add(displayBaseName(resource).toUpperCase());
   }
   const selected = downloaded.files.filter((entry) => wanted.has(displayBaseName(entry.name).toUpperCase()));
-  await loadFiles(selected.map(archiveFile));
+  for (const entry of selected) await loadFile(archiveFile(entry));
   for (const entry of selected) {
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(entry.name).toLowerCase());
     if (source) {
@@ -1614,16 +2119,115 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
       source.retrievedAt = downloaded.provenance.retrievedAt;
       source.archiveSha256 = downloaded.provenance.archiveSha256;
       source.cacheKey = downloaded.provenance.cacheKey;
+      source.catalogQuery = query;
     }
   }
   return selected.length;
 }
 
-async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQuery): Promise<void> {
+function clearManualAuxiliaryPicker(): void {
+  catalogAuxiliaryPicker.hidden = true;
+  catalogAuxiliaryResults.replaceChildren();
+}
+
+function markAuxiliarySource(
+  entry: ExtractedArchiveFile,
+  bundle: DatasusRemoteFile,
+  downloaded: DownloadedArchive,
+  catalogQuery?: DatasusSearchQuery,
+): void {
+  const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(entry.name).toLowerCase());
+  if (!source) return;
+  source.origin = bundle.address;
+  source.retrievedAt = downloaded.provenance.retrievedAt;
+  source.archiveSha256 = downloaded.provenance.archiveSha256;
+  source.cacheKey = downloaded.provenance.cacheKey;
+  source.catalogQuery = catalogQuery;
+}
+
+async function inspectManualAuxiliaryBundle(bundle: DatasusRemoteFile, catalogQuery?: DatasusSearchQuery): Promise<void> {
+  const controller = new AbortController();
+  activeCatalogController = controller;
+  setCatalogBusy(true);
+  try {
+    setCatalogStatus(`Baixando ${bundle.name} para inspecionar os auxiliares…`);
+    const downloaded = await downloadCatalogEntries([bundle], controller.signal, 7 * 24 * 60 * 60 * 1000, 'auxiliary');
+    const candidates = downloaded.files.filter((entry) => ['DEF', 'CNV'].includes(extensionOf(entry.name)));
+    catalogAuxiliaryResults.replaceChildren();
+    if (!candidates.length) {
+      setCatalogStatus(`${bundle.name} não contém arquivos DEF ou CNV reconhecidos.`, true);
+      return;
+    }
+    for (const entry of candidates) {
+      const item = document.createElement('div');
+      item.className = 'catalog-result';
+      const details = document.createElement('div');
+      const name = document.createElement('b');
+      const meta = document.createElement('small');
+      name.textContent = displayBaseName(entry.name);
+      meta.textContent = `${extensionOf(entry.name)} · ${bundle.name}`;
+      details.append(name, meta);
+      const open = document.createElement('button');
+      open.className = 'secondary-button';
+      open.type = 'button';
+      open.textContent = 'Abrir auxiliar';
+      open.addEventListener('click', () => {
+        void loadFile(archiveFile(entry))
+          .then(() => {
+            markAuxiliarySource(entry, bundle, downloaded, catalogQuery);
+            renderAudit();
+            setCatalogStatus(`${displayBaseName(entry.name)} aberto; escolha outros arquivos se necessário.`);
+          })
+          .catch((error: unknown) => setCatalogStatus(error instanceof Error ? error.message : String(error), true));
+      });
+      item.append(details, open);
+      catalogAuxiliaryResults.append(item);
+    }
+    setCatalogStatus(`${integerFormat.format(candidates.length)} auxiliar(es) em ${bundle.name}. Escolha manualmente os arquivos a abrir.`);
+  } catch (error) {
+    setCatalogStatus(error instanceof Error ? error.message : String(error), true);
+  } finally {
+    if (activeCatalogController === controller) activeCatalogController = null;
+    setCatalogBusy(false);
+  }
+}
+
+function showManualAuxiliaryBundles(bundles: readonly DatasusRemoteFile[], catalogQuery?: DatasusSearchQuery): void {
+  catalogAuxiliaryPicker.hidden = false;
+  catalogAuxiliaryResults.replaceChildren();
+  if (!bundles.length) {
+    catalogAuxiliaryResults.textContent = 'O catálogo oficial não listou pacotes auxiliares para este sistema.';
+    return;
+  }
+  for (const bundle of bundles) {
+    const item = document.createElement('div');
+    item.className = 'catalog-result';
+    const details = document.createElement('div');
+    const name = document.createElement('b');
+    const meta = document.createElement('small');
+    name.textContent = bundle.name;
+    meta.textContent = `${bundle.source} · ${bundle.modality}`;
+    details.append(name, meta);
+    const inspect = document.createElement('button');
+    inspect.className = 'secondary-button';
+    inspect.type = 'button';
+    inspect.textContent = 'Inspecionar pacote';
+    inspect.addEventListener('click', () => void inspectManualAuxiliaryBundle(bundle, catalogQuery));
+    item.append(details, inspect);
+    catalogAuxiliaryResults.append(item);
+  }
+}
+
+async function openOfficialFile(
+  remote: DatasusRemoteFile,
+  query: DatasusSearchQuery,
+  keepDialogOpen = false,
+): Promise<OpenOfficialFileResult> {
   const controller = new AbortController();
   activeCatalogController = controller;
   setCatalogBusy(true);
   let timedOut = false;
+  let manualAuxiliariesOffered = false;
   const timer = window.setTimeout(() => {
     timedOut = true;
     controller.abort();
@@ -1631,11 +2235,18 @@ async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQ
   try {
     let auxiliaryCount = 0;
     if (catalogAuxiliary.checked) {
-      try {
-        auxiliaryCount = await loadVerifiedAuxiliaries(query, controller.signal);
-      } catch (error) {
-        if (isAbortError(error)) throw error;
-        showToast(`Auxiliares não carregados: ${error instanceof Error ? error.message : String(error)}`, true);
+      if (verifiedAuxiliaryBundleName(query.system, query.fileType)) {
+        try {
+          auxiliaryCount = await loadVerifiedAuxiliaries(query, controller.signal);
+        } catch (error) {
+          if (isAbortError(error)) throw error;
+          showToast(`Auxiliares verificados não carregados: ${error instanceof Error ? error.message : String(error)}`, true);
+        }
+      } else {
+        const bundles = await searchOfficialAuxiliaries(query.system, controller.signal);
+        showManualAuxiliaryBundles(bundles, query);
+        manualAuxiliariesOffered = true;
+        showToast('Não há associação auxiliar comprovada; escolha um pacote oficial manualmente.');
       }
     }
     setCatalogStatus(`Baixando ${remote.name} do DATASUS…`);
@@ -1643,30 +2254,57 @@ async function openOfficialFile(remote: DatasusRemoteFile, query: DatasusSearchQ
     const wanted = downloaded.files.find((entry) => displayBaseName(entry.name).toLowerCase() === remote.name.toLowerCase())
       ?? downloaded.files.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
     if (!wanted) throw new Error('O pacote oficial não contém um DBC ou DBF reconhecido');
-    await loadFiles([archiveFile(wanted)]);
+    await loadFile(archiveFile(wanted));
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
     if (source) {
       source.origin = remote.address;
       source.retrievedAt = downloaded.provenance.retrievedAt;
       source.archiveSha256 = downloaded.provenance.archiveSha256;
       source.cacheKey = downloaded.provenance.cacheKey;
+      source.catalogQuery = remote.catalogQuery ?? query;
     }
     renderAudit();
-    setCatalogStatus(`${remote.name} aberto${auxiliaryCount ? ` com ${integerFormat.format(auxiliaryCount)} auxiliares` : ''}.`);
-    catalogDialog.close();
+    setCatalogStatus(manualAuxiliariesOffered
+      ? `${remote.name} aberto. Escolha auxiliares manualmente, se precisar.`
+      : `${remote.name} aberto${auxiliaryCount ? ` com ${integerFormat.format(auxiliaryCount)} auxiliares` : ''}.`);
+    if (!manualAuxiliariesOffered && !keepDialogOpen) catalogDialog.close();
     showToast(downloaded.provenance.cacheHit
       ? `${remote.name} reaberto do cache local`
       : `${remote.name} carregado diretamente do DATASUS`);
     void renderRecentArchives();
+    return { ok: true };
   } catch (error) {
     const message = isAbortError(error)
       ? timedOut ? 'O DATASUS demorou mais de 2 minutos para responder. Tente novamente.' : 'Operação cancelada.'
       : error instanceof Error ? error.message : String(error);
     setCatalogStatus(message, !isAbortError(error) || timedOut);
+    return { ok: false, error: message };
   } finally {
     window.clearTimeout(timer);
     if (activeCatalogController === controller) activeCatalogController = null;
     setCatalogBusy(false);
+  }
+}
+
+async function openOfficialFileBatch(files: readonly DatasusRemoteFile[], fallbackQuery: DatasusSearchQuery): Promise<void> {
+  const previousCombine = combineCompatibleFiles.checked;
+  let opened = 0;
+  let failure = '';
+  try {
+    for (const [index, remote] of files.entries()) {
+      combineCompatibleFiles.checked = index > 0;
+      const outcome = await openOfficialFile(remote, remote.catalogQuery ?? fallbackQuery, true);
+      if (!outcome.ok) {
+        failure = outcome.error;
+        break;
+      }
+      opened += 1;
+    }
+    if (opened === files.length) setCatalogStatus(`${integerFormat.format(opened)} arquivo(s) combinados com esquema compatível.`);
+    else if (opened > 0) setCatalogStatus(`Lote interrompido após ${integerFormat.format(opened)} arquivo(s); o conjunto parcial foi preservado. Motivo: ${failure}`, true);
+    else if (failure) setCatalogStatus(`Nenhum arquivo foi combinado. Motivo: ${failure}`, true);
+  } finally {
+    combineCompatibleFiles.checked = previousCombine;
   }
 }
 
@@ -1681,12 +2319,15 @@ async function openRecentArchive(summary: CachedArchiveSummary): Promise<void> {
     const wanted = extracted.find((entry) => expectedNames.has(displayBaseName(entry.name).toLowerCase()))
       ?? extracted.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
     if (!wanted) throw new Error('O pacote salvo não contém um DBC ou DBF reconhecido');
-    await loadFiles([archiveFile(wanted)]);
+    // Propagate decode/schema failures. The UI-oriented multi-file wrapper
+    // intentionally catches errors and would otherwise report a false success.
+    await loadFile(archiveFile(wanted));
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
     if (source) {
-      const sourceUrl = summary.sources.find((item) => item.name.toLowerCase() === source.name.toLowerCase())?.address
-        ?? summary.sources[0]?.address;
-      if (sourceUrl) source.origin = sourceUrl;
+      const cachedSource = summary.sources.find((item) => item.name.toLowerCase() === source.name.toLowerCase())
+        ?? summary.sources[0];
+      if (cachedSource?.address) source.origin = cachedSource.address;
+      if (cachedSource?.catalogQuery) source.catalogQuery = { ...cachedSource.catalogQuery };
       source.retrievedAt = new Date(summary.savedAt).toISOString();
       source.archiveSha256 = summary.sha256 || await sha256(cached.bytes);
       source.cacheKey = summary.key;
@@ -1759,14 +2400,17 @@ async function renderRecentArchives(): Promise<void> {
 async function searchCatalog(): Promise<void> {
   const type = fileTypesForSystem(catalogSystem.value).find((item) => item.code === catalogFileType.value);
   if (!type) return;
-  const query: DatasusSearchQuery = {
+  const selection = {
     system: catalogSystem.value,
     fileType: catalogFileType.value,
-    year: catalogYear.value,
-    ...(!systemIsAnnual(catalogSystem.value) ? { month: catalogMonth.value } : {}),
-    ...(catalogUf.value ? { uf: catalogUf.value } : {}),
+    years: selectedCatalogValues(catalogYear),
+    ...(!systemIsAnnual(catalogSystem.value)
+      ? { months: selectedCatalogValues(catalogMonth) }
+      : { annual: true }),
+    ...(selectedCatalogValues(catalogUf).length ? { ufs: selectedCatalogValues(catalogUf) } : {}),
   };
   catalogResults.replaceChildren();
+  clearManualAuxiliaryPicker();
   setCatalogStatus('Consultando o catálogo oficial…');
   const controller = new AbortController();
   activeCatalogController = controller;
@@ -1777,12 +2421,34 @@ async function searchCatalog(): Promise<void> {
     controller.abort();
   }, 60_000);
   try {
-    const files = await searchOfficialFiles(query, controller.signal);
+    const queries = expandDatasusSearchSelection(selection);
+    const batch = await searchOfficialCatalogBatch(queries, controller.signal);
+    const files = batch.files;
+    renderAvailabilityManifest(batch.availability);
+    const auxiliaryQuery = queries[0];
+    if (!auxiliaryQuery) throw new Error('Selecione ao menos um período e uma cobertura para consultar o catálogo.');
+    renderSourceManifestDownload(batch.availability, selection.system, selection.fileType, files, auxiliaryQuery);
     if (!files.length) {
       setCatalogStatus('Nenhum arquivo encontrado para essa combinação. O período pode ainda não ter sido publicado.');
       return;
     }
-    setCatalogStatus(`${integerFormat.format(files.length)} arquivo(s) encontrado(s).`);
+    setCatalogStatus(`${integerFormat.format(files.length)} arquivo(s) encontrado(s) em ${integerFormat.format(batch.availability.availableQueries)} de ${integerFormat.format(batch.availability.requestedQueries)} combinação(ões).`);
+    if (files.length > 1) {
+      const openAll = document.createElement('button');
+      openAll.className = 'secondary-button';
+      openAll.type = 'button';
+      openAll.textContent = 'Baixar e combinar todos';
+      openAll.title = 'O primeiro arquivo inicia um conjunto novo; os demais só entram se o esquema for compatível';
+      openAll.addEventListener('click', async () => {
+        openAll.disabled = true;
+        try {
+          await openOfficialFileBatch(files, auxiliaryQuery);
+        } finally {
+          openAll.disabled = false;
+        }
+      });
+      catalogResults.append(openAll);
+    }
     for (const remote of files) {
       const item = document.createElement('div');
       item.className = 'catalog-result';
@@ -1796,7 +2462,7 @@ async function searchCatalog(): Promise<void> {
       button.className = 'secondary-button';
       button.type = 'button';
       button.textContent = 'Baixar e abrir';
-      button.addEventListener('click', () => void openOfficialFile(remote, query));
+      button.addEventListener('click', () => void openOfficialFile(remote, remote.catalogQuery ?? auxiliaryQuery));
       item.append(details, button);
       catalogResults.append(item);
     }
@@ -1843,7 +2509,7 @@ function conversionNameInRegistry(id: string): string | null {
 }
 
 function saveRecipe(): void {
-  if (!currentPlan || !datasetFingerprint) return;
+  if (!currentPlan || !activeDatasetSources.length) return;
   const conversionIds = new Set<string>();
   if (currentPlan.spec.rows.conversionId) conversionIds.add(currentPlan.spec.rows.conversionId);
   if (currentPlan.spec.columns?.conversionId) conversionIds.add(currentPlan.spec.columns.conversionId);
@@ -1859,14 +2525,14 @@ function saveRecipe(): void {
     name: resultTitle.textContent ?? `Análise ${rowField.value}`,
     spec: currentPlan.spec,
     conversions,
-    sourceHints: [{
-      name: datasetFingerprint.name,
-      sha256: datasetFingerprint.sha256,
-      size: datasetFingerprint.size,
-      ...(datasetFingerprint.origin ? { sourceUrl: datasetFingerprint.origin } : {}),
-      ...(datasetFingerprint.retrievedAt ? { retrievedAt: datasetFingerprint.retrievedAt } : {}),
-      ...(datasetFingerprint.archiveSha256 ? { archiveSha256: datasetFingerprint.archiveSha256 } : {}),
-    }],
+    sourceHints: activeDatasetSources.map((source) => ({
+      name: source.name,
+      sha256: source.sha256,
+      size: source.size,
+      ...(source.origin ? { sourceUrl: source.origin } : {}),
+      ...(source.retrievedAt ? { retrievedAt: source.retrievedAt } : {}),
+      ...(source.archiveSha256 ? { archiveSha256: source.archiveSha256 } : {}),
+    })),
     ...(tableOperations.length ? { resultOperations: tableOperations } : {}),
     view: {
       chartType: chartType.value as ChartType,
@@ -1885,6 +2551,9 @@ function saveRecipe(): void {
       tableSortDirection: tableSortDirection.value as 'original' | 'ascending' | 'descending',
       tableDecimalPlaces: Number(tableDecimals.value),
       tableKeyVisible: tableKeyVisible.checked,
+      tableTitle: tableTitle.value.trim(),
+      tableSubtitle: tableSubtitle.value.trim(),
+      tableFooter: tableFooter.value.trim(),
     },
   };
   downloadBlob(
@@ -1898,7 +2567,7 @@ function savePortableTable(): void {
   const table: PortableTableV1 = {
     schema: 'tabwin-web.table',
     version: 1,
-    title: resultTitle.textContent?.trim() || `Tabela ${currentPlan.spec.rows.field}`,
+    title: tableTitle.value.trim() || resultTitle.textContent?.trim() || `Tabela ${currentPlan.spec.rows.field}`,
     rowLabel: activeRowLabel(),
     createdAt: new Date().toISOString(),
     ...(datasetFingerprint ? { source: {
@@ -1914,6 +2583,8 @@ function savePortableTable(): void {
       sortDirection: tableSortDirection.value as 'original' | 'ascending' | 'descending',
       decimalPlaces: Number(tableDecimals.value),
       keyVisible: tableKeyVisible.checked,
+      subtitle: tableSubtitle.value.trim(),
+      footer: tableFooter.value.trim(),
     },
   };
   downloadBlob(
@@ -1954,16 +2625,21 @@ async function openPortableTable(file: File): Promise<void> {
   configuredFilters = [];
   activeDef = null;
   activeMap = null;
+  mapNameByGeocode.clear();
   activeMapSource = '';
   cnvByName.clear();
   loadedSources.splice(0, loadedSources.length);
+  activeDatasetSources.splice(0, activeDatasetSources.length);
   datasetName = table.source?.name ?? file.name;
   datasetFingerprint = table.source ? {
     ...table.source,
     extension: extensionOf(table.source.name) || 'SOURCE',
     origin: `Tabela portátil ${file.name}`,
   } : null;
-  if (datasetFingerprint) rememberSource(datasetFingerprint);
+  if (datasetFingerprint) {
+    rememberSource(datasetFingerprint);
+    activeDatasetSources.push(datasetFingerprint);
+  }
   else renderFileList();
   currentPlan = table.plan;
   baseResult = structuredClone(table.baseResult);
@@ -1975,6 +2651,9 @@ async function openPortableTable(file: File): Promise<void> {
   columnField.replaceChildren(new Option('Resultado salvo', ''));
   resultKicker.textContent = `${file.name} · tabela portátil`;
   resultTitle.textContent = table.title;
+  tableTitle.value = table.title;
+  tableSubtitle.value = table.presentation?.subtitle ?? '';
+  tableFooter.value = table.presentation?.footer ?? '';
   if (table.presentation) {
     tableSortDirection.value = table.presentation.sortDirection;
     tableDecimals.value = String(table.presentation.decimalPlaces);
@@ -1995,11 +2674,20 @@ async function openPortableTable(file: File): Promise<void> {
   exportXmlButton.disabled = false;
   chartPngButton.disabled = false;
   chartSvgButton.disabled = false;
+  if (table.plan.spec.rows.field.toUpperCase().includes('MUNIC')) await ensureMap();
   showToast(`${file.name}: tabela aberta sem precisar do DBC original`);
 }
 
+async function includePortableTable(file: File): Promise<void> {
+  if (!currentResult) throw new Error('Gere ou abra uma tabela antes de incluir outra');
+  const table = parsePortableTable(await file.text());
+  const included = replayTableOperations(table.baseResult, table.operations);
+  const operation = createIncludeTableOperation(currentResult, included, table.title || file.name);
+  commitTableOperation(operation);
+}
+
 async function openRecipe(file: File): Promise<void> {
-  if (!dbfHeader || !datasetFingerprint) throw new Error('Abra um DBC ou DBF antes de aplicar a análise');
+  if (!dbfHeader || !activeDatasetSources.length) throw new Error('Abra um DBC ou DBF antes de aplicar a análise');
   const recipe = parseRecipe(await file.text());
   const fields = new Set(dbfHeader.fields.map((field) => field.name));
   const requiredFields = [
@@ -2016,7 +2704,9 @@ async function openRecipe(file: File): Promise<void> {
   measureKind.value = recipe.spec.measure.kind;
   if (recipe.spec.measure.field) measureField.value = recipe.spec.measure.field;
   suppressZero.checked = recipe.spec.suppressZeroRows ?? false;
+  suppressZeroColumns.checked = recipe.spec.suppressZeroColumns ?? false;
   discriminateUnclassified.checked = recipe.spec.rows.unclassifiedPolicy === 'discriminate';
+  discriminateColumnUnclassified.checked = recipe.spec.columns?.unclassifiedPolicy === 'discriminate';
   if (recipe.view?.chartType) chartType.value = recipe.view.chartType;
   if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
@@ -2034,6 +2724,13 @@ async function openRecipe(file: File): Promise<void> {
     rowConversion.value = loaded;
     startPosition.value = String(recipe.spec.rows.startPosition ?? 1);
   }
+  columnConversion.value = '';
+  if (recipe.spec.columns?.conversionId) {
+    const loaded = conversionNameInRegistry(recipe.spec.columns.conversionId);
+    if (!loaded) throw new Error(`Carregue a conversão ${displayBaseName(recipe.spec.columns.conversionId)} antes de abrir esta análise`);
+    columnConversion.value = loaded;
+    columnStartPosition.value = String(recipe.spec.columns.startPosition ?? 1);
+  }
   configuredFilters = recipe.spec.filters.map((filter) => {
     if (filter.kind === 'numeric-range') return { ...filter };
     if (!filter.conversionId) return cloneFilter(filter);
@@ -2043,12 +2740,20 @@ async function openRecipe(file: File): Promise<void> {
   });
   renderConfiguredFilters();
   updateMeasureControls();
+  updateColumnControls();
   await runAnalysis();
+  if (recipe.view?.tableTitle !== undefined) {
+    tableTitle.value = recipe.view.tableTitle;
+    resultTitle.textContent = recipe.view.tableTitle || activeRowLabel();
+  }
+  if (recipe.view?.tableSubtitle !== undefined) tableSubtitle.value = recipe.view.tableSubtitle;
+  if (recipe.view?.tableFooter !== undefined) tableFooter.value = recipe.view.tableFooter;
   if (recipe.resultOperations?.length && baseResult) {
     tableOperations = recipe.resultOperations.map((operation) => structuredClone(operation));
     currentResult = replayTableOperations(baseResult, tableOperations);
     renderResult();
   }
+  else if (currentResult) renderResult();
   if (recipe.view?.tableSortColumnKey
     && [...tableSortColumn.options].some((option) => option.value === recipe.view?.tableSortColumnKey)) {
     tableSortColumn.value = recipe.view.tableSortColumnKey;
@@ -2061,7 +2766,14 @@ async function openRecipe(file: File): Promise<void> {
     if (yIndex >= 0) statisticsY.value = String(yIndex);
     renderStatistics();
   }
-  const sameSource = recipe.sourceHints.some((hint) => hint.sha256 === datasetFingerprint?.sha256);
+  const expectedSources = recipe.sourceHints
+    .map((hint) => `${hint.sha256}:${hint.size}`)
+    .sort();
+  const actualSources = activeDatasetSources
+    .map((source) => `${source.sha256}:${source.size}`)
+    .sort();
+  const sameSource = expectedSources.length === actualSources.length
+    && expectedSources.every((fingerprint, index) => fingerprint === actualSources[index]);
   showToast(sameSource
     ? `${file.name}: análise reproduzida`
     : `${file.name}: análise aplicada a uma fonte diferente da original`);
@@ -2187,6 +2899,7 @@ sourceDbfButton.addEventListener('click', () => void downloadSourceDbf().catch((
   showToast(error instanceof Error ? error.message : String(error), true)));
 selectedDbfButton.addEventListener('click', () => void downloadSelectedDbf().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
+decodeCancelButton.addEventListener('click', () => activeDecode?.cancel());
 for (const eventName of ['dragenter', 'dragover']) {
   dropZone.addEventListener(eventName, (event) => {
     event.preventDefault();
@@ -2211,8 +2924,16 @@ rowField.addEventListener('change', () => {
   applyDefDefaults();
   void runAnalysis();
 });
-columnField.addEventListener('change', () => void runAnalysis());
+fieldSearch.addEventListener('input', searchDimensionFields);
+columnField.addEventListener('change', () => {
+  applyDefDefaults();
+  updateColumnControls();
+  void runAnalysis();
+});
 rowConversion.addEventListener('change', () => void runAnalysis());
+columnConversion.addEventListener('change', () => void runAnalysis());
+startPosition.addEventListener('change', () => void runAnalysis());
+columnStartPosition.addEventListener('change', () => void runAnalysis());
 measureKind.addEventListener('change', () => {
   updateMeasureControls();
   if (measureKind.value === 'count' || measureField.value) void runAnalysis();
@@ -2220,14 +2941,29 @@ measureKind.addEventListener('change', () => {
 measureField.addEventListener('change', () => void runAnalysis());
 filterField.addEventListener('change', populateFilterValues);
 filterKind.addEventListener('change', populateFilterValues);
+filterValueSearch.addEventListener('input', searchFilterValues);
 filterMode.addEventListener('change', updateFilterCount);
+qualityField.addEventListener('change', () => {
+  qualityMinimum.value = '';
+  qualityMaximum.value = '';
+  updateQualityProfile();
+});
+for (const control of [qualityMinimum, qualityMaximum]) control.addEventListener('input', updateQualityApplyState);
+qualitySuggestButton.addEventListener('click', suggestQualityRange);
+qualityApplyButton.addEventListener('click', () => {
+  try { applyQualityRange(); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
 for (const control of [filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum]) {
   control.addEventListener('input', updateFilterCount);
   control.addEventListener('change', updateFilterCount);
 }
 addFilterButton.addEventListener('click', addConfiguredFilter);
 selectAllFilterButton.addEventListener('click', () => {
-  for (const input of filterValues.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) input.checked = true;
+  for (const option of filterValues.querySelectorAll<HTMLElement>('.filter-option:not([hidden])')) {
+    const input = option.querySelector<HTMLInputElement>('input[type="checkbox"]');
+    if (input) input.checked = true;
+  }
   updateFilterCount();
 });
 clearFilterButton.addEventListener('click', () => {
@@ -2237,6 +2973,7 @@ clearFilterButton.addEventListener('click', () => {
 });
 openRecipeButton.addEventListener('click', () => recipeInput.click());
 openTableButton.addEventListener('click', () => tableInput.click());
+includeTableButton.addEventListener('click', () => includeTableInput.click());
 saveRecipeButton.addEventListener('click', () => {
   try {
     saveRecipe();
@@ -2260,8 +2997,16 @@ tableInput.addEventListener('change', () => {
   void openPortableTable(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
   tableInput.value = '';
 });
+includeTableInput.addEventListener('change', () => {
+  const file = includeTableInput.files?.[0];
+  if (!file) return;
+  void includePortableTable(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
+  includeTableInput.value = '';
+});
 suppressZero.addEventListener('change', () => void runAnalysis());
+suppressZeroColumns.addEventListener('change', () => void runAnalysis());
 discriminateUnclassified.addEventListener('change', () => void runAnalysis());
+discriminateColumnUnclassified.addEventListener('change', () => void runAnalysis());
 for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')) {
   button.addEventListener('click', () => showView(button.dataset.view as ViewName));
 }
@@ -2282,6 +3027,16 @@ for (const control of [tableSortColumn, tableSortDirection, tableDecimals, table
   control.addEventListener('change', () => {
     if (currentResult) renderTable(currentResult);
     renderAudit();
+  });
+}
+for (const control of [tableTitle, tableSubtitle, tableFooter]) {
+  control.addEventListener('input', () => {
+    if (control === tableTitle) resultTitle.textContent = tableTitle.value.trim() || activeRowLabel();
+    if (currentResult) {
+      renderTable(currentResult);
+      renderChart(currentResult);
+      renderAudit();
+    }
   });
 }
 tableLocate.addEventListener('input', () => {
@@ -2308,6 +3063,10 @@ tableColumnRight.addEventListener('click', () => {
 });
 tableColumnDelete.addEventListener('click', () => {
   try { commitTableOperation({ kind: 'delete-column', columnKey: tableEditColumn.value }); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+tableTranspose.addEventListener('click', () => {
+  try { commitTableOperation({ kind: 'transpose' }); }
   catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
 });
 tableRowSuppress.addEventListener('click', () => {
@@ -2397,6 +3156,7 @@ catalogDialog.addEventListener('click', (event) => {
 });
 catalogSystem.addEventListener('change', populateCatalogFileTypes);
 catalogFileType.addEventListener('change', updateCatalogGeography);
+for (const control of [catalogYear, catalogMonth, catalogUf]) control.addEventListener('change', renderCatalogCapabilities);
 catalogForm.addEventListener('submit', (event) => {
   event.preventDefault();
   void searchCatalog();

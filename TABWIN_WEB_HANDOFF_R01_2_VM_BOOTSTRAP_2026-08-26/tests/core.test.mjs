@@ -33,6 +33,41 @@ test('zero-row suppression occurs after materializing CNV categories', () => {
   assert.deepEqual(result.cells, [[1]]);
 });
 
+test('zero-column suppression removes only empty materialized column categories', () => {
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15',
+    rows: { field: 'UF' },
+    columns: { field: 'MES', conversionId: 'mes' },
+    measure: { kind: 'count' },
+    filters: [],
+    suppressZeroColumns: true,
+  });
+  const result = executeInMemory([
+    { UF: 'AC', MES: '01' },
+    { UF: 'DF', MES: '01' },
+  ], plan, { mes: monthCnv });
+  assert.deepEqual(result.columns.map((column) => column.label), ['Janeiro']);
+  assert.deepEqual(result.cells, [[1], [1]]);
+});
+
+test('zero-column suppression preserves the synthetic frequency column without a column dimension', () => {
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'MES', conversionId: 'mes' },
+    measure: { kind: 'count' }, filters: [], suppressZeroRows: true, suppressZeroColumns: true,
+  });
+  const result = executeInMemory([], plan, { mes: monthCnv });
+  assert.deepEqual(result.rows, []);
+  assert.deepEqual(result.columns.map((column) => column.label), ['Freqüência']);
+  assert.deepEqual(result.cells, []);
+});
+
+test('query plans reject non-boolean zero-suppression policies', () => {
+  assert.throws(() => compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' },
+    filters: [], suppressZeroColumns: 'yes',
+  }), /suppressZeroColumns must be boolean/);
+});
+
 test('row subtotal semantics add detail rows into subtotal rows', () => {
   const provider = parseCnv(['3 2', row(1, 'Publico', '99'), row(2, 'Federal', '10', '1'), row(3, 'Estadual', '20', '1')].join('\n'));
   const plan = compileQueryPlan({ compatibilityProfile: 'tabwin-4.15', rows: { field: 'NAT', conversionId: 'nat' }, measure: { kind: 'count' }, filters: [] });
@@ -46,6 +81,26 @@ test('supports row x column sum tabulation', () => {
   assert.deepEqual(result.rows.map((r) => r.key), ['AC', 'DF']);
   assert.deepEqual(result.columns.map((c) => c.key), ['2024', '2025']);
   assert.deepEqual(result.cells, [[10, 5], [3, 0]]);
+});
+
+test('high-cardinality columns remain deterministic without truncation', () => {
+  const records = Array.from({ length: 6_000 }, (_, index) => ({
+    UF: 'BR',
+    MUNICIPIO: String(index + 1).padStart(6, '0'),
+  }));
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15',
+    rows: { field: 'UF' },
+    columns: { field: 'MUNICIPIO' },
+    measure: { kind: 'count' },
+    filters: [],
+  });
+  const result = executeInMemory(records, plan);
+  assert.equal(result.columns.length, 6_000);
+  assert.equal(result.columns[0].key, '000001');
+  assert.equal(result.columns.at(-1).key, '006000');
+  assert.equal(result.cells[0].length, 6_000);
+  assert.ok(result.cells[0].every((value) => value === 1));
 });
 
 import { parseRecipe, serializeRecipe } from '../dist/packages/core/src/index.js';
@@ -71,10 +126,11 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
     resultOperations: [{
       kind: 'factor', sourceColumnKey: '__single__', factor: 100,
       output: { key: '__derived_1', label: 'Índice', totalPolicy: 'mean' },
-    }],
+    }, { kind: 'transpose' }],
     view: {
       tableSortColumnKey: '__derived_1', tableSortDirection: 'descending',
       tableDecimalPlaces: 2, tableKeyVisible: false,
+      tableTitle: 'Título', tableSubtitle: 'Subtítulo', tableFooter: 'Fonte',
     },
   };
   const a = serializeRecipe(recipe);

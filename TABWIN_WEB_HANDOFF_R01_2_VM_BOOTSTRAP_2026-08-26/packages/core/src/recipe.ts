@@ -39,6 +39,9 @@ export interface AnalysisRecipeV1 {
     tableSortDirection?: 'original' | 'ascending' | 'descending';
     tableDecimalPlaces?: number;
     tableKeyVisible?: boolean;
+    tableTitle?: string;
+    tableSubtitle?: string;
+    tableFooter?: string;
   };
 }
 
@@ -155,6 +158,15 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   if (parsed.view?.tableKeyVisible !== undefined && typeof parsed.view.tableKeyVisible !== 'boolean') {
     throw new Error('invalid table key visibility in TabWin Web recipe');
   }
+  for (const [name, value, maximum] of [
+    ['title', parsed.view?.tableTitle, 160],
+    ['subtitle', parsed.view?.tableSubtitle, 240],
+    ['footer', parsed.view?.tableFooter, 240],
+  ] as const) {
+    if (value !== undefined && (typeof value !== 'string' || value.length > maximum)) {
+      throw new Error(`invalid table ${name} in TabWin Web recipe`);
+    }
+  }
   return parsed as AnalysisRecipeV1;
 }
 
@@ -163,9 +175,38 @@ export function validateTableOperation(value: unknown): asserts value is TableOp
   const operation = value as Partial<TableOperation> & Record<string, unknown> & { output?: Record<string, unknown> };
   const stringField = (key: string): boolean => typeof operation[key] === 'string' && String(operation[key]).length > 0;
   const allowedKinds = new Set(['binary', 'factor', 'cumulative', 'absolute', 'integer', 'sequence', 'constant', 'expression',
-    'rename-column', 'move-column', 'delete-column', 'suppress-rows', 'aggregate-rows']);
+    'rename-column', 'move-column', 'delete-column', 'transpose', 'include-table', 'suppress-rows', 'aggregate-rows']);
   if (!operation.kind || !allowedKinds.has(operation.kind)) {
     throw new Error('invalid table operation in TabWin Web recipe');
+  }
+  if (operation.kind === 'transpose') return;
+  if (operation.kind === 'include-table') {
+    const rows = operation.rows as Array<Record<string, unknown>> | undefined;
+    const columns = operation.columns as Array<Record<string, unknown>> | undefined;
+    const cells = operation.cells as unknown[][] | undefined;
+    if (!stringField('sourceLabel') || String(operation.sourceLabel).length > 160
+      || typeof operation.requireMatchingLabels !== 'boolean'
+      || !Array.isArray(rows) || !Array.isArray(columns) || !Array.isArray(cells)
+      || rows.length !== cells.length || columns.length === 0
+      || rows.length > 100_000 || columns.length > 10_000 || rows.length * columns.length > 5_000_000
+      || rows.some((row) => !row || typeof row.key !== 'string' || !row.key || typeof row.label !== 'string')
+      || columns.some((column) => !column || typeof column.key !== 'string' || !column.key
+        || typeof column.label !== 'string' || !column.label
+        || !new Set(['raw', 'conversion', 'derived']).has(String(column.source))
+        || (column.subtotalTargetKey !== undefined && typeof column.subtotalTargetKey !== 'string')
+        || (column.excludeFromTotal !== undefined && typeof column.excludeFromTotal !== 'boolean')
+        || (column.totalPolicy !== undefined && !new Set([
+          'none', 'sum', 'product', 'mean', 'initial', 'final', 'min', 'max', 'precalculated',
+        ]).has(String(column.totalPolicy))))
+      || cells.some((row) => !Array.isArray(row) || row.length !== columns.length
+        || row.some((cell) => typeof cell !== 'number' || !Number.isFinite(cell)))) {
+      throw new Error('invalid include-table operation in TabWin Web recipe');
+    }
+    if (new Set(rows.map((row) => row.key)).size !== rows.length
+      || new Set(columns.map((column) => column.key)).size !== columns.length) {
+      throw new Error('duplicate key in include-table operation in TabWin Web recipe');
+    }
+    return;
   }
   if (operation.kind === 'rename-column') {
     if (!stringField('columnKey') || !stringField('label')) throw new Error('invalid rename-column operation in TabWin Web recipe');

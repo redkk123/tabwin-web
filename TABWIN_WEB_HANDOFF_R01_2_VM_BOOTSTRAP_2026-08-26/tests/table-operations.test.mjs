@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   applyTableOperation,
   calculateColumnTotal,
+  createIncludeTableOperation,
   replayTableOperations,
 } from '../dist/packages/analysis/src/table-operations.js';
 
@@ -93,6 +94,47 @@ test('column rename, movement and deletion are immutable replayable operations',
   assert.deepEqual(deleted.columns.map((column) => column.key), ['x']);
   assert.deepEqual(deleted.cells.map((row) => row[0]), [10, -5, 3]);
   assert.equal(base.columns[0].label, 'X');
+});
+
+test('transpose swaps axes and matrix without mutating or losing metadata', () => {
+  const transposed = applyTableOperation(base, { kind: 'transpose' }).result;
+  assert.deepEqual(transposed.rows, base.columns);
+  assert.deepEqual(transposed.columns, base.rows);
+  assert.deepEqual(transposed.cells, [[10, -5, 3], [2, 0, 4]]);
+  assert.deepEqual(base.cells, [[10, 2], [-5, 0], [3, 4]]);
+  const restored = applyTableOperation(transposed, { kind: 'transpose' }).result;
+  assert.deepEqual(restored, base);
+});
+
+test('include table appends columns by an exact row-key join and reorders the included rows', () => {
+  const included = {
+    rows: [{ key: 'c', label: 'C', source: 'raw' }, { key: 'a', label: 'A', source: 'raw' }, { key: 'b', label: 'B', source: 'raw' }],
+    columns: [{ key: 'population', label: 'População', source: 'raw', totalPolicy: 'sum' }],
+    cells: [[300], [100], [200]], warnings: [], recordsSeen: 3, recordsAccepted: 3,
+  };
+  const operation = createIncludeTableOperation(base, included, 'Censo 2022');
+  const { result, audit } = applyTableOperation(base, operation);
+  assert.deepEqual(result.columns.map((column) => column.key), ['x', 'y', 'censo-2022:population']);
+  assert.deepEqual(result.cells, [[10, 2, 100], [-5, 0, 200], [3, 4, 300]]);
+  assert.match(result.warnings.at(-1), /modern explicit policy/);
+  assert.equal(audit.compatibility, 'modern-explicit-policy');
+  assert.deepEqual(base.cells, [[10, 2], [-5, 0], [3, 4]]);
+});
+
+test('include table rejects missing keys, label disagreements and non-finite cells', () => {
+  const included = {
+    rows: [{ key: 'a', label: 'A', source: 'raw' }],
+    columns: [{ key: 'z', label: 'Z', source: 'raw' }],
+    cells: [[1]], warnings: [], recordsSeen: 1, recordsAccepted: 1,
+  };
+  assert.throws(() => applyTableOperation(base, createIncludeTableOperation(base, included, 'Outra')), /exactly match/);
+  const exact = { ...included, rows: base.rows.map((row) => ({ ...row })), cells: [[1], [2], [3]] };
+  const labelMismatch = createIncludeTableOperation(base, exact, 'Outra');
+  labelMismatch.rows[0].label = 'Diferente';
+  assert.throws(() => applyTableOperation(base, labelMismatch), /label differs/);
+  const nonFinite = createIncludeTableOperation(base, exact, 'Outra');
+  nonFinite.cells[0][0] = Number.NaN;
+  assert.throws(() => applyTableOperation(base, nonFinite), /non-finite/);
 });
 
 test('row suppression removes matched rows without changing source totals', () => {

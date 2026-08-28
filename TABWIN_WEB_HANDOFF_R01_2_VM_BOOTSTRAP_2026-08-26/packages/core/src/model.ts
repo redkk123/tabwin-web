@@ -19,6 +19,8 @@ export interface DimensionSpec {
 
 interface FilterSpecBase {
   field: string;
+  /** Modern provenance marker; execution remains identical to an ordinary explicit filter. */
+  origin?: 'data-quality';
   /** Include matches by default; exclude inverts the predicate. */
   mode?: 'include' | 'exclude';
   conversionId?: string;
@@ -69,6 +71,7 @@ export interface TabulationSpec {
   measure: MeasureSpec;
   filters: FilterSpec[];
   suppressZeroRows?: boolean;
+  suppressZeroColumns?: boolean;
 }
 
 export interface QueryPlan {
@@ -153,6 +156,16 @@ export type TableOperation =
   | { kind: 'rename-column'; columnKey: string; label: string }
   | { kind: 'move-column'; columnKey: string; direction: 'left' | 'right' }
   | { kind: 'delete-column'; columnKey: string }
+  | { kind: 'transpose' }
+  | {
+      /** Self-contained, strict row-key join. This is a modern explicit policy until golden-tested. */
+      kind: 'include-table';
+      sourceLabel: string;
+      requireMatchingLabels: boolean;
+      rows: Array<Pick<ResultAxisItem, 'key' | 'label'>>;
+      columns: ResultAxisItem[];
+      cells: number[][];
+    }
   | { kind: 'suppress-rows'; rowKeys: string[] }
   | {
       kind: 'aggregate-rows';

@@ -3,11 +3,16 @@ import {
   DATASUS_DOWNLOAD_ENDPOINT,
   DATASUS_TRANSFER_ENDPOINT,
   buildAuxiliarySearchBody,
+  buildAvailabilityManifest,
   buildDownloadBody,
   buildSearchBody,
+  deduplicateRemoteFiles,
   parsePreparedDownloadResponse,
   parseSearchResponse,
+  verifiedAuxiliaryBundleName,
   type DatasusRemoteFile,
+  type DatasusAvailabilityManifest,
+  type DatasusCatalogQueryResult,
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
 
@@ -74,6 +79,28 @@ async function postForm(endpoint: string, body: URLSearchParams, signal?: AbortS
 
 export async function searchOfficialFiles(query: DatasusSearchQuery, signal?: AbortSignal): Promise<DatasusRemoteFile[]> {
   return parseSearchResponse(await postForm(DATASUS_TRANSFER_ENDPOINT, buildSearchBody(query), signal));
+}
+
+/** The official form accepts one period/UF tuple; batch it deterministically. */
+export async function searchOfficialFilesBatch(
+  queries: readonly DatasusSearchQuery[],
+  signal?: AbortSignal,
+): Promise<DatasusRemoteFile[]> {
+  return (await searchOfficialCatalogBatch(queries, signal)).files;
+}
+
+export async function searchOfficialCatalogBatch(
+  queries: readonly DatasusSearchQuery[],
+  signal?: AbortSignal,
+): Promise<{ files: DatasusRemoteFile[]; availability: DatasusAvailabilityManifest }> {
+  const files: DatasusRemoteFile[] = [];
+  const results: DatasusCatalogQueryResult[] = [];
+  for (const query of queries) {
+    const result = await searchOfficialFiles(query, signal);
+    results.push({ query: { ...query }, files: result });
+    files.push(...result.map((file) => ({ ...file, catalogQuery: { ...query } })));
+  }
+  return { files: deduplicateRemoteFiles(files), availability: buildAvailabilityManifest(results) };
 }
 
 export async function searchOfficialAuxiliaries(system: string, signal?: AbortSignal): Promise<DatasusRemoteFile[]> {
@@ -162,17 +189,14 @@ export function extractSupportedArchiveFiles(archive: Uint8Array): ExtractedArch
   return output;
 }
 
-export function chooseCurrentAuxiliaryBundle(files: readonly DatasusRemoteFile[], system: string): DatasusRemoteFile | null {
-  const preferredNames: Record<string, string> = {
-    SIHSUS: 'TAB_SIH.zip',
-    SIASUS: 'TAB_SIA.zip',
-  };
-  const preferred = preferredNames[system];
-  if (preferred) {
-    const exact = files.find((file) => file.name.toUpperCase() === preferred.toUpperCase());
-    if (exact) return exact;
-  }
-  return files.find((file) => !/\d{6}[-_]\d{6}/.test(file.name)) ?? files[0] ?? null;
+export function chooseVerifiedAuxiliaryBundle(
+  files: readonly DatasusRemoteFile[],
+  system: string,
+  fileType: string,
+): DatasusRemoteFile | null {
+  const verifiedName = verifiedAuxiliaryBundleName(system, fileType);
+  if (!verifiedName) return null;
+  return files.find((file) => file.name.toUpperCase() === verifiedName.toUpperCase()) ?? null;
 }
 
 export function suggestedDefinitionName(system: string, fileType: string): string | null {

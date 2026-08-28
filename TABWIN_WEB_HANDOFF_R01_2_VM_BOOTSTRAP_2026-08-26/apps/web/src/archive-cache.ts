@@ -1,3 +1,5 @@
+import type { DatasusSearchQuery } from '../../../packages/acquisition/src/datasus.ts';
+
 export type CachedArchiveRole = 'data' | 'auxiliary';
 
 export interface CachedArchiveSource {
@@ -5,6 +7,7 @@ export interface CachedArchiveSource {
   address: string;
   source: string;
   modality: string;
+  catalogQuery?: DatasusSearchQuery;
 }
 
 interface CachedArchive {

@@ -1,10 +1,10 @@
 {
-  "revision": "R05.3-B-acquisition-progress-cancel",
-  "date": "2026-08-27",
+  "revision": "CRITICAL-SINAN-DENGUE-fix-progress",
+  "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 86,
-    "passed": 86,
+    "total": 112,
+    "passed": 112,
     "failed": 0,
     "command": "npm run check"
   },
@@ -94,6 +94,47 @@
     ,"reversible-row-suppression"
     ,"reversible-row-sum-aggregation"
     ,"table-editing-guards-against-final-column-deletion"
+    ,"audited-r05-3-c-r06-0-and-worker-tree-integration"
+    ,"multi-uf-and-multi-period-official-acquisition-selection"
+    ,"schema-checked-multi-source-tabulation"
+    ,"explicit-manual-auxiliary-selection-without-rule-guessing"
+    ,"cancellable-dbc-dbf-web-worker-decoding"
+    ,"independent-row-and-column-zero-suppression"
+    ,"column-cnv-start-position-and-unclassified-controls"
+    ,"deterministic-6000-column-cardinality-regression"
+    ,"modern-accent-insensitive-variable-and-category-search"
+    ,"immutable-replayable-table-transpose"
+    ,"recipe-and-portable-table-title-subtitle-footer"
+    ,"accessible-table-caption-and-print-footer"
+    ,"strict-replayable-portable-table-include-by-exact-row-key"
+    ,"presentation-only-bundled-municipality-code-name-bridge"
+    ,"municipality-name-aware-table-location"
+    ,"non-destructive-numeric-data-quality-profile"
+    ,"manual-inclusive-valid-range-cleaning-rules"
+    ,"review-before-apply-iqr-range-suggestion"
+    ,"recipe-and-audit-persisted-data-quality-filter-origin"
+    ,"typed-datasus-periodicity-geography-and-auxiliary-capabilities"
+    ,"query-time-only-file-availability-policy"
+    ,"visible-multi-selection-request-count"
+    ,"official-query-result-availability-manifest"
+    ,"explicit-missing-period-and-uf-diagnostics"
+    ,"versioned-portable-official-source-query-manifest"
+    ,"deterministic-source-manifest-serialization-and-validation"
+    ,"source-manifest-file-and-query-availability-diff"
+    ,"bounded-browser-source-manifest-comparison"
+    ,"reviewed-explicit-new-source-download-from-manifest-diff"
+    ,"incremental-batch-schema-compatibility-stop"
+    ,"versioned-research-request-model"
+    ,"deterministic-multi-dataset-research-query-plan"
+    ,"explicit-unknown-file-count-and-byte-estimates-before-catalog-observation"
+    ,"non-interpreted-user-authored-research-concept-terms"
+    ,"officially-observed-58-type-sinan-catalog-snapshot"
+    ,"preflight-decoded-dbf-memory-capacity-diagnostic"
+    ,"large-official-dbc-not-misclassified-as-corrupt"
+    ,"failed-official-decode-preserves-previous-dataset"
+    ,"bounded-4kib-chunk-emitting-pkware-dcl-decoder"
+    ,"byte-exact-streamed-dcl-equivalence-on-real-g001-dbc"
+    ,"explicit-optional-dbf-eof-byte-policy"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -119,6 +160,20 @@
     ,"github-actions-runner-blocked-by-account-billing-lock"
     ,"golden-equivalence-for-post-tabulation-operations"
     ,"table-normalization-and-advanced-header-footnote-editing"
+    ,"r06-1-top-n-tie-order-and-total-semantics-await-oracle"
+    ,"r06-1-multiple-increment-layout-and-totals-await-oracle"
+    ,"column-def-cnv-ui-real-browser-release-smoke"
+    ,"r06-2-post-table-operations-await-focused-goldens"
+    ,"legacy-include-table-mismatch-paste-column-width-key-length-and-normalization"
+    ,"legacy-header1-header2-footer-and-print-pagination"
+    ,"dynamic-official-catalog-period-availability"
+    ,"geographic-label-registries-beyond-bundled-municipalities"
+    ,"raw-sentinel-code-meaning-without-def-cnv-evidence"
+    ,"clinical-cleaning-presets-without-authoritative-source"
+    ,"cross-field-data-quality-rules"
+    ,"multi-period-null-category-and-schema-drift-diagnostics"
+    ,"large-national-dbc-streaming-and-chunked-execution"
+    ,"sinan-def-cnv-and-tabnet-dimension-registry"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -138,11 +193,15 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "finish-official-acquisition-rules-manual-fallback-and-cancel-progress-ux",
+    "capture-short-top-n-and-multiple-increment-tabwin-415-oracles",
+    "run-docs-testing-r06-1-short-oracle-cases",
+    "capture-focused-post-table-tabwin-415-oracles",
+    "audit-include-table-and-paste-semantics-without-guessing",
+    "implement-large-dataset-record-chunk-store-and-worker-aggregation",
+    "resolve-research-plan-queries-into-observed-source-manifests",
+    "extend-data-quality-to-explicit-cross-field-rules-after-catalog-core",
     "close-cataloged-tabwin-415-feature-families",
-    "move-DBC-processing-to-cancellable-Web-Worker",
-    "add-offline-recent-files-screen-and-cache-controls",
-    "surface-DEF-driven-increments-and-selections",
+    "surface-all-evidence-backed-DEF-driven-increments-and-selections",
     "continue-TAB-archaeology-against-portable-recipe-model",
     "expand-chart-and-map-families"
     ,"after-functional-matrix-generate-short-seeded-pairwise-oracle-corpus"

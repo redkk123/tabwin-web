@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import { parseTabwinMap } from '../dist/packages/formats/src/index.js';
 
@@ -38,4 +39,12 @@ test('parses a TabWin 1.00 polygon map and honors Pascal geocode length', () => 
 test('rejects truncated MAP input with an auditable byte offset', () => {
   const truncated = fixtureMap().subarray(0, -3);
   assert.throws(() => parseTabwinMap(truncated), /MAP offset .*truncated/);
+});
+
+test('bundled municipality map provides local code-to-name labels', () => {
+  const map = parseTabwinMap(readFileSync('apps/web/public/maps/br_municip.MAP'));
+  const names = new Map(map.objects.map((object) => [object.geocode, object.name]));
+  assert.equal(map.objects.length, 5_570);
+  assert.equal(names.get('110002'), 'Ariquemes');
+  assert.equal(names.get('500020'), 'Água Clara');
 });

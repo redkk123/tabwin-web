@@ -14,8 +14,8 @@ const table = {
     columns: [{ key: '__value__', label: 'Freqüência', source: 'derived' }],
     cells: [[12]], warnings: [], recordsSeen: 13, recordsAccepted: 12,
   },
-  operations: [],
-  presentation: { sortColumnKey: '__value__', sortDirection: 'descending', decimalPlaces: 0, keyVisible: true },
+  operations: [{ kind: 'transpose' }],
+  presentation: { sortColumnKey: '__value__', sortDirection: 'descending', decimalPlaces: 0, keyVisible: true, subtitle: 'Subtítulo', footer: 'Fonte' },
 };
 
 test('portable table serialization is deterministic and round-trippable', () => {
@@ -41,7 +41,17 @@ test('portable table parser rejects invalid plans, operations and presentation',
   const invalidOperation = structuredClone(table);
   invalidOperation.operations = [{ kind: 'delete-column', columnKey: '' }];
   assert.throws(() => parsePortableTable(JSON.stringify(invalidOperation)), /operation/);
+  const invalidInclude = structuredClone(table);
+  invalidInclude.operations = [{
+    kind: 'include-table', sourceLabel: 'Outra', requireMatchingLabels: true,
+    rows: [{ key: '1', label: 'A' }],
+    columns: [{ key: 'outra:x', label: 'X', source: 'derived' }], cells: [[]],
+  }];
+  assert.throws(() => parsePortableTable(JSON.stringify(invalidInclude)), /include-table/);
   const invalidPresentation = structuredClone(table);
   invalidPresentation.presentation.decimalPlaces = 20;
   assert.throws(() => parsePortableTable(JSON.stringify(invalidPresentation)), /presentation/);
+  const oversizedFooter = structuredClone(table);
+  oversizedFooter.presentation.footer = 'x'.repeat(241);
+  assert.throws(() => parsePortableTable(JSON.stringify(oversizedFooter)), /presentation/);
 });

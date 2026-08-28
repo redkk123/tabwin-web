@@ -17,6 +17,8 @@ export interface PortableTableV1 {
     sortDirection: 'original' | 'ascending' | 'descending';
     decimalPlaces: number;
     keyVisible: boolean;
+    subtitle?: string;
+    footer?: string;
   };
 }
 
@@ -96,7 +98,9 @@ export function parsePortableTable(json: string): PortableTableV1 {
     if (typeof presentation.sortColumnKey !== 'string'
       || !new Set(['original', 'ascending', 'descending']).has(presentation.sortDirection)
       || !Number.isInteger(presentation.decimalPlaces) || presentation.decimalPlaces < -1 || presentation.decimalPlaces > 6
-      || typeof presentation.keyVisible !== 'boolean') {
+      || typeof presentation.keyVisible !== 'boolean'
+      || (presentation.subtitle !== undefined && (typeof presentation.subtitle !== 'string' || presentation.subtitle.length > 240))
+      || (presentation.footer !== undefined && (typeof presentation.footer !== 'string' || presentation.footer.length > 240))) {
       throw new Error('invalid presentation in TabWin Web table');
     }
   }

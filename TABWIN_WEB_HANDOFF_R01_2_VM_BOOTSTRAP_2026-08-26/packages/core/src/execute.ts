@@ -274,6 +274,16 @@ export function executeInMemory(
     cells = cells.filter((_, index) => keep[index]);
   }
 
+  // The legacy panel exposes row and column zero suppression independently.
+  // Preserve the synthetic single measure column when no column dimension was
+  // requested; column suppression applies only to a materialized column axis.
+  if (plan.spec.suppressZeroColumns && plan.spec.columns) {
+    const keep = columns.map((_, columnIndex) =>
+      cells.some((row) => (row[columnIndex] ?? 0) !== 0));
+    columns = columns.filter((_, index) => keep[index]);
+    cells = cells.map((row) => row.filter((_, index) => keep[index]));
+  }
+
   return {
     rows,
     columns,

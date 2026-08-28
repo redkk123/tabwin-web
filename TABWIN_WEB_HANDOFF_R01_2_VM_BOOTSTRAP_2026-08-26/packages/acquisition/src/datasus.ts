@@ -34,6 +34,63 @@ export interface DatasusRemoteFile {
   modality: string;
   name: string;
   address: string;
+  /** Explicit official catalog tuple, retained for source-level provenance. */
+  catalogQuery?: DatasusSearchQuery;
+}
+
+/** Explicit expansion of a multi-period catalog selection. */
+export interface DatasusSearchSelection {
+  system: string;
+  fileType: string;
+  years: readonly string[];
+  months?: readonly string[];
+  ufs?: readonly string[];
+  annual?: boolean;
+}
+
+export interface DatasusCatalogCapabilities {
+  system: DatasusSystem;
+  fileType: DatasusFileType;
+  periodicity: 'annual' | 'monthly';
+  geographies: Array<'BR' | 'UF'>;
+  multiplePeriods: true;
+  multipleUfs: boolean;
+  availability: 'verified-at-query-time';
+  auxiliaryResolution: 'verified-automatic' | 'explicit-manual';
+}
+
+export interface DatasusCatalogQueryResult {
+  query: DatasusSearchQuery;
+  files: readonly DatasusRemoteFile[];
+}
+
+export interface DatasusAvailabilityManifest {
+  requestedQueries: number;
+  availableQueries: number;
+  missingQueries: DatasusSearchQuery[];
+  fileCount: number;
+  entries: Array<{
+    query: DatasusSearchQuery;
+    status: 'available' | 'missing';
+    files: Array<Pick<DatasusRemoteFile, 'name' | 'address'>>;
+  }>;
+}
+
+export interface DatasusSourceManifestV1 {
+  schema: 'tabwin-web.source-manifest';
+  version: 1;
+  createdAt: string;
+  system: string;
+  fileType: string;
+  availability: DatasusAvailabilityManifest;
+}
+
+export interface DatasusSourceManifestDiff {
+  addedFiles: Array<Pick<DatasusRemoteFile, 'name' | 'address'>>;
+  removedFiles: Array<Pick<DatasusRemoteFile, 'name' | 'address'>>;
+  unchangedFiles: Array<Pick<DatasusRemoteFile, 'name' | 'address'>>;
+  newlyAvailableQueries: DatasusSearchQuery[];
+  newlyMissingQueries: DatasusSearchQuery[];
 }
 
 /** Catalog facts published by the official Transferencia de Arquivos page. */
@@ -87,16 +144,64 @@ export const DATASUS_FILE_TYPES: readonly DatasusFileType[] = [
   { system: 'CNES', code: 'PF', label: 'Profissionais', coverage: 'UF' },
   { system: 'CNES', code: 'EP', label: 'Equipes', coverage: 'UF' },
   { system: 'CNES', code: 'RC', label: 'Regras contratuais', coverage: 'UF' },
-  { system: 'SINAN', code: 'DENG', label: 'Dengue', coverage: 'BR' },
+  { system: 'SINAN', code: 'ACBI', label: 'Acidente de trabalho com material biológico', coverage: 'BR' },
+  { system: 'SINAN', code: 'ACGR', label: 'Acidente de trabalho', coverage: 'BR' },
+  { system: 'SINAN', code: 'AIDA', label: 'AIDS em adultos', coverage: 'BR' },
+  { system: 'SINAN', code: 'AIDC', label: 'AIDS em crianças', coverage: 'BR' },
+  { system: 'SINAN', code: 'ANIM', label: 'Acidente por animais peçonhentos', coverage: 'BR' },
+  { system: 'SINAN', code: 'ANTR', label: 'Atendimento antirrábico', coverage: 'BR' },
+  { system: 'SINAN', code: 'BOTU', label: 'Botulismo', coverage: 'BR' },
+  { system: 'SINAN', code: 'CANC', label: 'Câncer relacionado ao trabalho', coverage: 'BR' },
+  { system: 'SINAN', code: 'CHAG', label: 'Doença de Chagas aguda', coverage: 'BR' },
   { system: 'SINAN', code: 'CHIK', label: 'Febre de Chikungunya', coverage: 'BR' },
-  { system: 'SINAN', code: 'ZIKA', label: 'Zika vírus', coverage: 'BR' },
-  { system: 'SINAN', code: 'TUBE', label: 'Tuberculose', coverage: 'BR' },
+  { system: 'SINAN', code: 'COLE', label: 'Cólera', coverage: 'BR' },
+  { system: 'SINAN', code: 'COQU', label: 'Coqueluche', coverage: 'BR' },
+  { system: 'SINAN', code: 'DCRJ', label: 'Doença de Creutzfeldt-Jakob', coverage: 'BR' },
+  { system: 'SINAN', code: 'DENG', label: 'Dengue', coverage: 'BR' },
+  { system: 'SINAN', code: 'DERM', label: 'Dermatoses ocupacionais', coverage: 'BR' },
+  { system: 'SINAN', code: 'DIFT', label: 'Difteria', coverage: 'BR' },
+  { system: 'SINAN', code: 'ESPO', label: 'Esporotricose (epizootia)', coverage: 'BR' },
+  { system: 'SINAN', code: 'ESQU', label: 'Esquistossomose', coverage: 'BR' },
+  { system: 'SINAN', code: 'EXAN', label: 'Doenças exantemáticas', coverage: 'BR' },
+  { system: 'SINAN', code: 'FMAC', label: 'Febre maculosa', coverage: 'BR' },
+  { system: 'SINAN', code: 'FTIF', label: 'Febre tifoide', coverage: 'BR' },
   { system: 'SINAN', code: 'HANS', label: 'Hanseníase', coverage: 'BR' },
+  { system: 'SINAN', code: 'HANT', label: 'Hantavirose', coverage: 'BR' },
   { system: 'SINAN', code: 'HEPA', label: 'Hepatites virais', coverage: 'BR' },
+  { system: 'SINAN', code: 'HIVA', label: 'HIV em adultos', coverage: 'BR' },
+  { system: 'SINAN', code: 'HIVC', label: 'HIV em crianças', coverage: 'BR' },
+  { system: 'SINAN', code: 'HIVE', label: 'HIV em crianças expostas', coverage: 'BR' },
+  { system: 'SINAN', code: 'HIVG', label: 'HIV em gestante', coverage: 'BR' },
   { system: 'SINAN', code: 'IEXO', label: 'Intoxicação exógena', coverage: 'BR' },
-  { system: 'SINAN', code: 'VIOL', label: 'Violências', coverage: 'BR' },
-  { system: 'SINAN', code: 'ANIM', label: 'Acidentes por animais peçonhentos', coverage: 'BR' },
+  { system: 'SINAN', code: 'INFL', label: 'Influenza pandêmica', coverage: 'BR' },
+  { system: 'SINAN', code: 'LEIV', label: 'Leishmaniose visceral', coverage: 'BR' },
+  { system: 'SINAN', code: 'LEPT', label: 'Leptospirose', coverage: 'BR' },
+  { system: 'SINAN', code: 'LERD', label: 'LER/Dort', coverage: 'BR' },
+  { system: 'SINAN', code: 'LTAN', label: 'Leishmaniose tegumentar americana', coverage: 'BR' },
+  { system: 'SINAN', code: 'MALA', label: 'Malária', coverage: 'BR' },
   { system: 'SINAN', code: 'MENI', label: 'Meningite', coverage: 'BR' },
+  { system: 'SINAN', code: 'MENT', label: 'Transtornos mentais relacionados ao trabalho', coverage: 'BR' },
+  { system: 'SINAN', code: 'NTRA', label: 'Notificação de tracoma', coverage: 'BR' },
+  { system: 'SINAN', code: 'PAIR', label: 'Perda auditiva por ruído relacionada ao trabalho', coverage: 'BR' },
+  { system: 'SINAN', code: 'PEST', label: 'Peste', coverage: 'BR' },
+  { system: 'SINAN', code: 'PFAN', label: 'Paralisia flácida aguda', coverage: 'BR' },
+  { system: 'SINAN', code: 'PNEU', label: 'Pneumoconioses relacionadas ao trabalho', coverage: 'BR' },
+  { system: 'SINAN', code: 'RAIV', label: 'Raiva', coverage: 'BR' },
+  { system: 'SINAN', code: 'ROTA', label: 'Rotavírus', coverage: 'BR' },
+  { system: 'SINAN', code: 'SDTA', label: 'Surto de doenças transmitidas por alimentos', coverage: 'BR' },
+  { system: 'SINAN', code: 'SIFA', label: 'Sífilis adquirida', coverage: 'BR' },
+  { system: 'SINAN', code: 'SIFC', label: 'Sífilis congênita', coverage: 'BR' },
+  { system: 'SINAN', code: 'SIFG', label: 'Sífilis em gestante', coverage: 'BR' },
+  { system: 'SINAN', code: 'SRC', label: 'Síndrome da rubéola congênita', coverage: 'BR' },
+  { system: 'SINAN', code: 'TETA', label: 'Tétano acidental', coverage: 'BR' },
+  { system: 'SINAN', code: 'TETN', label: 'Tétano neonatal', coverage: 'BR' },
+  { system: 'SINAN', code: 'TOXC', label: 'Toxoplasmose congênita', coverage: 'BR' },
+  { system: 'SINAN', code: 'TOXG', label: 'Toxoplasmose gestacional', coverage: 'BR' },
+  { system: 'SINAN', code: 'TRAC', label: 'Inquérito de tracoma', coverage: 'BR' },
+  { system: 'SINAN', code: 'TUBE', label: 'Tuberculose', coverage: 'BR' },
+  { system: 'SINAN', code: 'VARC', label: 'Varicela', coverage: 'BR' },
+  { system: 'SINAN', code: 'VIOL', label: 'Violência doméstica, sexual e outras violências', coverage: 'BR' },
+  { system: 'SINAN', code: 'ZIKA', label: 'Zika vírus', coverage: 'BR' },
   { system: 'CIHA', code: 'CIHA', label: 'Comunicação hospitalar e ambulatorial', coverage: 'UF' },
   { system: 'CIH', code: 'CR', label: 'Comunicação de internação hospitalar', coverage: 'UF' },
   { system: 'SISCOLO', code: 'CC', label: 'Citopatológico do colo do útero', coverage: 'UF' },
@@ -129,6 +234,46 @@ export function buildSearchBody(query: DatasusSearchQuery): URLSearchParams {
   if (query.month) appendArray(body, 'mes', [query.month]);
   if (query.uf) appendArray(body, 'uf', [query.uf]);
   return body;
+}
+
+function orderedUnique(values: readonly string[] | undefined): string[] {
+  return [...new Set((values ?? []).map((value) => value.trim()).filter(Boolean))]
+    .sort((left, right) => left.localeCompare(right));
+}
+
+/** Produces a stable request list for the official single-tuple catalog API. */
+export function expandDatasusSearchSelection(selection: DatasusSearchSelection): DatasusSearchQuery[] {
+  const years = orderedUnique(selection.years);
+  if (!years.length) throw new Error('Selecione pelo menos um ano do DATASUS');
+  const months = selection.annual ? [''] : orderedUnique(selection.months);
+  if (!selection.annual && !months.length) throw new Error('Selecione pelo menos um mês do DATASUS');
+  const ufs = orderedUnique(selection.ufs);
+  const queries: DatasusSearchQuery[] = [];
+  for (const year of years) for (const month of months) {
+    if (ufs.length) for (const uf of ufs) {
+      queries.push({
+        system: selection.system,
+        fileType: selection.fileType,
+        year,
+        ...(month ? { month } : {}),
+        // The official catalog represents national coverage by omitting UF.
+        // `BR` is only the explicit multi-select UI sentinel.
+        ...(uf === 'BR' ? {} : { uf }),
+      });
+    } else queries.push({ system: selection.system, fileType: selection.fileType, year, ...(month ? { month } : {}) });
+  }
+  return queries;
+}
+
+/** Removes overlapping catalog entries while imposing an auditable stable order. */
+export function deduplicateRemoteFiles(files: readonly DatasusRemoteFile[]): DatasusRemoteFile[] {
+  const unique = new Map<string, DatasusRemoteFile>();
+  for (const file of files) {
+    const key = `${file.address}\n${file.name}`;
+    if (!unique.has(key)) unique.set(key, file);
+  }
+  return [...unique.values()].sort((left, right) =>
+    left.address.localeCompare(right.address) || left.name.localeCompare(right.name));
 }
 
 export function buildAuxiliarySearchBody(system: string): URLSearchParams {
@@ -210,3 +355,149 @@ export function systemIsAnnual(system: string): boolean {
   return DATASUS_SYSTEMS.find((item) => item.code === system)?.annual ?? false;
 }
 
+/**
+ * Navigable catalog metadata only. It describes how to query the official
+ * catalog, never claims that an individual year/period is available.
+ */
+export function catalogCapabilities(systemCode: string, fileTypeCode: string): DatasusCatalogCapabilities {
+  const system = DATASUS_SYSTEMS.find((item) => item.code === systemCode);
+  if (!system) throw new Error(`Sistema DATASUS desconhecido: ${systemCode}`);
+  const fileType = DATASUS_FILE_TYPES.find((item) => item.system === systemCode && item.code === fileTypeCode);
+  if (!fileType) throw new Error(`Tipo DATASUS desconhecido para ${systemCode}: ${fileTypeCode}`);
+  const geographies: Array<'BR' | 'UF'> = fileType.coverage === 'BOTH'
+    ? ['BR', 'UF'] : fileType.coverage === 'BR' ? ['BR'] : ['UF'];
+  return {
+    system,
+    fileType,
+    periodicity: system.annual ? 'annual' : 'monthly',
+    geographies,
+    multiplePeriods: true,
+    multipleUfs: geographies.includes('UF'),
+    availability: 'verified-at-query-time',
+    auxiliaryResolution: verifiedAuxiliaryBundleName(systemCode, fileTypeCode)
+      ? 'verified-automatic' : 'explicit-manual',
+  };
+}
+
+/** Builds an evidence-only availability view from actual official query results. */
+export function buildAvailabilityManifest(results: readonly DatasusCatalogQueryResult[]): DatasusAvailabilityManifest {
+  const entries = results.map(({ query, files }) => ({
+    query: { ...query },
+    status: files.length ? 'available' as const : 'missing' as const,
+    files: files.map(({ name, address }) => ({ name, address })),
+  }));
+  return {
+    requestedQueries: entries.length,
+    availableQueries: entries.filter((entry) => entry.status === 'available').length,
+    missingQueries: entries.filter((entry) => entry.status === 'missing').map((entry) => ({ ...entry.query })),
+    fileCount: entries.reduce((count, entry) => count + entry.files.length, 0),
+    entries,
+  };
+}
+
+function stableJsonValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableJsonValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, item]) => [key, stableJsonValue(item)]));
+  }
+  return value;
+}
+
+function validateManifestQuery(value: unknown, system: string, fileType: string): DatasusSearchQuery {
+  if (!value || typeof value !== 'object') throw new Error('Consulta inválida no manifesto de fontes');
+  const query = value as Record<string, unknown>;
+  if (query.system !== system || query.fileType !== fileType || typeof query.year !== 'string' || !query.year) {
+    throw new Error('Consulta incompatível no manifesto de fontes');
+  }
+  if (query.month !== undefined && typeof query.month !== 'string') throw new Error('Mês inválido no manifesto de fontes');
+  if (query.uf !== undefined && typeof query.uf !== 'string') throw new Error('UF inválida no manifesto de fontes');
+  return { system, fileType, year: query.year, ...(query.month ? { month: query.month } : {}), ...(query.uf ? { uf: query.uf } : {}) };
+}
+
+export function parseSourceManifest(payload: string): DatasusSourceManifestV1 {
+  const parsed: unknown = JSON.parse(payload);
+  if (!parsed || typeof parsed !== 'object') throw new Error('Manifesto de fontes inválido');
+  const record = parsed as Record<string, unknown>;
+  if (record.schema !== 'tabwin-web.source-manifest' || record.version !== 1) throw new Error('Formato de manifesto de fontes não suportado');
+  if (typeof record.system !== 'string' || typeof record.fileType !== 'string') throw new Error('Origem ausente no manifesto de fontes');
+  catalogCapabilities(record.system, record.fileType);
+  if (typeof record.createdAt !== 'string' || !Number.isFinite(Date.parse(record.createdAt))) throw new Error('Data inválida no manifesto de fontes');
+  const availability = record.availability as Record<string, unknown> | undefined;
+  if (!availability || !Array.isArray(availability.entries) || availability.entries.length > 10_000) throw new Error('Entradas inválidas no manifesto de fontes');
+  const entries = availability.entries.map((value) => {
+    if (!value || typeof value !== 'object') throw new Error('Entrada inválida no manifesto de fontes');
+    const entry = value as Record<string, unknown>;
+    const query = validateManifestQuery(entry.query, record.system as string, record.fileType as string);
+    if (entry.status !== 'available' && entry.status !== 'missing') throw new Error('Status inválido no manifesto de fontes');
+    const status: 'available' | 'missing' = entry.status;
+    if (!Array.isArray(entry.files) || entry.files.length > 10_000) throw new Error('Arquivos inválidos no manifesto de fontes');
+    const files = entry.files.map((value) => {
+      if (!value || typeof value !== 'object') throw new Error('Arquivo inválido no manifesto de fontes');
+      const file = value as Record<string, unknown>;
+      if (typeof file.name !== 'string' || !file.name || typeof file.address !== 'string' || !isOfficialFtpAddress(file.address)) throw new Error('Endereço de arquivo não oficial no manifesto de fontes');
+      return { name: file.name, address: file.address };
+    });
+    if ((status === 'available') !== (files.length > 0)) throw new Error('Status inconsistente no manifesto de fontes');
+    return { query, status, files };
+  });
+  return {
+    schema: 'tabwin-web.source-manifest', version: 1, createdAt: record.createdAt, system: record.system, fileType: record.fileType,
+    availability: {
+      requestedQueries: entries.length,
+      availableQueries: entries.filter((entry) => entry.status === 'available').length,
+      missingQueries: entries.filter((entry) => entry.status === 'missing').map((entry) => ({ ...entry.query })),
+      fileCount: entries.reduce((count, entry) => count + entry.files.length, 0),
+      entries,
+    },
+  };
+}
+
+/** Creates a portable provenance record without embedding downloaded health data. */
+export function createSourceManifest(system: string, fileType: string, availability: DatasusAvailabilityManifest, createdAt = new Date().toISOString()): DatasusSourceManifestV1 {
+  return parseSourceManifest(JSON.stringify({ schema: 'tabwin-web.source-manifest', version: 1, createdAt, system, fileType, availability }));
+}
+
+export function serializeSourceManifest(manifest: DatasusSourceManifestV1): string {
+  const validated = parseSourceManifest(JSON.stringify(manifest));
+  return `${JSON.stringify(stableJsonValue(validated), null, 2)}\n`;
+}
+
+function manifestQueryKey(query: DatasusSearchQuery): string {
+  return [query.system, query.fileType, query.year, query.month ?? '', query.uf ?? ''].join('\n');
+}
+
+function manifestFiles(manifest: DatasusSourceManifestV1): Map<string, Pick<DatasusRemoteFile, 'name' | 'address'>> {
+  const files = new Map<string, Pick<DatasusRemoteFile, 'name' | 'address'>>();
+  for (const entry of manifest.availability.entries) for (const file of entry.files) files.set(`${file.address}\n${file.name}`, file);
+  return files;
+}
+
+/** Compares observed catalog evidence; it never infers why an official result changed. */
+export function compareSourceManifests(previousInput: DatasusSourceManifestV1, currentInput: DatasusSourceManifestV1): DatasusSourceManifestDiff {
+  const previous = parseSourceManifest(JSON.stringify(previousInput));
+  const current = parseSourceManifest(JSON.stringify(currentInput));
+  if (previous.system !== current.system || previous.fileType !== current.fileType) {
+    throw new Error('Manifestos de sistemas ou tipos diferentes não podem ser comparados');
+  }
+  const previousFiles = manifestFiles(previous);
+  const currentFiles = manifestFiles(current);
+  const sortFiles = (files: Array<Pick<DatasusRemoteFile, 'name' | 'address'>>) => files.sort((left, right) => left.address.localeCompare(right.address) || left.name.localeCompare(right.name));
+  const previousStatus = new Map(previous.availability.entries.map((entry) => [manifestQueryKey(entry.query), entry]));
+  return {
+    addedFiles: sortFiles([...currentFiles].filter(([key]) => !previousFiles.has(key)).map(([, file]) => ({ ...file }))),
+    removedFiles: sortFiles([...previousFiles].filter(([key]) => !currentFiles.has(key)).map(([, file]) => ({ ...file }))),
+    unchangedFiles: sortFiles([...currentFiles].filter(([key]) => previousFiles.has(key)).map(([, file]) => ({ ...file }))),
+    newlyAvailableQueries: current.availability.entries.filter((entry) => entry.status === 'available' && previousStatus.get(manifestQueryKey(entry.query))?.status === 'missing').map((entry) => ({ ...entry.query })),
+    newlyMissingQueries: current.availability.entries.filter((entry) => entry.status === 'missing' && previousStatus.get(manifestQueryKey(entry.query))?.status === 'available').map((entry) => ({ ...entry.query })),
+  };
+}
+
+/**
+ * Auxiliary archive relationship verified against a real official SIH-RD
+ * acquisition. This is intentionally not a system-wide naming convention.
+ */
+export function verifiedAuxiliaryBundleName(system: string, fileType: string): string | null {
+  return system === 'SIHSUS' && fileType === 'RD' ? 'TAB_SIH.zip' : null;
+}

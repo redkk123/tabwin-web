@@ -11,6 +11,14 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
   const warnings: string[] = [];
 
   if (!spec.rows.field.trim()) throw new QueryPlanError('row field is required');
+  for (const [label, value] of [
+    ['suppressZeroRows', spec.suppressZeroRows],
+    ['suppressZeroColumns', spec.suppressZeroColumns],
+  ] as const) {
+    if (value !== undefined && typeof value !== 'boolean') {
+      throw new QueryPlanError(`${label} must be boolean`);
+    }
+  }
   if (spec.columns && !spec.columns.field.trim()) {
     throw new QueryPlanError('column field cannot be empty');
   }
@@ -34,6 +42,9 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
   }
   for (const [index, filter] of spec.filters.entries()) {
     if (!filter.field.trim()) throw new QueryPlanError(`filter ${index + 1} has no field`);
+    if (filter.origin !== undefined && filter.origin !== 'data-quality') {
+      throw new QueryPlanError(`filter ${index + 1} origin is invalid`);
+    }
     if (filter.startPosition !== undefined && (!Number.isInteger(filter.startPosition) || filter.startPosition <= 0)) {
       throw new QueryPlanError(`filter ${index + 1} startPosition must be a positive integer`);
     }
@@ -56,6 +67,7 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
     }
     if (filter.mode === 'exclude') warnings.push(`filter ${index + 1} uses explicit exclusion policy; TabWin default equivalence is pending`);
     if (filter.kind === 'numeric-range') warnings.push(`filter ${index + 1} uses an explicit numeric range policy`);
+    if (filter.origin === 'data-quality') warnings.push(`filter ${index + 1} is an explicit, non-destructive data-quality rule`);
   }
 
   if (spec.measure.kind === 'count' && spec.measure.totalPolicy) {

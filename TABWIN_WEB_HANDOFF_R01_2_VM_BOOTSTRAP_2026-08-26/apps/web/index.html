@@ -47,18 +47,29 @@
         <div class="source-actions">
           <button class="secondary-button" id="source-dbf-button" type="button" disabled>Extrair DBF original</button>
           <button class="secondary-button" id="selected-dbf-button" type="button" disabled>Salvar seleção em DBF</button>
+          <button class="secondary-button danger-button" id="decode-cancel-button" type="button" hidden>Cancelar leitura</button>
         </div>
+        <label class="check-label source-combine">
+          <input id="combine-compatible-files" type="checkbox" />
+          <span>Combinar próximos DBC/DBF somente quando o esquema for compatível</span>
+        </label>
 
         <div class="recipe-actions" aria-label="Análise reproduzível">
           <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>
           <button class="secondary-button" id="save-recipe-button" type="button" disabled>Salvar análise</button>
           <input id="recipe-input" type="file" accept=".json,.twrecipe" hidden />
           <button class="secondary-button" id="open-table-button" type="button">Abrir tabela</button>
+          <button class="secondary-button" id="include-table-button" type="button" disabled>Incluir tabela</button>
           <button class="secondary-button" id="save-table-button" type="button" disabled>Salvar tabela</button>
           <input id="table-input" type="file" accept=".twtable" hidden />
+          <input id="include-table-input" type="file" accept=".twtable" hidden />
         </div>
 
         <form id="analysis-form" class="analysis-form">
+          <label>
+            <span>Buscar variável</span>
+            <input id="field-search" type="search" placeholder="Nome técnico ou rótulo do DEF" disabled>
+          </label>
           <label>
             <span>Linhas</span>
             <select id="row-field" disabled><option>Abra um DBC primeiro</option></select>
@@ -70,6 +81,10 @@
           <label>
             <span>Conversão da linha</span>
             <select id="row-conversion" disabled><option value="">Valores originais</option></select>
+          </label>
+          <label>
+            <span>Conversão da coluna</span>
+            <select id="column-conversion" disabled><option value="">Valores originais</option></select>
           </label>
           <label>
             <span>Medida</span>
@@ -93,6 +108,7 @@
               <label><span>Tipo</span><select id="filter-kind"><option value="categories">Valores/categorias</option><option value="numeric-range">Intervalo numérico</option></select></label>
             </div>
             <div class="filter-info" id="filter-info">Escolha um campo para selecionar valores.</div>
+            <input id="filter-value-search" class="filter-search" type="search" placeholder="Buscar valor ou categoria" aria-label="Buscar valor ou categoria do filtro" hidden disabled>
             <div class="filter-values" id="filter-values"></div>
             <div class="filter-range" id="filter-range" hidden>
               <label><span>Mínimo</span><input id="filter-minimum" type="number" step="any" placeholder="Sem limite"></label>
@@ -106,18 +122,47 @@
             </div>
             <div class="active-filter-list" id="active-filter-list"></div>
           </details>
+          <details class="filter-builder quality-builder">
+            <summary>Limpeza assistida <span>não destrutiva</span></summary>
+            <label>
+              <span>Campo para examinar</span>
+              <select id="quality-field" disabled><option value="">Abra um DBC primeiro</option></select>
+            </label>
+            <div class="filter-info quality-summary" id="quality-summary">Escolha um campo para ver distribuição, ausências e valores extremos.</div>
+            <div class="filter-range">
+              <label><span>Mínimo válido</span><input id="quality-minimum" type="number" step="any" placeholder="Sem limite" disabled></label>
+              <label><span>Máximo válido</span><input id="quality-maximum" type="number" step="any" placeholder="Sem limite" disabled></label>
+            </div>
+            <div class="quality-actions">
+              <button class="text-button" id="quality-suggest-button" type="button" disabled>Preencher sugestão IQR</button>
+              <button class="secondary-button" id="quality-apply-button" type="button" disabled>Aplicar faixa manual</button>
+            </div>
+            <p class="quality-note">A sugestão apenas preenche os campos. Confira o contexto clínico antes de aplicar; o arquivo original nunca é alterado.</p>
+          </details>
           <div class="form-row">
             <label>
-              <span>Posição inicial</span>
+              <span>Posição inicial da linha</span>
               <input id="start-position" type="number" min="1" step="1" value="1" disabled />
+            </label>
+            <label>
+              <span>Posição inicial da coluna</span>
+              <input id="column-start-position" type="number" min="1" step="1" value="1" disabled />
             </label>
             <label class="check-label">
               <input id="suppress-zero" type="checkbox" checked disabled />
-              <span>Ocultar zerados</span>
+              <span>Ocultar linhas zeradas</span>
+            </label>
+            <label class="check-label">
+              <input id="suppress-zero-columns" type="checkbox" checked disabled />
+              <span>Ocultar colunas zeradas</span>
             </label>
             <label class="check-label">
               <input id="discriminate-unclassified" type="checkbox" disabled />
-              <span>Discriminar não classificados</span>
+              <span>Não classificados nas linhas</span>
+            </label>
+            <label class="check-label">
+              <input id="discriminate-column-unclassified" type="checkbox" disabled />
+              <span>Não classificados nas colunas</span>
             </label>
           </div>
           <button class="primary-button" id="run-button" type="submit" disabled>
@@ -208,6 +253,9 @@
               <p class="compatibility-note">Políticas modernas explícitas. A equivalência dessas transformações com o TabWin 4.15 será promovida operação por operação após casos-oráculo.</p>
             </section>
             <div class="table-presentation" id="table-presentation" hidden aria-label="Apresentação da tabela">
+              <label>Título<input id="table-title" type="text" maxlength="160" placeholder="Título da tabela"></label>
+              <label>Subtítulo<input id="table-subtitle" type="text" maxlength="240" placeholder="Subtítulo opcional"></label>
+              <label>Rodapé<input id="table-footer" type="text" maxlength="240" placeholder="Rodapé opcional"></label>
               <label>Localizar<input id="table-locate" type="search" placeholder="Código ou categoria"></label>
               <label>Ordenar por<select id="table-sort-column"><option value="__row_key__">Chave/linha</option></select></label>
               <label>Ordem<select id="table-sort-direction"><option value="original">Original</option><option value="ascending">Crescente</option><option value="descending">Decrescente</option></select></label>
@@ -230,6 +278,7 @@
                 <label>Nome da agregação<input id="table-aggregate-label" type="text" maxlength="80" placeholder="Ex.: Demais categorias"></label>
                 <label class="table-key-toggle"><input id="table-aggregate-remove" type="checkbox" checked> Substituir linhas localizadas</label>
                 <div class="table-edit-actions">
+                  <button class="secondary-button" id="table-transpose" type="button">Transpor linhas/colunas</button>
                   <button class="secondary-button" id="table-row-aggregate" type="button" disabled>Agregar localizadas</button>
                   <button class="secondary-button danger-button" id="table-row-suppress" type="button" disabled>Suprimir localizadas</button>
                 </div>
@@ -339,12 +388,13 @@
       <form id="catalog-form" class="catalog-form">
         <label><span>Sistema</span><select id="catalog-system"></select></label>
         <label><span>Tipo de dados</span><select id="catalog-file-type"></select></label>
+        <div class="catalog-capabilities" id="catalog-capabilities"></div>
         <div class="catalog-grid">
-          <label><span>Ano</span><select id="catalog-year"></select></label>
-          <label id="catalog-month-label"><span>Mês</span><select id="catalog-month"></select></label>
-          <label id="catalog-uf-label"><span>UF</span><select id="catalog-uf"></select></label>
+          <label><span>Ano <small>(Ctrl/Cmd para múltiplos)</small></span><select id="catalog-year" multiple size="4"></select></label>
+          <label id="catalog-month-label"><span>Mês <small>(Ctrl/Cmd para múltiplos)</small></span><select id="catalog-month" multiple size="4"></select></label>
+          <label id="catalog-uf-label"><span>UF <small>(Ctrl/Cmd para múltiplos)</small></span><select id="catalog-uf" multiple size="5"></select></label>
         </div>
-        <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar DEF e CNV automaticamente quando houver regra verificada</span></label>
+        <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar auxiliares: automático só com regra verificada; caso contrário, oferecer escolha manual</span></label>
         <div class="catalog-request-actions">
           <button class="primary-button" id="catalog-search-button" type="submit"><span>Procurar arquivos</span><span aria-hidden="true">→</span></button>
           <button class="secondary-button danger-button" id="catalog-cancel-button" type="button" hidden>Cancelar</button>
@@ -352,6 +402,16 @@
       </form>
       <div class="catalog-status" id="catalog-status" aria-live="polite"></div>
       <div class="catalog-results" id="catalog-results"></div>
+      <section class="catalog-recent" id="catalog-auxiliary-picker" hidden aria-labelledby="catalog-auxiliary-title">
+        <div class="catalog-recent-heading">
+          <div>
+            <span class="eyebrow">Seleção explícita</span>
+            <h3 id="catalog-auxiliary-title">Arquivos auxiliares oficiais</h3>
+            <p>Quando não existe associação comprovada, o aplicativo mostra os pacotes e você escolhe o DEF/CNV; nenhum nome é inferido.</p>
+          </div>
+        </div>
+        <div class="catalog-results" id="catalog-auxiliary-results"></div>
+      </section>
       <section class="catalog-recent" aria-labelledby="catalog-recent-title">
         <div class="catalog-recent-heading">
           <div>
