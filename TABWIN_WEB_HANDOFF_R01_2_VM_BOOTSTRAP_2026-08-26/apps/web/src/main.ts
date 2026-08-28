@@ -11,6 +11,7 @@ import {
   serializePortableTable,
   serializeRecipe,
   type AnalysisRecipeV1,
+  type CrossFieldRuleSpec,
   type FilterSpec,
   type QueryPlan,
   type PortableTableV1,
@@ -170,6 +171,35 @@ const qualityMinimum = element<HTMLInputElement>('#quality-minimum');
 const qualityMaximum = element<HTMLInputElement>('#quality-maximum');
 const qualitySuggestButton = element<HTMLButtonElement>('#quality-suggest-button');
 const qualityApplyButton = element<HTMLButtonElement>('#quality-apply-button');
+const crossFieldLabel = element<HTMLInputElement>('#cross-field-label');
+const crossFieldFields = [
+  element<HTMLSelectElement>('#cross-field-field-1'),
+  element<HTMLSelectElement>('#cross-field-field-2'),
+] as const;
+const crossFieldOperators = [
+  element<HTMLSelectElement>('#cross-field-operator-1'),
+  element<HTMLSelectElement>('#cross-field-operator-2'),
+] as const;
+const crossFieldValues = [
+  element<HTMLInputElement>('#cross-field-value-1'),
+  element<HTMLInputElement>('#cross-field-value-2'),
+] as const;
+const crossFieldSecondValues = [
+  element<HTMLInputElement>('#cross-field-second-value-1'),
+  element<HTMLInputElement>('#cross-field-second-value-2'),
+] as const;
+const crossFieldValueLabels = [
+  element<HTMLElement>('#cross-field-value-label-1'),
+  element<HTMLElement>('#cross-field-value-label-2'),
+] as const;
+const crossFieldSecondValueWraps = [
+  element<HTMLElement>('#cross-field-second-value-wrap-1'),
+  element<HTMLElement>('#cross-field-second-value-wrap-2'),
+] as const;
+const crossFieldAction = element<HTMLButtonElement>('#cross-field-action');
+const crossFieldAdd = element<HTMLButtonElement>('#cross-field-add');
+const crossFieldCount = element<HTMLElement>('#cross-field-count');
+const activeCrossFieldList = element<HTMLElement>('#active-cross-field-list');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
 const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
 const recipeInput = element<HTMLInputElement>('#recipe-input');
@@ -202,6 +232,8 @@ const mapZoomIn = element<HTMLButtonElement>('#map-zoom-in');
 const resultKicker = element<HTMLElement>('#result-kicker');
 const resultTitle = element<HTMLElement>('#result-title');
 const datasetStats = element<HTMLElement>('#dataset-stats');
+const qualityOutcomes = element<HTMLElement>('#quality-outcomes');
+const qualityOutcomeList = element<HTMLElement>('#quality-outcome-list');
 const emptyState = element<HTMLElement>('#empty-state');
 const tableWrap = element<HTMLElement>('#table-wrap');
 const resultTable = element<HTMLTableElement>('#result-table');
@@ -306,6 +338,8 @@ const activeDatasetFiles: File[] = [];
 let activeFilterConversion = '';
 let activeFilterStartPosition: number | undefined;
 let configuredFilters: FilterSpec[] = [];
+let configuredCrossFieldRules: CrossFieldRuleSpec[] = [];
+let crossFieldRuleSequence = 0;
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -391,7 +425,8 @@ function setControlsEnabled(enabled: boolean): void {
   for (const control of [fieldSearch, rowField, columnField, rowConversion, columnConversion, measureKind, measureField, filterField, filterMode,
     filterKind, filterValueSearch, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition, columnStartPosition,
     qualityField, qualityMinimum, qualityMaximum, suppressZero, suppressZeroColumns, discriminateUnclassified,
-    discriminateColumnUnclassified, runButton]) {
+    discriminateColumnUnclassified, crossFieldLabel, ...crossFieldFields, ...crossFieldOperators, ...crossFieldValues,
+    ...crossFieldSecondValues, runButton]) {
     control.disabled = !enabled;
   }
   if (enabled) updateMeasureControls();
@@ -402,7 +437,13 @@ function setControlsEnabled(enabled: boolean): void {
   if (!enabled) {
     qualitySuggestButton.disabled = true;
     qualityApplyButton.disabled = true;
+    crossFieldAction.disabled = true;
+    crossFieldAdd.disabled = true;
+  } else {
+    crossFieldAction.disabled = false;
+    updateCrossFieldAddState();
   }
+  for (const button of activeCrossFieldList.querySelectorAll<HTMLButtonElement>('button')) button.disabled = !enabled;
 }
 
 function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
@@ -453,6 +494,7 @@ function populateControls(preferredField?: string): void {
   populateMeasureFields();
   populateFilterFields();
   populateQualityFields();
+  populateCrossFieldFields();
   populateConversions();
   setControlsEnabled(true);
 }
@@ -776,6 +818,151 @@ function cloneFilter(filter: FilterSpec): FilterSpec {
     : { ...filter, acceptedCategories: [...filter.acceptedCategories] };
 }
 
+function cloneCrossFieldRule(rule: CrossFieldRuleSpec): CrossFieldRuleSpec {
+  return { ...rule, conditions: rule.conditions.map(cloneFilter) };
+}
+
+type CrossFieldOperator = 'equals' | 'gte' | 'gt' | 'lte' | 'lt' | 'between';
+
+function populateCrossFieldFields(): void {
+  if (!dbfHeader) return;
+  for (const [index, select] of crossFieldFields.entries()) {
+    const previous = select.value;
+    select.replaceChildren(new Option(index === 0 ? 'Escolha um campo' : 'Escolha outro campo', ''));
+    for (const field of dbfHeader.fields) select.add(new Option(selectionLabel(field.name), field.name));
+    select.value = dbfHeader.fields.some((field) => field.name === previous) ? previous : '';
+  }
+  updateCrossFieldAddState();
+}
+
+function updateCrossFieldConditionControls(index: number): void {
+  const operator = crossFieldOperators[index]!.value as CrossFieldOperator;
+  const value = crossFieldValues[index]!;
+  const second = crossFieldSecondValues[index]!;
+  const isExact = operator === 'equals';
+  const isBetween = operator === 'between';
+  value.type = isExact ? 'text' : 'number';
+  value.step = isExact ? '' : 'any';
+  value.placeholder = isExact ? 'Código ou valor original' : operator === 'between' ? 'Valor mínimo' : 'Limite numérico';
+  crossFieldValueLabels[index]!.textContent = isExact ? 'Valor exato'
+    : operator === 'between' ? 'Valor mínimo' : 'Limite';
+  crossFieldSecondValueWraps[index]!.hidden = !isBetween;
+  second.disabled = !isBetween || !dbfHeader || runButton.disabled;
+  updateCrossFieldAddState();
+}
+
+function updateCrossFieldAddState(): void {
+  const fieldsReady = crossFieldFields.every((select) => Boolean(select.value))
+    && crossFieldFields[0].value !== crossFieldFields[1].value;
+  const valuesReady = crossFieldOperators.every((select, index) => {
+    const first = crossFieldValues[index]!.value.trim();
+    const second = crossFieldSecondValues[index]!.value.trim();
+    return Boolean(first) && (select.value !== 'between' || Boolean(second));
+  });
+  crossFieldAdd.disabled = !dbfHeader || runButton.disabled || !fieldsReady || !valuesReady;
+}
+
+function crossFieldCondition(index: number): FilterSpec {
+  const field = crossFieldFields[index]!.value;
+  const operator = crossFieldOperators[index]!.value as CrossFieldOperator;
+  const raw = crossFieldValues[index]!.value.trim();
+  if (!field || !raw) throw new Error(`Complete a condição ${index + 1}`);
+  if (operator === 'equals') return { field, acceptedCategories: [raw] };
+  const value = Number(raw);
+  if (!Number.isFinite(value)) throw new Error(`Informe um limite numérico válido na condição ${index + 1}`);
+  if (operator === 'gte' || operator === 'gt') {
+    return { field, kind: 'numeric-range', minimum: value, includeMinimum: operator === 'gte' };
+  }
+  if (operator === 'lte' || operator === 'lt') {
+    return { field, kind: 'numeric-range', maximum: value, includeMaximum: operator === 'lte' };
+  }
+  const maximum = Number(crossFieldSecondValues[index]!.value);
+  if (!Number.isFinite(maximum)) throw new Error(`Informe o máximo numérico da condição ${index + 1}`);
+  if (value > maximum) throw new Error(`O mínimo da condição ${index + 1} não pode superar o máximo`);
+  return {
+    field, kind: 'numeric-range', minimum: value, maximum,
+    includeMinimum: true, includeMaximum: true,
+  };
+}
+
+function describeCrossFieldCondition(condition: FilterSpec): string {
+  const field = selectionLabel(condition.field);
+  if (condition.kind !== 'numeric-range') {
+    return `${field} = ${condition.acceptedCategories.join(', ')}`;
+  }
+  if (condition.minimum !== undefined && condition.maximum !== undefined) {
+    return `${field} entre ${condition.minimum} e ${condition.maximum}`;
+  }
+  if (condition.minimum !== undefined) return `${field} ${condition.includeMinimum === false ? '>' : '≥'} ${condition.minimum}`;
+  return `${field} ${condition.includeMaximum === false ? '<' : '≤'} ${condition.maximum}`;
+}
+
+function addCrossFieldRule(): void {
+  const conditions = [crossFieldCondition(0), crossFieldCondition(1)];
+  if (conditions[0]!.field === conditions[1]!.field) throw new Error('Escolha dois campos diferentes');
+  const generatedLabel = conditions.map(describeCrossFieldCondition).join(' + ');
+  const rule: CrossFieldRuleSpec = {
+    id: `regra-cruzada-${Date.now().toString(36)}-${++crossFieldRuleSequence}`,
+    label: crossFieldLabel.value.trim() || generatedLabel,
+    conditions,
+    action: crossFieldAction.dataset.action === 'exclude' ? 'exclude' : 'flag',
+  };
+  configuredCrossFieldRules.push(rule);
+  crossFieldLabel.value = '';
+  for (const input of [...crossFieldValues, ...crossFieldSecondValues]) input.value = '';
+  renderCrossFieldRules();
+  updateCrossFieldAddState();
+  void runAnalysis();
+}
+
+function renderCrossFieldRules(): void {
+  activeCrossFieldList.replaceChildren();
+  const outcomes = new Map((currentResult?.dataQuality ?? []).map((outcome) => [outcome.id, outcome]));
+  configuredCrossFieldRules.forEach((rule, index) => {
+    const item = document.createElement('div');
+    item.className = 'active-filter active-cross-field';
+    const copy = document.createElement('span');
+    copy.className = 'rule-copy';
+    const title = document.createElement('b');
+    title.textContent = rule.label;
+    const detail = document.createElement('small');
+    const matched = outcomes.get(rule.id)?.matchedRecords;
+    detail.textContent = `${rule.conditions.map(describeCrossFieldCondition).join(' · ')}${matched === undefined ? '' : ` · ${integerFormat.format(matched)} ocorrência(s)`}`;
+    copy.append(title, detail);
+    const action = document.createElement('button');
+    action.type = 'button';
+    action.className = 'rule-action';
+    action.dataset.action = rule.action;
+    action.textContent = rule.action === 'exclude' ? 'Excluir' : 'Sinalizar';
+    action.title = rule.action === 'exclude' ? 'Alternar para apenas sinalizar' : 'Alternar para excluir correspondências';
+    action.addEventListener('click', () => {
+      configuredCrossFieldRules[index] = { ...rule, action: rule.action === 'exclude' ? 'flag' : 'exclude' };
+      renderCrossFieldRules();
+      void runAnalysis();
+    });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.setAttribute('aria-label', `Remover regra ${rule.label}`);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => {
+      configuredCrossFieldRules.splice(index, 1);
+      renderCrossFieldRules();
+      void runAnalysis();
+    });
+    item.append(copy, action, remove);
+    activeCrossFieldList.append(item);
+  });
+  crossFieldCount.textContent = configuredCrossFieldRules.length
+    ? `${integerFormat.format(configuredCrossFieldRules.length)} ativa(s)`
+    : 'nenhuma';
+}
+
+function toggleCrossFieldAction(): void {
+  const next = crossFieldAction.dataset.action === 'exclude' ? 'flag' : 'exclude';
+  crossFieldAction.dataset.action = next;
+  crossFieldAction.textContent = next === 'exclude' ? 'Excluir correspondências' : 'Apenas sinalizar';
+}
+
 function populateConversions(): void {
   const previousRow = rowConversion.value;
   const previousColumn = columnConversion.value;
@@ -853,7 +1040,9 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   currentCompatibilityProfile = 'tabwin-4.15';
   sourceDbfButton.disabled = false;
   configuredFilters = [];
+  configuredCrossFieldRules = [];
   renderConfiguredFilters();
+  renderCrossFieldRules();
   datasetName = file.name;
   datasetFingerprint = source;
   populateControls(chooseDefaultField(header.fields));
@@ -1133,7 +1322,9 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   currentCompatibilityProfile = 'modern';
   sourceDbfButton.disabled = true;
   configuredFilters = [];
+  configuredCrossFieldRules = [];
   renderConfiguredFilters();
+  renderCrossFieldRules();
   datasetName = file.name;
   datasetFingerprint = source;
   populateControls(chooseDefaultField(fields));
@@ -1281,6 +1472,9 @@ function buildPlan(): QueryPlan {
     } } : {}),
     measure,
     filters: configuredFilters.map(cloneFilter),
+    ...(configuredCrossFieldRules.length
+      ? { crossFieldRules: configuredCrossFieldRules.map(cloneCrossFieldRule) }
+      : {}),
     suppressZeroRows: suppressZero.checked,
     suppressZeroColumns: suppressZeroColumns.checked,
   };
@@ -1290,7 +1484,8 @@ function buildPlan(): QueryPlan {
 function conversionsForPlan(plan: QueryPlan): Record<string, CnvDefinition> {
   const conversions: Record<string, CnvDefinition> = {};
   for (const id of [plan.spec.rows.conversionId, plan.spec.columns?.conversionId,
-    ...plan.spec.filters.map((filter) => filter.conversionId)]) {
+    ...plan.spec.filters.map((filter) => filter.conversionId),
+    ...(plan.spec.crossFieldRules ?? []).flatMap((rule) => rule.conditions.map((condition) => condition.conversionId))]) {
     if (id) conversions[id] = cnvByName.get(id)!;
   }
   return conversions;
@@ -1365,7 +1560,29 @@ function renderResult(): void {
   populateStatisticsColumns(currentResult);
   renderStatistics();
   renderAudit();
+  renderDataQualityOutcomes();
+  renderCrossFieldRules();
   if (activeMap) renderMap();
+}
+
+function renderDataQualityOutcomes(): void {
+  const outcomes = currentResult?.dataQuality ?? [];
+  qualityOutcomeList.replaceChildren();
+  qualityOutcomes.hidden = outcomes.length === 0;
+  for (const outcome of outcomes) {
+    const item = document.createElement('div');
+    item.className = 'quality-outcome';
+    const label = document.createElement('span');
+    label.textContent = outcome.label;
+    const count = document.createElement('b');
+    count.textContent = integerFormat.format(outcome.matchedRecords);
+    const action = document.createElement('span');
+    action.textContent = outcome.action === 'exclude'
+      ? 'Correspondências excluídas da tabulação'
+      : 'Apenas sinalizadas; nenhum registro removido';
+    item.append(label, count, action);
+    qualityOutcomeList.append(item);
+  }
 }
 
 function operationLabel(operation: TableOperation): string {
@@ -2714,6 +2931,9 @@ function saveRecipe(): void {
   if (currentPlan.spec.rows.conversionId) conversionIds.add(currentPlan.spec.rows.conversionId);
   if (currentPlan.spec.columns?.conversionId) conversionIds.add(currentPlan.spec.columns.conversionId);
   for (const filter of currentPlan.spec.filters) if (filter.conversionId) conversionIds.add(filter.conversionId);
+  for (const rule of currentPlan.spec.crossFieldRules ?? []) {
+    for (const condition of rule.conditions) if (condition.conversionId) conversionIds.add(condition.conversionId);
+  }
   const conversions = [...conversionIds].map((id) => {
     const source = loadedSources.find((item) => baseName(item.name) === baseName(id));
     if (!source) throw new Error(`Não foi possível localizar a impressão digital de ${id}`);
@@ -2825,6 +3045,8 @@ async function openPortableTable(file: File): Promise<void> {
   sourceDbfButton.disabled = true;
   selectedDbfButton.disabled = true;
   configuredFilters = [];
+  configuredCrossFieldRules = [];
+  renderCrossFieldRules();
   activeDef = null;
   activeMap = null;
   mapNameByGeocode.clear();
@@ -2899,6 +3121,7 @@ async function openRecipe(file: File): Promise<void> {
     recipe.spec.columns?.field,
     recipe.spec.measure.field,
     ...recipe.spec.filters.map((filter) => filter.field),
+    ...(recipe.spec.crossFieldRules ?? []).flatMap((rule) => rule.conditions.map((condition) => condition.field)),
   ].filter((field): field is string => Boolean(field));
   const missing = requiredFields.filter((field) => !fields.has(field));
   if (missing.length) throw new Error(`O arquivo atual não possui: ${[...new Set(missing)].join(', ')}`);
@@ -2942,7 +3165,17 @@ async function openRecipe(file: File): Promise<void> {
     if (!loaded) throw new Error(`Carregue a conversão ${displayBaseName(filter.conversionId)} antes de abrir esta análise`);
     return { ...filter, conversionId: loaded, acceptedCategories: [...filter.acceptedCategories] };
   });
+  configuredCrossFieldRules = (recipe.spec.crossFieldRules ?? []).map((rule) => ({
+    ...rule,
+    conditions: rule.conditions.map((condition) => {
+      if (condition.kind === 'numeric-range' || !condition.conversionId) return cloneFilter(condition);
+      const loaded = conversionNameInRegistry(condition.conversionId);
+      if (!loaded) throw new Error(`Carregue a conversão ${displayBaseName(condition.conversionId)} antes de abrir esta análise`);
+      return { ...condition, conversionId: loaded, acceptedCategories: [...condition.acceptedCategories] };
+    }),
+  }));
   renderConfiguredFilters();
+  renderCrossFieldRules();
   updateMeasureControls();
   updateColumnControls();
   await runAnalysis();
@@ -3165,6 +3398,17 @@ for (const control of [qualityMinimum, qualityMaximum]) control.addEventListener
 qualitySuggestButton.addEventListener('click', suggestQualityRange);
 qualityApplyButton.addEventListener('click', () => {
   try { applyQualityRange(); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+for (const [index, operator] of crossFieldOperators.entries()) {
+  operator.addEventListener('change', () => updateCrossFieldConditionControls(index));
+  crossFieldFields[index]!.addEventListener('change', updateCrossFieldAddState);
+  crossFieldValues[index]!.addEventListener('input', updateCrossFieldAddState);
+  crossFieldSecondValues[index]!.addEventListener('input', updateCrossFieldAddState);
+}
+crossFieldAction.addEventListener('click', toggleCrossFieldAction);
+crossFieldAdd.addEventListener('click', () => {
+  try { addCrossFieldRule(); }
   catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
 });
 for (const control of [filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum]) {

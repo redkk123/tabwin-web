@@ -139,6 +139,41 @@
             </div>
             <p class="quality-note">A sugestão apenas preenche os campos. Confira o contexto clínico antes de aplicar; o arquivo original nunca é alterado.</p>
           </details>
+          <details class="filter-builder cross-field-builder">
+            <summary>Regras cruzadas <span id="cross-field-count">nenhuma</span></summary>
+            <label>
+              <span>Nome da regra</span>
+              <input id="cross-field-label" type="text" maxlength="120" placeholder="Ex.: combinação que exige revisão" disabled>
+            </label>
+            <div class="cross-field-condition" data-condition="1">
+              <strong>Condição 1</strong>
+              <label><span>Campo</span><select id="cross-field-field-1" disabled><option value="">Escolha um campo</option></select></label>
+              <label><span>Condição</span><select id="cross-field-operator-1" disabled>
+                <option value="equals">Igual a</option><option value="gte">Maior ou igual a</option>
+                <option value="gt">Maior que</option><option value="lte">Menor ou igual a</option>
+                <option value="lt">Menor que</option><option value="between">Entre, inclusive</option>
+              </select></label>
+              <label><span id="cross-field-value-label-1">Valor exato</span><input id="cross-field-value-1" type="text" disabled></label>
+              <label id="cross-field-second-value-wrap-1" hidden><span>Valor máximo</span><input id="cross-field-second-value-1" type="number" step="any" disabled></label>
+            </div>
+            <div class="cross-field-condition" data-condition="2">
+              <strong>Condição 2</strong>
+              <label><span>Campo</span><select id="cross-field-field-2" disabled><option value="">Escolha outro campo</option></select></label>
+              <label><span>Condição</span><select id="cross-field-operator-2" disabled>
+                <option value="equals">Igual a</option><option value="gte">Maior ou igual a</option>
+                <option value="gt">Maior que</option><option value="lte">Menor ou igual a</option>
+                <option value="lt">Menor que</option><option value="between">Entre, inclusive</option>
+              </select></label>
+              <label><span id="cross-field-value-label-2">Valor exato</span><input id="cross-field-value-2" type="text" disabled></label>
+              <label id="cross-field-second-value-wrap-2" hidden><span>Valor máximo</span><input id="cross-field-second-value-2" type="number" step="any" disabled></label>
+            </div>
+            <div class="quality-actions cross-field-actions">
+              <button class="secondary-button cross-field-action" id="cross-field-action" type="button" data-action="flag" disabled>Apenas sinalizar</button>
+              <button class="secondary-button" id="cross-field-add" type="button" disabled>Adicionar regra</button>
+            </div>
+            <div class="active-filter-list" id="active-cross-field-list"></div>
+            <p class="quality-note">As duas condições precisam ocorrer no mesmo registro. A regra é uma política explícita do usuário e fica registrada na análise.</p>
+          </details>
           <div class="form-row">
             <label>
               <span>Posição inicial da linha</span>
@@ -204,6 +239,10 @@
           </div>
 
           <div class="dataset-stats" id="dataset-stats" hidden></div>
+          <section class="quality-outcomes" id="quality-outcomes" hidden aria-live="polite">
+            <div><strong>Regras cruzadas de qualidade</strong><small>Ocorrências no conjunto examinado</small></div>
+            <div id="quality-outcome-list"></div>
+          </section>
 
           <nav class="view-tabs" aria-label="Visualização do resultado">
             <button class="active" data-view="table" type="button">Tabela</button>

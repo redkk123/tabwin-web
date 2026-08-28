@@ -66,15 +66,20 @@ dados**, e é por isso que ela não deve ir para o fim.
 
 ### 2.1 Interface das regras cruzadas de qualidade
 
+**Concluído em 2026-08-28.** Editor de duas condições, comparação por valor ou
+faixa numérica, lista ativa, alternância sinalizar/excluir e contagem de
+ocorrências no resultado. Receitas restauram as regras. Evidência em
+`docs/handoffs/R09_1_CROSS_FIELD_QUALITY_UI_REPORT.md`.
+
 **Esforço:** um dia · **Risco:** baixo · **Valor:** alto
 
 `CrossFieldRuleSpec`, validação, execução, contagem por regra, persistência em
 receita e replay: **tudo pronto e coberto por testes**. Não aparece nada na
 tela.
 
-Falta: formulário para montar a regra (campo, condição, campo, condição),
-lista das regras ativas, exibição de `dataQuality[].matchedRecords` e o botão
-que alterna entre apenas sinalizar e excluir.
+Entregue: formulário para montar a regra (campo, condição, campo, condição),
+lista das regras ativas, exibição de `dataQuality[].matchedRecords` e botão que
+alterna entre apenas sinalizar e excluir.
 
 O caso que motivou — gestante de 80 anos — passa a ser possível para o usuário
 comum sem escrever código.

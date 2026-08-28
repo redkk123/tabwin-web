@@ -1,5 +1,5 @@
 {
-  "revision": "R09-0-D-codex-audit-and-low-complexity-closure",
+  "revision": "R09-1-cross-field-quality-ui",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
@@ -164,6 +164,8 @@
     ,"headless-safe-analysis-yield"
     ,"preliminary-modality-propagated-to-plan-audit-and-recipe"
     ,"versioned-json-tabulation-result-export"
+    ,"cross-field-quality-rule-builder-ui"
+    ,"visible-per-rule-quality-outcomes-and-action-toggle"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -230,7 +232,7 @@
     "add-an-l3-result-cache-so-reanalysis-does-not-repeat-a-full-pass",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
-    "surface-cross-field-rules-and-combination-profile-in-the-interface",
+    "surface-rare-combination-profile-and-create-rule-bridge-in-the-interface",
     "resolve-research-plan-queries-into-observed-source-manifests",
     "capture-oracle-evidence-before-shipping-any-clinical-cleaning-preset",
     "close-cataloged-tabwin-415-feature-families",

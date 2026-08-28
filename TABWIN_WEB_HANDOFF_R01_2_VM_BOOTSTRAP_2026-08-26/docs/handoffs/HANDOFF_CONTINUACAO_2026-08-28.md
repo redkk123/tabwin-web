@@ -19,6 +19,16 @@ do Worker em abertura, falha e cancelamento, além do falso truncamento de
 valores distintos. Relatório completo em
 `docs/handoffs/CODEX_AUDIT_CLAUDE_2026-08-28.md`.
 
+### Atualização posterior — Faixa 2.1
+
+A interface de regras cruzadas de qualidade foi entregue. O usuário monta duas
+condições sobre campos diferentes, escolhe comparação exata ou numérica,
+alterna cada regra entre sinalizar e excluir, e vê a contagem de ocorrências
+devolvida pelo Worker. Salvamento e abertura de receita incluem as regras.
+Teste real no `RDAC2401.dbc`: `MUNIC_RES = 120040` e `IDADE >= 0` encontrou
+1.789 registros tanto em sinalização quanto em exclusão, sem erros no console.
+Relatório em `docs/handoffs/R09_1_CROSS_FIELD_QUALITY_UI_REPORT.md`.
+
 O site publicado no GitHub Pages **continua atrás de todos os commits abaixo**,
 inclusive da correção da busca nacional. Nenhum deploy foi autorizado.
 
