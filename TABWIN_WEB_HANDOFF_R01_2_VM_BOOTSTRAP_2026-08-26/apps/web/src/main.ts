@@ -1,13 +1,13 @@
 import {
+  readDbfHeader,
+  type DbfField,
   type DbfHeader,
   type DbfRecord,
 } from '@precisa-saude/datasus-dbc';
 import {
   compileQueryPlan,
-  executeInMemory,
   parsePortableTable,
   parseRecipe,
-  resolvePlanRecord,
   serializePortableTable,
   serializeRecipe,
   type AnalysisRecipeV1,
@@ -48,7 +48,6 @@ import {
 import { tabulationToCsv, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
-import { writeDbf } from '../../../packages/export/src/dbf-writer.ts';
 import {
   chooseVerifiedAuxiliaryBundle,
   extractSupportedArchiveFiles,
@@ -82,7 +81,7 @@ import {
   pearsonCorrelation,
   simpleLinearRegression,
 } from '../../../packages/analysis/src/statistics.ts';
-import { profileNumericField } from '../../../packages/analysis/src/data-quality.ts';
+import type { NumericFieldProfile } from '../../../packages/analysis/src/data-quality.ts';
 import {
   applyTableOperation,
   calculateColumnTotal,
@@ -280,7 +279,6 @@ const catalogRecentSummary = element<HTMLElement>('#catalog-recent-summary');
 const catalogRecentList = element<HTMLElement>('#catalog-recent-list');
 const catalogCacheClear = element<HTMLButtonElement>('#catalog-cache-clear');
 
-let records: DbfRecord[] = [];
 let dbfHeader: DbfHeader | null = null;
 let currentDatasetFile: File | null = null;
 let currentCompatibilityProfile: 'tabwin-4.15' | 'modern' = 'tabwin-4.15';
@@ -519,14 +517,31 @@ function inputQualityNumber(value: number): string {
   return Number(value.toPrecision(12)).toString();
 }
 
-function updateQualityProfile(): void {
-  if (!qualityField.value || !records.length) {
+/** Kept so suggesting a range does not re-read the dataset. */
+let lastQualityProfile: NumericFieldProfile | null = null;
+
+async function updateQualityProfile(): Promise<void> {
+  lastQualityProfile = null;
+  if (!qualityField.value || !datasetRecordCount) {
     qualitySummary.textContent = 'Escolha um campo para ver distribuição, ausências e valores extremos.';
     qualitySuggestButton.disabled = true;
     qualityApplyButton.disabled = true;
     return;
   }
-  const profile = profileNumericField(records, qualityField.value);
+  qualitySummary.textContent = 'Perfilando o campo…';
+  qualitySuggestButton.disabled = true;
+  let profile: NumericFieldProfile;
+  try {
+    ({ profile } = await askDataset<{ profile: NumericFieldProfile }>(
+      { type: 'profile-numeric', field: qualityField.value },
+      { label: 'Perfil de qualidade' },
+    ));
+  } catch (error) {
+    qualitySummary.textContent = error instanceof Error ? error.message : String(error);
+    qualityApplyButton.disabled = true;
+    return;
+  }
+  lastQualityProfile = profile;
   if (!profile.numericRecords) {
     qualitySummary.textContent = `${selectionLabel(profile.field)} não possui valores numéricos reconhecidos; ${integerFormat.format(profile.missingRecords)} ausente(s) e ${integerFormat.format(profile.invalidRecords)} inválido(s).`;
     qualitySuggestButton.disabled = true;
@@ -552,8 +567,8 @@ function updateQualityApplyState(): void {
 }
 
 function suggestQualityRange(): void {
-  const profile = profileNumericField(records, qualityField.value);
-  if (profile.minimum === undefined || profile.maximum === undefined
+  const profile = lastQualityProfile;
+  if (!profile || profile.minimum === undefined || profile.maximum === undefined
     || profile.lowerIqrFence === undefined || profile.upperIqrFence === undefined) return;
   qualityMinimum.value = inputQualityNumber(Math.max(profile.minimum, profile.lowerIqrFence));
   qualityMaximum.value = inputQualityNumber(Math.min(profile.maximum, profile.upperIqrFence));
@@ -588,7 +603,7 @@ function populateFilterFields(): void {
   filterField.replaceChildren(new Option('Sem filtro', ''));
   for (const field of dbfHeader.fields) filterField.add(new Option(selectionLabel(field.name), field.name));
   filterField.value = dbfHeader.fields.some((field) => field.name === previous) ? previous : '';
-  populateFilterValues();
+  void populateFilterValues();
 }
 
 function updateMeasureControls(): void {
@@ -597,7 +612,7 @@ function updateMeasureControls(): void {
   measureField.disabled = !dbfHeader || !isSum;
 }
 
-function populateFilterValues(): void {
+async function populateFilterValues(): Promise<void> {
   filterValues.replaceChildren();
   filterValueSearch.value = '';
   activeFilterConversion = '';
@@ -641,15 +656,18 @@ function populateFilterValues(): void {
     }
   }
 
-  const values = new Set<string>();
-  for (const record of records) {
-    const raw = record[field];
-    if (raw !== null && raw !== undefined) values.add(String(raw));
-    if (values.size >= 500) break;
+  filterInfo.textContent = 'Lendo os valores do campo…';
+  try {
+    const collected = await askDataset<{ values: string[]; truncated: boolean }>(
+      { type: 'distinct', field, limit: 500 },
+      { label: 'Leitura de valores' },
+    );
+    for (const value of collected.values) addFilterOption(value, value || '(em branco)');
+    filterInfo.textContent =
+      `${collected.values.length}${collected.truncated ? '+' : ''} valores encontrados. Marque os valores que deseja incluir.`;
+  } catch (error) {
+    filterInfo.textContent = error instanceof Error ? error.message : String(error);
   }
-  const sorted = [...values].sort((a, b) => a.localeCompare(b, 'pt-BR', { numeric: true }));
-  for (const value of sorted) addFilterOption(value, value || '(em branco)');
-  filterInfo.textContent = `${sorted.length}${values.size >= 500 ? '+' : ''} valores encontrados. Marque os valores que deseja incluir.`;
 }
 
 function addFilterOption(value: string, label: string, unclassified = false): void {
@@ -768,7 +786,7 @@ function populateConversions(): void {
   if (cnvByName.has(previousColumn)) columnConversion.value = previousColumn;
   applyDefDefaults();
   updateColumnControls();
-  if (filterField.value) populateFilterValues();
+  if (filterField.value) void populateFilterValues();
 }
 
 function applyDefDefaults(): void {
@@ -798,7 +816,7 @@ function updateDatasetStats(): void {
   if (!dbfHeader || !activeDatasetSources.length) return;
   const sourceBytes = activeDatasetSources.reduce((total, source) => total + source.size, 0);
   const values: Array<readonly [string, string]> = [
-    [integerFormat.format(records.length), 'registros ativos'],
+    [integerFormat.format(datasetRecordCount), 'registros ativos'],
     [integerFormat.format(dbfHeader.fields.length), 'campos'],
     [formatBytes(sourceBytes), activeDatasetSources.length === 1 ? 'arquivo original' : `${activeDatasetSources.length} arquivos-fonte`],
     [datasetFingerprint?.sha256.slice(0, 10) ?? `${activeDatasetSources.length} fontes`, datasetFingerprint ? 'sha-256' : 'proveniências auditáveis'],
@@ -818,14 +836,12 @@ function updateDatasetStats(): void {
 }
 
 async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: LoadedSource): Promise<void> {
-  const decoded = await decodeDbfFile(bytes, file, isDbc);
-  const { header, records: nextRecords } = decoded;
+  const header = await openDatasetFile(bytes, file, isDbc);
 
   // Admit the source only after decoding succeeds. Cancellation or malformed
   // input must leave the previous dataset and its provenance intact.
   rememberSource(source);
   activeDatasetSources.splice(0, activeDatasetSources.length, source);
-  records = nextRecords;
   dbfHeader = header;
   currentDatasetFile = file;
   currentCompatibilityProfile = 'tabwin-4.15';
@@ -845,12 +861,15 @@ function schemaSignature(header: DbfHeader): string {
     .join('|');
 }
 
-async function decodeDbfFile(bytes: Uint8Array, file: File, isDbc: boolean): Promise<{ header: DbfHeader; records: DbfRecord[] }> {
+async function openDatasetFile(bytes: Uint8Array, file: File, isDbc: boolean): Promise<DbfHeader> {
   if (activeDecode) throw new Error('Outra leitura DBC/DBF ainda está em andamento');
-  setBusy(isDbc ? `Descompactando ${file.name}…` : `Lendo ${file.name}…`);
+  setBusy(isDbc ? `Abrindo ${file.name}…` : `Lendo ${file.name}…`);
   decodeCancelButton.hidden = false;
   try {
-    return await decodeDbfInWorker(bytes, isDbc, file.name);
+    return await openDataset(
+      [{ kind: 'binary', name: file.name, bytes: transferableBytes(bytes), isDbc }],
+      `Leitura de ${file.name}`,
+    );
   } finally {
     decodeCancelButton.hidden = true;
     activeDecode = null;
@@ -866,12 +885,21 @@ async function appendCompatibleDbf(
   if (activeDatasetSources.some((item) => item.size === source.size && item.sha256 === source.sha256)) {
     throw new Error(`${file.name}: este arquivo já faz parte do conjunto combinado`);
   }
-  const decoded = await decodeDbfFile(bytes, file, isDbc);
-  if (!dbfHeader || schemaSignature(dbfHeader) !== schemaSignature(decoded.header)) {
-    throw new Error(`${file.name}: esquema incompatível; arquivos combinados precisam ter os mesmos campos, tipos, tamanhos e decimais`);
+  if (activeDecode) throw new Error('Outra leitura DBC/DBF ainda está em andamento');
+  if (!dbfHeader) throw new Error('Abra um arquivo antes de combinar outro');
+  setBusy(`Combinando ${file.name}…`);
+  decodeCancelButton.hidden = false;
+  try {
+    // The Worker holds every source and checks the schema against the open
+    // dataset, so nothing is concatenated on this thread.
+    dbfHeader = await appendDataset(
+      { kind: 'binary', name: file.name, bytes: transferableBytes(bytes), isDbc },
+      `Combinação de ${file.name}`,
+    );
+  } finally {
+    decodeCancelButton.hidden = true;
+    activeDecode = null;
   }
-  for (const record of decoded.records) records.push(record);
-  dbfHeader = { ...dbfHeader, recordCount: records.length };
   rememberSource(source);
   activeDatasetSources.push(source);
   currentDatasetFile = null;
@@ -882,53 +910,131 @@ async function appendCompatibleDbf(
   await runAnalysis();
 }
 
-async function decodeDbfInWorker(
-  bytes: Uint8Array,
-  isDbc: boolean,
-  name: string,
-): Promise<{ header: DbfHeader; records: DbfRecord[] }> {
-  const worker = new Worker(new URL('./dbf-decode-worker.ts', import.meta.url), { type: 'module' });
-  // File-backed Uint8Arrays normally span their complete ArrayBuffer. Transfer that
-  // buffer directly so large DBC/DBF inputs are not duplicated on the main thread.
-  // Only a view into a larger buffer needs an isolated copy before transfer.
-  const source = bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
-    ? bytes.buffer as ArrayBuffer
-    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  return new Promise((resolve, reject) => {
+type DatasetWorkerSource =
+  | { kind: 'binary'; name: string; bytes: ArrayBuffer; isDbc: boolean }
+  | { kind: 'records'; name: string; records: DbfRecord[] };
+
+/**
+ * The opened dataset lives in the Worker; this thread keeps only its shape.
+ *
+ * There is no second path for large files. Every request streams the retained
+ * sources in bounded batches and decodes just the fields it needs, so the same
+ * code serves a small SIH file and the national Dengue file.
+ */
+let datasetWorker: Worker | null = null;
+let datasetRequestId = 0;
+let datasetRecordCount = 0;
+
+function disposeDatasetWorker(): void {
+  datasetWorker?.terminate();
+  datasetWorker = null;
+}
+
+function datasetWorkerInstance(): Worker {
+  if (!datasetWorker) {
+    datasetWorker = new Worker(new URL('./dataset-worker.ts', import.meta.url), { type: 'module' });
+  }
+  return datasetWorker;
+}
+
+interface DatasetAskOptions {
+  label: string;
+  transfer?: Transferable[];
+  progress?: (recordsRead: number, recordCount: number) => void;
+}
+
+/**
+ * Sends one request and resolves with its reply.
+ *
+ * Cancellation terminates the Worker rather than sending a message: the Worker
+ * runs a synchronous decode loop and cannot process messages while it does.
+ */
+function askDataset<T>(message: Record<string, unknown>, options: DatasetAskOptions): Promise<T> {
+  const worker = datasetWorkerInstance();
+  const requestId = ++datasetRequestId;
+  return new Promise<T>((resolve, reject) => {
     let settled = false;
     const finish = (action: () => void): void => {
       if (settled) return;
       settled = true;
-      worker.terminate();
+      worker.removeEventListener('message', onMessage);
+      worker.removeEventListener('error', onFailure);
+      activeDecode = null;
       action();
     };
-    activeDecode = { cancel: () => finish(() => reject(new Error(`Leitura de ${name} cancelada`))) };
-    worker.addEventListener('message', (event: MessageEvent<
-      | { type: 'progress'; recordsRead: number; recordCount: number }
-      | { type: 'result'; header: DbfHeader; records: DbfRecord[] }
-      | { type: 'error'; message: string }
-    >) => {
-      const message = event.data;
-      if (message.type === 'progress') {
-        resultTitle.textContent = `Lendo ${name}: ${integerFormat.format(message.recordsRead)} de ${integerFormat.format(message.recordCount)} registros…`;
+    const onMessage = (event: MessageEvent<Record<string, unknown>>): void => {
+      const data = event.data;
+      if (!data || data.requestId !== requestId) return;
+      if (data.type === 'progress') {
+        options.progress?.(Number(data.recordsRead), Number(data.recordCount));
         return;
       }
-      if (message.type === 'error') finish(() => reject(new Error(message.message)));
-      else finish(() => resolve({ header: message.header, records: message.records }));
-    });
-    worker.addEventListener('error', () => {
-      finish(() => reject(new Error(`Não foi possível processar ${name} no trabalhador local`)));
-    }, { once: true });
-    worker.addEventListener('messageerror', () => {
-      finish(() => reject(new Error(`O resultado de ${name} não pôde ser transferido do trabalhador local`)));
-    }, { once: true });
+      if (data.type === 'error') {
+        finish(() => reject(new Error(String(data.message))));
+        return;
+      }
+      finish(() => resolve(data as T));
+    };
+    const onFailure = (): void => {
+      disposeDatasetWorker();
+      finish(() => reject(new Error(`${options.label} falhou no trabalhador local`)));
+    };
+    worker.addEventListener('message', onMessage);
+    worker.addEventListener('error', onFailure, { once: true });
+    activeDecode = {
+      cancel: () => {
+        disposeDatasetWorker();
+        finish(() => reject(new Error(`${options.label} cancelada`)));
+      },
+    };
     try {
-      worker.postMessage({ type: 'decode', bytes: source, isDbc }, [source]);
+      worker.postMessage({ ...message, requestId }, options.transfer ?? []);
     } catch (error) {
       finish(() => reject(error instanceof Error ? error : new Error(String(error))));
     }
   });
 }
+
+function datasetProgress(label: string) {
+  return (recordsRead: number, recordCount: number): void => {
+    resultTitle.textContent = recordCount
+      ? `${label}: ${integerFormat.format(recordsRead)} de ${integerFormat.format(recordCount)} registros…`
+      : `${label}: ${integerFormat.format(recordsRead)} registros…`;
+  };
+}
+
+async function openDataset(
+  sources: DatasetWorkerSource[],
+  label: string,
+  fields?: DbfField[],
+): Promise<DbfHeader> {
+  disposeDatasetWorker();
+  const transfer = sources.flatMap((source) => (source.kind === 'binary' ? [source.bytes] : []));
+  const reply = await askDataset<{ header: DbfHeader; recordCount: number }>(
+    { type: 'open', sources, ...(fields ? { fields } : {}) },
+    { label, transfer },
+  );
+  datasetRecordCount = reply.recordCount;
+  return reply.header;
+}
+
+async function appendDataset(source: DatasetWorkerSource, label: string): Promise<DbfHeader> {
+  const transfer = source.kind === 'binary' ? [source.bytes] : [];
+  const reply = await askDataset<{ header: DbfHeader; recordCount: number }>(
+    { type: 'append', source },
+    { label, transfer },
+  );
+  datasetRecordCount = reply.recordCount;
+  return reply.header;
+}
+
+/** Detaches the buffer so a large file is never duplicated on this thread. */
+function transferableBytes(bytes: Uint8Array): ArrayBuffer {
+  return bytes.byteOffset === 0 && bytes.byteLength === bytes.buffer.byteLength
+    ? bytes.buffer as ArrayBuffer
+    : bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 
 async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: LoadedSource): Promise<void> {
   setBusy(`Lendo ${file.name}…`);
@@ -938,16 +1044,15 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   const dataset = parseDelimited(text, extensionOf(file.name) === 'TSV' ? { delimiter: '\t' } : {});
   rememberSource(source);
   activeDatasetSources.splice(0, activeDatasetSources.length, source);
-  records = dataset.records as DbfRecord[];
   const fields = dataset.fields;
-  dbfHeader = {
-    version: 0x03,
-    dateOfLastUpdate: new Date(file.lastModified || Date.now()),
-    recordCount: records.length,
-    headerLength: 32 + fields.length * 32 + 1,
-    recordLength: 1 + fields.reduce((sum, field) => sum + field.length, 0),
+  // A parsed CSV becomes a dataset source like any other, so the same Worker
+  // answers every request and this thread keeps no records for it either.
+  dbfHeader = await openDataset(
+    [{ kind: 'records', name: file.name, records: dataset.records as DbfRecord[] }],
+    `Leitura de ${file.name}`,
     fields,
-  };
+  );
+  dbfHeader = { ...dbfHeader, dateOfLastUpdate: new Date(file.lastModified || Date.now()) };
   currentDatasetFile = null;
   currentCompatibilityProfile = 'modern';
   sourceDbfButton.disabled = true;
@@ -958,7 +1063,7 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   populateControls(chooseDefaultField(fields));
   updateDatasetStats();
   await runAnalysis();
-  showToast(`${file.name}: ${integerFormat.format(records.length)} linhas CSV carregadas`);
+  showToast(`${file.name}: ${integerFormat.format(datasetRecordCount)} linhas CSV carregadas`);
 }
 
 async function loadFile(file: File): Promise<void> {
@@ -978,7 +1083,7 @@ async function loadFile(file: File): Promise<void> {
   };
 
   if (extension === 'DBC' || extension === 'DBF') {
-    if (combineCompatibleFiles.checked && dbfHeader && records.length) {
+    if (combineCompatibleFiles.checked && dbfHeader && datasetRecordCount) {
       await appendCompatibleDbf(bytes, file, extension === 'DBC', source);
       return;
     }
@@ -1036,14 +1141,20 @@ async function downloadSelectedDbf(): Promise<void> {
   try {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
     const conversions = conversionsForPlan(currentPlan);
-    const selected = records.filter((record) => resolvePlanRecord(record, currentPlan!, conversions) !== undefined);
-    if (selected.length !== currentResult.recordsAccepted) {
+    // The Worker selects with the same resolvePlanRecord boundary the table
+    // used, so the exported subset cannot disagree with the accepted count.
+    const reply = await askDataset<{ bytes: ArrayBuffer }>(
+      { type: 'selected-dbf', plan: currentPlan, conversions },
+      { label: 'Exportação de registros selecionados', progress: datasetProgress('Selecionando') },
+    );
+    const bytes = new Uint8Array(reply.bytes);
+    const written = readDbfHeader(bytes).recordCount;
+    if (written !== currentResult.recordsAccepted) {
       throw new Error('A seleção DBF divergiu da contagem aceita; exportação interrompida');
     }
-    const bytes = writeDbf(selected, dbfHeader.fields, { dateOfLastUpdate: dbfHeader.dateOfLastUpdate });
     const filename = `${datasetName.replace(/\.[^.]+$/, '')}-selecionados.dbf`;
     downloadBlob(new Blob([bytes as BlobPart], { type: 'application/x-dbf' }), filename);
-    showToast(`${filename}: ${integerFormat.format(selected.length)} registros`);
+    showToast(`${filename}: ${integerFormat.format(written)} registros`);
   } finally {
     selectedDbfButton.textContent = label;
     selectedDbfButton.disabled = false;
@@ -1110,13 +1221,17 @@ function conversionsForPlan(plan: QueryPlan): Record<string, CnvDefinition> {
 }
 
 async function runAnalysis(): Promise<void> {
-  if (!dbfHeader || !records.length || !rowField.value) return;
+  if (!dbfHeader || !datasetRecordCount || !rowField.value) return;
   setBusy('Montando a tabela…');
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  decodeCancelButton.hidden = false;
   try {
     const plan = buildPlan();
     const conversions = conversionsForPlan(plan);
-    const result = executeInMemory(records, plan, conversions);
+    const { result } = await askDataset<{ result: TabulationResult }>(
+      { type: 'tabulate', plan, conversions },
+      { label: 'Tabulação', progress: datasetProgress('Tabulando') },
+    );
     currentPlan = plan;
     baseResult = result;
     currentResult = result;
@@ -1146,6 +1261,8 @@ async function runAnalysis(): Promise<void> {
     resultTitle.textContent = message;
     showToast(message, true);
     setControlsEnabled(true);
+  } finally {
+    decodeCancelButton.hidden = true;
   }
 }
 
@@ -2617,7 +2734,8 @@ function renderPortableTableStats(table: PortableTableV1): void {
 
 async function openPortableTable(file: File): Promise<void> {
   const table = parsePortableTable(await file.text());
-  records = [];
+  disposeDatasetWorker();
+  datasetRecordCount = 0;
   dbfHeader = null;
   currentDatasetFile = null;
   currentCompatibilityProfile = table.plan.spec.compatibilityProfile;
@@ -2940,8 +3058,8 @@ measureKind.addEventListener('change', () => {
   if (measureKind.value === 'count' || measureField.value) void runAnalysis();
 });
 measureField.addEventListener('change', () => void runAnalysis());
-filterField.addEventListener('change', populateFilterValues);
-filterKind.addEventListener('change', populateFilterValues);
+filterField.addEventListener('change', () => void populateFilterValues());
+filterKind.addEventListener('change', () => void populateFilterValues());
 filterValueSearch.addEventListener('input', searchFilterValues);
 filterMode.addEventListener('change', updateFilterCount);
 qualityField.addEventListener('change', () => {

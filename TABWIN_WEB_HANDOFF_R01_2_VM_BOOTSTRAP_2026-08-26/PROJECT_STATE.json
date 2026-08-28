@@ -1,5 +1,5 @@
 {
-  "revision": "R09-0-B-worker-side-aggregation",
+  "revision": "R09-0-C-worker-owned-dataset",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
@@ -154,6 +154,9 @@
     ,"measured-decode-cost-breakdown-locating-the-record-object-wall"
     ,"plan-field-projection-at-the-decoding-source"
     ,"real-dengbr25-read-end-to-end-in-bounded-memory"
+    ,"worker-owned-dataset-with-no-records-on-the-main-thread"
+    ,"single-streaming-path-for-every-file-size"
+    ,"browser-verified-worker-open-tabulate-profile-distinct-and-export"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -190,11 +193,9 @@
     ,"raw-sentinel-code-meaning-without-def-cnv-evidence"
     ,"clinical-cleaning-presets-without-authoritative-source"
     ,"multi-period-null-category-and-schema-drift-diagnostics"
-    ,"large-national-dbc-streaming-and-chunked-execution"
     ,"sinan-def-cnv-and-tabnet-dimension-registry"
     ,"preliminary-modality-propagated-to-plan-audit-and-recipe"
     ,"message-driven-cancellation-of-an-in-flight-synchronous-decode"
-    ,"large-national-dbc-connected-to-the-interface"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -220,7 +221,7 @@
     "audit-include-table-and-paste-semantics-without-guessing",
     "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
     "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
-    "route-large-official-files-through-the-worker-tabulation-path-in-the-ui",
+    "open-dengbr25-in-a-real-browser-session-end-to-end",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
     "propagate-preliminary-modality-into-plan-audit-and-recipe",
