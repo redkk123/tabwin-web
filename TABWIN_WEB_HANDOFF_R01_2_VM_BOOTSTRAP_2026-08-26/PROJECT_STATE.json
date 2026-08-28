@@ -1,10 +1,10 @@
 {
-  "revision": "CRITICAL-SINAN-DENGUE-fix-progress",
+  "revision": "R09-0-A-bounded-record-stream",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 112,
-    "passed": 112,
+    "total": 121,
+    "passed": 121,
     "failed": 0,
     "command": "npm run check"
   },
@@ -135,6 +135,12 @@
     ,"bounded-4kib-chunk-emitting-pkware-dcl-decoder"
     ,"byte-exact-streamed-dcl-equivalence-on-real-g001-dbc"
     ,"explicit-optional-dbf-eof-byte-policy"
+    ,"dbf-record-assembly-across-arbitrary-chunk-boundaries"
+    ,"bounded-batch-record-delivery-without-materializing-the-dbf"
+    ,"streamed-record-equality-with-published-reader-on-real-rdac2401"
+    ,"measured-flat-peak-record-memory-independent-of-file-size"
+    ,"batch-boundary-cooperative-stream-cancellation"
+    ,"sinan-finals-catalog-audited-against-official-transfer-script"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -174,6 +180,10 @@
     ,"multi-period-null-category-and-schema-drift-diagnostics"
     ,"large-national-dbc-streaming-and-chunked-execution"
     ,"sinan-def-cnv-and-tabnet-dimension-registry"
+    ,"sinan-p-and-esusnotifica-p-preliminary-sources-not-modeled"
+    ,"worker-side-aggregation-over-bounded-record-batches"
+    ,"message-driven-cancellation-of-an-in-flight-synchronous-decode"
+    ,"large-national-dbc-connected-to-the-interface"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -197,7 +207,10 @@
     "run-docs-testing-r06-1-short-oracle-cases",
     "capture-focused-post-table-tabwin-415-oracles",
     "audit-include-table-and-paste-semantics-without-guessing",
-    "implement-large-dataset-record-chunk-store-and-worker-aggregation",
+    "aggregate-bounded-record-batches-inside-the-decode-worker",
+    "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
+    "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
+    "decide-preliminary-versus-final-provenance-before-adding-sinan-p",
     "resolve-research-plan-queries-into-observed-source-manifests",
     "extend-data-quality-to-explicit-cross-field-rules-after-catalog-core",
     "close-cataloged-tabwin-415-feature-families",

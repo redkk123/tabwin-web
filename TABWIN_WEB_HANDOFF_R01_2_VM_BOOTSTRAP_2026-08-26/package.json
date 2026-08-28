@@ -18,6 +18,8 @@
     "verify:datasus-live": "npm run build && node scripts/verify-datasus-live.mjs",
     "materialize:g001": "npm run build && node scripts/materialize-g001.mjs",
     "verify:g001": "npm run build && node scripts/verify-g001-local.mjs",
+    "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
+    "bench:record-stream": "npm run build && node --expose-gc --max-old-space-size=6144 scripts/measure-record-stream-memory.mjs",
     "check": "npm run test && npm run typecheck:web && npm run web:build"
   },
   "dependencies": {
