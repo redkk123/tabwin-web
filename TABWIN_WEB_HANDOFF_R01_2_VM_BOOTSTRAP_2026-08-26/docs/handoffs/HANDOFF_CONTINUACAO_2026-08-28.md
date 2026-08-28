@@ -6,44 +6,47 @@ Para quem continuar o TabWin Web, humano ou modelo. Leia junto com
 ## ESTADO
 
 Tudo commitado e enviado para a `main` de `redkk123/tabwin-web`. Working tree
-limpo. Gate `npm run check` verde. G001 inalterado e ainda `pass` com
-tolerância zero.
+limpo. `npm run check` verde com **148 testes**. G001 inalterado e ainda `pass`
+com tolerância zero.
 
-O site publicado no GitHub Pages **continua atrás de todos os commits abaixo**.
-Nenhum deploy foi autorizado.
+O site publicado no GitHub Pages **continua atrás de todos os commits abaixo**,
+inclusive da correção da busca nacional. Nenhum deploy foi autorizado.
 
 ## AMBIENTE
 
 VM Windows no Google Cloud. O `winget` não instala Node aqui — o MSI exige
-elevação UAC impossível numa sessão headless. Node 24.19.0 portátil em:
+elevação UAC impossível numa sessão headless. Node 24.19.0 portátil em
+`C:\Users\angelogabriel860\tools\node-v24.19.0-win-x64`, já no PATH do usuário.
 
-```
-C:\Users\angelogabriel860\tools\node-v24.19.0-win-x64
-```
-
-Já está no PATH do usuário; sessões antigas precisam do prefixo. Depois de
-`npm ci`, rode `npm rebuild esbuild workerd` — o npm 11.17 bloqueia postinstall
-e o build Vite falha sem os binários de plataforma.
+Depois de `npm ci`, rode `npm rebuild esbuild workerd`: o npm 11.17 bloqueia
+postinstall e o build Vite falha sem os binários de plataforma.
 
 Projeto em `C:\projetos\tabwin-web\TABWIN_WEB_HANDOFF_R01_2_VM_BOOTSTRAP_2026-08-26`.
-Assets privados do oracle fora do Git em `C:\projetos\tabwin-private\oracle\`,
-incluindo agora `large/DENGBR25.dbc` baixado do DATASUS.
+Assets privados fora do Git em `C:\projetos\tabwin-private\oracle\`, incluindo
+`large/DENGBR25.dbc` baixado do DATASUS.
 
-Regras de convivência e backup em `C:\projetos\PROTOCOLO_VM_COMPARTILHADA.md`.
-Histórico do que foi feito em `C:\projetos\OPERACOES_LOG.md`. Backup antes de
-qualquer operação de risco: `C:\projetos\scripts\backup-tabwin.ps1`.
+Regras de convivência em `C:\projetos\PROTOCOLO_VM_COMPARTILHADA.md`, histórico
+em `C:\projetos\OPERACOES_LOG.md`, backup em
+`C:\projetos\scripts\backup-tabwin.ps1`.
 
-## O QUE FOI ENTREGUE HOJE
+Para rodar o app: `C:\projetos\.claude\launch.json` já aponta para o Vite com o
+root correto.
+
+## O QUE FOI ENTREGUE
 
 | Commit | Entrega |
 | --- | --- |
-| `5f9cc8a` | Restauração da árvore de trabalho do kit de migração, que só existia em disco |
+| `5f9cc8a` | Restauração da árvore de trabalho que só existia em disco |
 | `53a4645` | Leitura de registros em blocos limitados |
-| `bb440a8` | **Correção crítica**: consulta nacional devolvia catálogo vazio |
+| `bb440a8` | **Correção crítica**: busca nacional devolvia catálogo vazio |
 | `909d547` | Regras de qualidade cruzadas entre campos |
 | `d7ade22` | Agregação da tabulação dentro do Worker |
 | `ba1aa14` | Forma incremental limitada para todo consumidor de registros |
 | `fafd88b` | Medição de onde vai o tempo ao abrir um DBC |
+| `9110d78` | Decodificar somente os campos que o plano lê |
+| `09a0d84` | Medição da projeção no arquivo real do Dengue |
+| `2f3675c` | O conjunto de dados passa a morar no Worker |
+| `2ea8ee7` | Prova do Dengue abrindo em navegador |
 
 Cada um tem relatório em `docs/handoffs/`.
 
@@ -53,101 +56,88 @@ Cada um tem relatório em `docs/handoffs/`.
 comentário afirmando que o catálogo oficial representa cobertura nacional
 omitindo a UF. A premissa é falsa: o endpoint exige `uf[]=BR`.
 
-Consequência: **buscar qualquer arquivo nacional no app sempre devolvia "nenhum
-arquivo encontrado"** — os 58 tipos do SINAN, SINASC/DNEX, SIM/DO, PO. Os testes
-fixavam a omissão defeituosa, então passavam enquanto o produto não funcionava.
+Consequência: **buscar qualquer arquivo nacional sempre devolvia "nenhum arquivo
+encontrado"** — os 58 tipos do SINAN, SINASC/DNEX, SIM/DO, PO. Os testes fixavam
+a omissão defeituosa, então passavam enquanto o produto não funcionava.
 
-Detalhes e evidência em `CRITICAL_NATIONAL_CATALOG_UF_FIX_REPORT.md`.
+Detalhes em `CRITICAL_NATIONAL_CATALOG_UF_FIX_REPORT.md`.
 
-## O BLOQUEIO QUE CONTINUA
+## O BLOQUEIO DO DENGUE ACABOU
 
-`DENGBR25.dbc` ainda não abre na interface. O que já existe:
+O `DENGBR25.dbc` abre e tabula na interface. Verificado em navegador com o
+arquivo verdadeiro: 1.643.215 registros, 121 campos, tabela `MUNICIPIO` com
+1.927 linhas e total 99.257, com **38 MiB de heap na thread principal** para um
+DBF que declara 511 MiB. Conferido contra execução independente em Node:
+idêntico.
 
-- decodificador PKWARE DCL que emite blocos de 4 KiB, provado byte a byte;
-- montagem de registros através de fronteiras arbitrárias de bloco, provada
-  idêntica ao leitor publicado sobre o `RDAC2401.dbc` real;
-- acumulador de tabulação incremental, limitado por células distintas e não por
-  registros, provado idêntico à execução de uma vez;
-- Worker que agrega e devolve só a tabela;
-- forma incremental limitada para perfil numérico, combinações, valores
-  distintos e exportação de selecionados.
+Como chegou lá, em ordem: decodificador DCL em blocos de 4 KiB, montagem de
+registros através de fronteiras arbitrárias, acumulador incremental limitado por
+células distintas, projeção pelos campos do plano, e o Worker dono do conjunto.
 
-Falta a última milha, e ela **não é ligar fio na interface**. Ver abaixo.
+Medições que sustentam o desenho, todas reproduzíveis:
 
-## POR QUE NÃO BASTA LIGAR NA INTERFACE
+- `bench:decode-breakdown` — 91% do custo é criar objeto de registro, não
+  descomprimir;
+- `bench:plan-projection` — no Dengue real, 13,2 s projetado contra 190,9 s sem
+  projeção, resultado idêntico;
+- `bench:record-stream` — pico de memória em lotes não cresce com o arquivo.
 
-Medido, não estimado (`npm run bench:decode-breakdown`):
+## O QUE FALTA, POR BLOCO DO DOCUMENTO MESTRE
 
-- descompressão DCL: 35 ms sobre o `RDAC2401.dbc`;
-- bytes mais registros: 386 ms sobre o mesmo arquivo;
-- **91% do tempo é criar objeto JavaScript de registro**, não descomprimir.
+Contra o backlog de 42 itens do `CODEX_MASTER_HANDOFF_TABWIN_WEB.md`:
 
-O `DENGBR25.dbc` real tem **1.643.215 registros**, 326 bytes cada, 121 campos,
-511 MiB de DBF declarado. Uma passada completa custa da ordem de dois a três
-minutos nesta VM.
+**P0 (1–14) — fechado.** Ressalva: existe **um** golden só, o G001. A seção 12
+do documento pede uma bateria por subsistema.
 
-Isso descarta dois desenhos:
+**P1 (15–25) — 7 de 11.** Faltam: log da tabulação `.LST` (18), `.TAB`
+archaeology/replay (21), tabela grande virtualizada (23 — hoje corta em 500
+linhas), editor/inspector DEF/CNV (24).
 
-1. Worker guarda os bytes e re-decodifica a cada análise — trocar um filtro
-   custaria minutos.
-2. Guardar registros como objeto JavaScript — 1,2 milhão de registros já custou
-   376 MiB medidos.
+**P2 (26–35) — 5 de 10, e os 5 parciais.** Gráficos sem editor de eixos/zoom/
+impressão; mapas sem quebras manuais, camadas, legendas e sedes. Faltam
+inteiros: seleção espacial (31), distâncias (32), fluxos origem-destino (33),
+import geográfico (34), notas técnicas (35).
 
-## A PROJEÇÃO JÁ RESOLVEU O BLOQUEIO
+**P3 (36–42) — 1 de 7.** Feito: data-quality (42). Parciais: 40 e 41, existe
+diff de manifesto de fontes mas não diff entre execuções. Faltam: SQL local via
+DuckDB (36), export SQL/R/Python (37), plugin de análise (38), substituto
+moderno do RX (39).
 
-`packages/core/src/plan-fields.ts` enumera os campos que o plano lê, e o fluxo
-em blocos aceita `fields` para decodificar só esses. Medido sobre o Dengue real
-com `npm run bench:plan-projection`:
+**Arquitetura, Parte II.** Lacunas estruturais: cache em camadas só tem o L1
+(raw, IndexedDB) — **faltam L2 normalizado e L3 de resultado**; Concept Registry
+deferido por falta de fonte autoritativa; Progressive Research Query tem
+fundação e não o resolvedor; Schema Registry é só checagem; **não há teste
+end-to-end** (sem Playwright).
 
-| Caminho | Tempo |
-| --- | --- |
-| Só descompressão DCL | 7,3 s |
-| Tabulação com os 3 campos do plano | **13,2 s** |
-| Tabulação com os 121 campos | 190,9 s |
+## PRÓXIMO PASSO QUE EU RECOMENDO
 
-Resultado idêntico nos dois casos: 4.815 linhas, 1.629.310 registros aceitos.
+**L3 result cache.** Hoje cada reanálise repete uma passada inteira: trocar um
+filtro no Dengue custa os 13 s de novo. Um cache de resultado por plano
+transforma isso em instantâneo e é a diferença entre abrir o arquivo e
+realmente trabalhar com ele.
 
-Isso é de baixo risco semântico porque o executor continua recebendo
-`DataRecord` e rodando o mesmo código; o ganho vem de decodificar 3 campos em
-vez de 121.
+Depois dele, a **bateria de goldens** — é o que sustenta a palavra
+"compatível", e hoje ela se apoia num caso só.
 
-**Portanto o armazenamento colunar não é mais pré-requisito.** Ele continua
-valendo como otimização de reanálise, levando 13 s para milissegundos, mas não
-bloqueia o Dengue. O piso é a descompressão: 7,3 s dos 13,2 s.
+## ARMADILHAS QUE CUSTARAM TEMPO
 
-Se alguém for mesmo implementar o colunar: cardinalidade medida no Dengue não
-passa de 29.539 por coluna, índice de 2 bytes serve para todas, e as 121
-colunas somam cerca de 228 MiB. E a regra que não pode ser quebrada: qualquer
-executor colunar precisa **provar igualdade com `resolvePlanRecord`** antes de
-substituí-lo, do mesmo jeito que o acumulador em lotes foi provado. G001
-sozinho não cobre CNV, `startPosition`, faixas numéricas, não classificados nem
-regras cruzadas.
-
-## O QUE FALTA DE VERDADE
-
-Ligar o caminho na interface, e como **caminho único**, não como desvio para
-arquivo grande. O `main.ts` ainda carrega registros para um array residente e
-seis consumidores leem esse array. Todos já têm forma incremental limitada
-(`ba1aa14`), então a troca é mecânica: uma passada em lote alimentando os
-acumuladores, com o Worker devolvendo só resultado.
-
-## OUTRAS PENDÊNCIAS
-
-- Interface para regras cruzadas e perfil de combinações: o núcleo está pronto
-  e testado, mas nada aparece na tela.
-- Propagar a modalidade preliminar até a auditoria e a receita. O DATASUS
-  resolve preliminar contra final pelo ano consultado, e o app já recebe
-  `modality`, mas ela para na lista do catálogo.
-- CI do GitHub Actions bloqueado por billing da conta, não por teste vermelho.
-- Deploy do Pages nunca autorizado.
+- **Teste verde não é prova de produto funcionando.** O bug do `uf=BR` passou
+  por 121 testes verdes porque os testes fixavam o comportamento defeituoso.
+- **Meça antes de desenhar.** Três desenhos meus foram derrubados por medição:
+  re-decodificar por análise (80 s por filtro), guardar registros como objeto
+  (376 MiB por 1,2 milhão), e a suposição de que o colunar era pré-requisito.
+- **O painel de pré-visualização desta VM não compõe quadros**, então
+  `requestAnimationFrame` não dispara sozinho e `runAnalysis` fica esperando.
+  Um screenshot força o quadro. É limitação do ambiente, mas vale trocar esse
+  `await` por `setTimeout` de zero.
 
 ## O QUE NÃO FAZER
 
 - Não adicionar `SINAN_P` nem `ESUSNOTIFICA_p` ao seletor. Foram medidos:
-  devolvem resposta idêntica a `SINAN` e `ESUSNOTIFICA`. Ver a correção em
+  devolvem resposta idêntica a `SINAN` e `ESUSNOTIFICA`, porque o serviço
+  resolve preliminar contra final pelo ano consultado. Ver
   `SINAN_CATALOG_AUDIT_2026-08-28.md`.
 - Não alterar golden nem G001 para fazer teste passar.
-- Não criar um segundo caminho de leitura só para arquivo grande. O ponto do
-  trabalho de hoje foi justamente evitar isso.
-- Não confiar em teste verde como prova de que o produto funciona: o bug do
-  `uf=BR` passou por 121 testes verdes.
+- Não criar um segundo caminho de leitura para arquivo grande. Existe um
+  caminho só, sem limiar de tamanho, e foi trabalho para chegar nele.
+- Não embutir preset clínico de implausibilidade sem fonte citada.
