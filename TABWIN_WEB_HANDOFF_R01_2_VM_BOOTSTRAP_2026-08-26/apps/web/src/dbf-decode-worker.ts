@@ -13,6 +13,7 @@ import {
   type DbfStreamSummary,
 } from '../../../packages/acquisition/src/dbf-record-stream.ts';
 import { createTabulationAccumulator, type ConversionRegistry } from '../../../packages/core/src/execute.ts';
+import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
 import type { QueryPlan, TabulationResult } from '../../../packages/core/src/model.ts';
 
 interface DecodeRequest {
@@ -130,9 +131,13 @@ function tabulate(request: TabulateRequest): void {
       }
     };
 
+    // Decode only what the plan reads. Record decoding is the dominant cost of
+    // opening a DATASUS file, and a tabulation names a handful of fields out of
+    // the hundred-odd a national file declares.
+    const fields = fieldsUsedByPlan(request.plan);
     const summary = request.isDbc
-      ? streamDbcRecords(source, consume, { batchSize })
-      : streamDbfRecords(source, consume, { batchSize });
+      ? streamDbcRecords(source, consume, { batchSize, fields })
+      : streamDbfRecords(source, consume, { batchSize, fields });
     const { header, ...stream } = summary;
 
     workerScope.postMessage({

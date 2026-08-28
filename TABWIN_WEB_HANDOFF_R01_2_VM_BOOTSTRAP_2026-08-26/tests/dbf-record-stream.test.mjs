@@ -227,3 +227,39 @@ test('streaming refuses a header whose record geometry is unusable', () => {
     /contagem de registros inválida/,
   );
 });
+
+test('projecting to a field subset preserves those values exactly', async () => {
+  const { bytes, header } = buildFixture();
+  const full = collect(bytes, header, 7, { batchSize: 64 });
+  const projected = collect(bytes, header, 7, { batchSize: 64, fields: ['TEXTO', 'CODIGO'] });
+
+  assert.equal(projected.records.length, full.records.length);
+  assert.deepEqual(
+    projected.records,
+    full.records.map((record) => ({ TEXTO: record.TEXTO, CODIGO: record.CODIGO })),
+    'os campos projetados devem ser idênticos ao decode completo',
+  );
+  // Skipped fields are absent, not null, so a consumer cannot confuse a
+  // projected-away field with a genuinely empty one.
+  assert.equal('IDADE' in projected.records[0], false);
+  assert.deepEqual(projected.summary.recordsEmitted, full.summary.recordsEmitted);
+});
+
+test('projection preserves offsets when the skipped field sits in the middle', () => {
+  const { bytes, header } = buildFixture();
+  const full = collect(bytes, header, 5, { batchSize: 64 });
+  // DATA sits between QTD and ATIVO; skipping it must not shift ATIVO/CODIGO.
+  const projected = collect(bytes, header, 5, { batchSize: 64, fields: ['QTD', 'ATIVO', 'CODIGO'] });
+  assert.deepEqual(
+    projected.records,
+    full.records.map(({ QTD, ATIVO, CODIGO }) => ({ QTD, ATIVO, CODIGO })),
+  );
+});
+
+test('projection rejects a field the DBF does not declare', () => {
+  const { bytes, header } = buildFixture();
+  assert.throws(
+    () => collect(bytes, header, 64, { fields: ['TEXTO', 'INEXISTENTE'] }),
+    /Campo inexistente no DBF: INEXISTENTE/,
+  );
+});
