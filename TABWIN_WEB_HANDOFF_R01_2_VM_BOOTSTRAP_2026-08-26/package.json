@@ -21,6 +21,7 @@
     "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
     "bench:record-stream": "npm run build && node --expose-gc --max-old-space-size=6144 scripts/measure-record-stream-memory.mjs",
     "bench:decode-breakdown": "npm run build && node scripts/measure-decode-breakdown.mjs",
+    "bench:plan-projection": "npm run build && node --max-old-space-size=8192 scripts/measure-plan-projection.mjs",
     "check": "npm run test && npm run typecheck:web && npm run web:build"
   },
   "dependencies": {

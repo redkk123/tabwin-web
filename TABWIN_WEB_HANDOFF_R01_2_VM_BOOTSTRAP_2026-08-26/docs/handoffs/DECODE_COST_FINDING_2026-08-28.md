@@ -46,15 +46,41 @@ Descarta também guardar os registros como objetos JavaScript: é justamente a
 representação que a medição de memória já mostrou custar 376 MiB para 1,2
 milhão de registros.
 
-## O QUE ISSO INDICA
+## MEDIDO NO ARQUIVO REAL
 
-A representação de registro é a parede. O caminho que resta é **armazenamento
-colunar**: decodificar uma vez, a partir do fluxo em blocos que já existe, para
-colunas tipadas com strings dicionarizadas, e executar cada análise sobre as
-colunas.
+O `DENGBR25.dbc` foi baixado do DATASUS e lido inteiro pelo fluxo em blocos:
+**1.643.215 registros**, 326 bytes cada, 121 campos, 511 MiB de DBF declarado e
+nunca materializado, em 130.784 blocos.
 
-O trabalho em blocos não foi desvio: ele é a metade da frente desse desenho,
-porque é o que permite construir as colunas sem materializar 511 MiB de DBF.
+Cardinalidade observada: **nenhuma coluna passa de 29.539 valores distintos**
+(`ID_UNIDADE`). Índice de 2 bytes serve para todas, e o total colunar das 121
+colunas fica em cerca de 228 MiB.
+
+## A PROJEÇÃO RESOLVE, E O COLUNAR NÃO É PRÉ-REQUISITO
+
+Como só a criação de objeto custa caro, decodificar apenas os campos que o
+plano nomeia elimina quase todo o custo. Medido com
+`npm run bench:plan-projection` sobre o Dengue real, plano de
+`ID_MUNICIP` por `CS_SEXO` com filtro em `NU_IDADE_N`:
+
+| Caminho | Tempo |
+| --- | --- |
+| Só descompressão DCL | 7,3 s |
+| Tabulação decodificando os 3 campos do plano | **13,2 s** |
+| Tabulação decodificando os 121 campos | 190,9 s |
+
+**14,5x mais rápido, com resultado idêntico** (`projectedEqualsFull: true`):
+4.815 linhas, 3 colunas, 1.629.310 registros aceitos.
+
+Conclusão que corrige a expectativa anterior deste documento: **o
+armazenamento colunar deixa de ser pré-requisito para abrir o Dengue.** Treze
+segundos com progresso é uso aceitável. O colunar continua valendo como
+otimização para reanálises repetidas, levando 13 s para a casa dos
+milissegundos, mas não bloqueia mais nada.
+
+O piso é a descompressão: 7,3 s dos 13,2 s. Nenhum trabalho sobre a
+representação de registro desce abaixo disso sem guardar bytes descomprimidos
+ou colunas.
 
 ## RISCO A RESPEITAR
 

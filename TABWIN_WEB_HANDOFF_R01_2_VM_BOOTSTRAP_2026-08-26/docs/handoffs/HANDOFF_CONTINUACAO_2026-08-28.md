@@ -93,26 +93,43 @@ Isso descarta dois desenhos:
 2. Guardar registros como objeto JavaScript — 1,2 milhão de registros já custou
    376 MiB medidos.
 
-## PRÓXIMO PASSO, COM O RISCO EXPLÍCITO
+## A PROJEÇÃO JÁ RESOLVEU O BLOQUEIO
 
-Armazenamento colunar alimentado pelo fluxo em blocos que já existe, com
-**projeção**: o executor só precisa dos campos que o plano nomeia, e
-`packages/core/src/plan-fields.ts` já enumera exatamente esses campos.
+`packages/core/src/plan-fields.ts` enumera os campos que o plano lê, e o fluxo
+em blocos aceita `fields` para decodificar só esses. Medido sobre o Dengue real
+com `npm run bench:plan-projection`:
 
-A projeção é o que torna isso viável e de baixo risco semântico: o executor
-continua recebendo `DataRecord` e rodando o mesmo código, então a compatibilidade
-não muda. O ganho vem de decodificar 3 ou 4 campos em vez de 121.
+| Caminho | Tempo |
+| --- | --- |
+| Só descompressão DCL | 7,3 s |
+| Tabulação com os 3 campos do plano | **13,2 s** |
+| Tabulação com os 121 campos | 190,9 s |
 
-Cuidado obrigatório antes de guardar todas as colunas: **não cabe**. 121 colunas
-por 1,64 milhão de registros custa no mínimo 198 MiB só de índices de 1 byte, e
-realisticamente o dobro. Quem implementar precisa decidir entre guardar apenas
-as colunas em uso, persistir colunas em IndexedDB e carregar sob demanda, ou
-reingerir quando o usuário pedir um campo novo. Meça antes de escolher.
+Resultado idêntico nos dois casos: 4.815 linhas, 1.629.310 registros aceitos.
 
-Regra que não pode ser quebrada: qualquer executor colunar precisa **provar
-igualdade com `resolvePlanRecord`** sobre os mesmos dados antes de substituí-lo,
-do mesmo jeito que o acumulador em lotes foi provado. G001 sozinho não cobre
-CNV, `startPosition`, faixas numéricas, não classificados nem regras cruzadas.
+Isso é de baixo risco semântico porque o executor continua recebendo
+`DataRecord` e rodando o mesmo código; o ganho vem de decodificar 3 campos em
+vez de 121.
+
+**Portanto o armazenamento colunar não é mais pré-requisito.** Ele continua
+valendo como otimização de reanálise, levando 13 s para milissegundos, mas não
+bloqueia o Dengue. O piso é a descompressão: 7,3 s dos 13,2 s.
+
+Se alguém for mesmo implementar o colunar: cardinalidade medida no Dengue não
+passa de 29.539 por coluna, índice de 2 bytes serve para todas, e as 121
+colunas somam cerca de 228 MiB. E a regra que não pode ser quebrada: qualquer
+executor colunar precisa **provar igualdade com `resolvePlanRecord`** antes de
+substituí-lo, do mesmo jeito que o acumulador em lotes foi provado. G001
+sozinho não cobre CNV, `startPosition`, faixas numéricas, não classificados nem
+regras cruzadas.
+
+## O QUE FALTA DE VERDADE
+
+Ligar o caminho na interface, e como **caminho único**, não como desvio para
+arquivo grande. O `main.ts` ainda carrega registros para um array residente e
+seis consumidores leem esse array. Todos já têm forma incremental limitada
+(`ba1aa14`), então a troca é mecânica: uma passada em lote alimentando os
+acumuladores, com o Worker devolvendo só resultado.
 
 ## OUTRAS PENDÊNCIAS
 
