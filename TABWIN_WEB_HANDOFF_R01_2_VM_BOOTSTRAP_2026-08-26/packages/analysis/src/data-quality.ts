@@ -37,6 +37,55 @@ export interface FieldCombinationProfile {
 
 const DEFAULT_COMBINATION_LIMIT = 50;
 const DEFAULT_MAX_COMBINATIONS = 200_000;
+/** One retained numeric column: 5 million values is roughly 40 MiB. */
+const DEFAULT_MAX_RETAINED_VALUES = 5_000_000;
+
+/**
+ * Incremental profiler fed by bounded record batches.
+ *
+ * Every one-shot profile in this module is a thin wrapper over its accumulator,
+ * so the streaming and in-memory paths can never drift apart.
+ */
+export interface ProfileAccumulator<T> {
+  push(records: Iterable<DataRecord>): void;
+  finish(): T;
+}
+
+/**
+ * Collects the distinct values of one field for the filter picker.
+ *
+ * Bounded by construction: once `limit` values are known it keeps counting
+ * records but stops growing, so a high-cardinality field cannot exhaust memory.
+ */
+export function createDistinctValueCollector(
+  field: string,
+  limit = 500,
+): ProfileAccumulator<{ values: string[]; truncated: boolean }> {
+  if (!field.trim()) throw new Error('distinct values require a field');
+  if (!Number.isSafeInteger(limit) || limit < 1) throw new Error(`limite inválido de valores distintos: ${limit}`);
+  const values = new Set<string>();
+  let truncated = false;
+
+  return {
+    push(records: Iterable<DataRecord>): void {
+      for (const record of records) {
+        const raw = record[field];
+        if (raw === null || raw === undefined) continue;
+        if (values.size >= limit) {
+          truncated = true;
+          continue;
+        }
+        values.add(String(raw));
+      }
+    },
+    finish() {
+      return {
+        values: [...values].sort((left, right) => left.localeCompare(right, 'pt-BR', { numeric: true })),
+        truncated,
+      };
+    },
+  };
+}
 
 function combinationValue(raw: unknown): string | null {
   if (raw === null || raw === undefined) return null;
@@ -53,11 +102,10 @@ function combinationValue(raw: unknown): string | null {
  * `CrossFieldRuleSpec`. No clinical or epidemiological meaning is applied
  * here, because the project has no oracle for any.
  */
-export function profileFieldCombinations(
-  records: readonly DataRecord[],
+export function createFieldCombinationProfiler(
   fields: readonly string[],
   options: { limit?: number; maxCombinations?: number } = {},
-): FieldCombinationProfile {
+): ProfileAccumulator<FieldCombinationProfile> {
   const requested = fields.map((field) => field.trim());
   if (requested.length < 2) throw new Error('combination profile requires at least two fields');
   if (requested.some((field) => !field)) throw new Error('combination profile requires non-empty fields');
@@ -71,41 +119,59 @@ export function profileFieldCombinations(
 
   const counts = new Map<string, { values: Array<string | null>; records: number }>();
   let truncated = false;
-  for (const record of records) {
-    const values = requested.map((field) => combinationValue(record[field]));
-    // JSON is injective for Array<string | null>, so no separator character
-    // can collide with a real field value and absence stays distinct from ''.
-    const key = JSON.stringify(values);
-    const existing = counts.get(key);
-    if (existing) {
-      existing.records += 1;
-      continue;
+  let total = 0;
+
+  function push(records: Iterable<DataRecord>): void {
+    for (const record of records) {
+      total += 1;
+      const values = requested.map((field) => combinationValue(record[field]));
+      // JSON is injective for Array<string | null>, so no separator character
+      // can collide with a real field value and absence stays distinct from ''.
+      const key = JSON.stringify(values);
+      const existing = counts.get(key);
+      if (existing) {
+        existing.records += 1;
+        continue;
+      }
+      if (counts.size >= maxCombinations) {
+        truncated = true;
+        continue;
+      }
+      counts.set(key, { values, records: 1 });
     }
-    if (counts.size >= maxCombinations) {
-      truncated = true;
-      continue;
-    }
-    counts.set(key, { values, records: 1 });
   }
 
-  const total = records.length;
-  const combinations = [...counts.entries()]
-    .sort(([leftKey, left], [rightKey, right]) =>
-      left.records - right.records || leftKey.localeCompare(rightKey))
-    .slice(0, limit)
-    .map(([, entry]) => ({
-      values: entry.values,
-      records: entry.records,
-      share: total ? entry.records / total : 0,
-    }));
+  function finish(): FieldCombinationProfile {
+    const combinations = [...counts.entries()]
+      .sort(([leftKey, left], [rightKey, right]) =>
+        left.records - right.records || leftKey.localeCompare(rightKey))
+      .slice(0, limit)
+      .map(([, entry]) => ({
+        values: entry.values,
+        records: entry.records,
+        share: total ? entry.records / total : 0,
+      }));
 
-  return {
-    fields: requested,
-    totalRecords: total,
-    distinctCombinations: counts.size,
-    truncated,
-    combinations,
-  };
+    return {
+      fields: requested,
+      totalRecords: total,
+      distinctCombinations: counts.size,
+      truncated,
+      combinations,
+    };
+  }
+
+  return { push, finish };
+}
+
+export function profileFieldCombinations(
+  records: readonly DataRecord[],
+  fields: readonly string[],
+  options: { limit?: number; maxCombinations?: number } = {},
+): FieldCombinationProfile {
+  const profiler = createFieldCombinationProfiler(fields, options);
+  profiler.push(records);
+  return profiler.finish();
 }
 
 function numericValue(raw: unknown): number | undefined {
@@ -127,23 +193,74 @@ function quantile(sorted: readonly number[], probability: number): number | unde
   return start + (end - start) * fraction;
 }
 
-/** Descriptive diagnostics only. Nothing is removed or rewritten here. */
-export function profileNumericField(records: readonly DataRecord[], field: string): NumericFieldProfile {
+/**
+ * Descriptive diagnostics only. Nothing is removed or rewritten here.
+ *
+ * Quartiles need every value, so this retains the profiled column — and only
+ * that column. Beyond {@link DEFAULT_MAX_RETAINED_VALUES} it fails with an
+ * explicit capacity message instead of quietly profiling a truncated sample,
+ * because quantiles over a silent subset would be misleading rather than
+ * merely incomplete.
+ */
+export function createNumericFieldProfiler(
+  field: string,
+  options: { maxRetainedValues?: number } = {},
+): ProfileAccumulator<NumericFieldProfile> {
   if (!field.trim()) throw new Error('numeric profile requires a field');
+  const maxRetainedValues = options.maxRetainedValues ?? DEFAULT_MAX_RETAINED_VALUES;
+  if (!Number.isSafeInteger(maxRetainedValues) || maxRetainedValues < 1) {
+    throw new Error(`limite inválido de valores retidos: ${maxRetainedValues}`);
+  }
   const values: number[] = [];
+  let totalRecords = 0;
   let missingRecords = 0;
   let invalidRecords = 0;
-  for (const record of records) {
-    const raw = record[field];
-    if (raw === null || raw === undefined || String(raw).trim() === '') {
-      missingRecords++;
-      continue;
+
+  function push(records: Iterable<DataRecord>): void {
+    for (const record of records) {
+      totalRecords += 1;
+      const raw = record[field];
+      if (raw === null || raw === undefined || String(raw).trim() === '') {
+        missingRecords++;
+        continue;
+      }
+      const value = numericValue(raw);
+      if (value === undefined) {
+        invalidRecords++;
+        continue;
+      }
+      if (values.length >= maxRetainedValues) {
+        throw new Error(
+          `O perfil numérico de ${field} precisaria reter mais de ${maxRetainedValues.toLocaleString('pt-BR')} valores. `
+          + 'Quartis sobre uma amostra truncada seriam enganosos, então o perfil não foi calculado. '
+          + 'Reduza o conjunto com um filtro antes de perfilar.',
+        );
+      }
+      values.push(value);
     }
-    const value = numericValue(raw);
-    if (value === undefined) invalidRecords++;
-    else values.push(value);
   }
-  values.sort((left, right) => left - right);
+
+  function finish(): NumericFieldProfile {
+    return summarizeNumericValues(field, [...values].sort((left, right) => left - right), {
+      totalRecords, missingRecords, invalidRecords,
+    });
+  }
+
+  return { push, finish };
+}
+
+export function profileNumericField(records: readonly DataRecord[], field: string): NumericFieldProfile {
+  const profiler = createNumericFieldProfiler(field);
+  profiler.push(records);
+  return profiler.finish();
+}
+
+function summarizeNumericValues(
+  field: string,
+  values: readonly number[],
+  counts: { totalRecords: number; missingRecords: number; invalidRecords: number },
+): NumericFieldProfile {
+  const { totalRecords, missingRecords, invalidRecords } = counts;
   const firstQuartile = quantile(values, .25);
   const median = quantile(values, .5);
   const thirdQuartile = quantile(values, .75);
@@ -155,7 +272,7 @@ export function profileNumericField(records: readonly DataRecord[], field: strin
     ? 0 : values.filter((value) => value < lowerIqrFence || value > upperIqrFence).length;
   const base = {
     field,
-    totalRecords: records.length,
+    totalRecords,
     numericRecords: values.length,
     missingRecords,
     invalidRecords,
