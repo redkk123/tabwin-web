@@ -157,6 +157,7 @@
     ,"worker-owned-dataset-with-no-records-on-the-main-thread"
     ,"single-streaming-path-for-every-file-size"
     ,"browser-verified-worker-open-tabulate-profile-distinct-and-export"
+    ,"real-dengbr25-opened-and-tabulated-in-a-browser-session"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -221,7 +222,7 @@
     "audit-include-table-and-paste-semantics-without-guessing",
     "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
     "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
-    "open-dengbr25-in-a-real-browser-session-end-to-end",
+    "add-an-l3-result-cache-so-reanalysis-does-not-repeat-a-full-pass",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
     "propagate-preliminary-modality-into-plan-audit-and-recipe",

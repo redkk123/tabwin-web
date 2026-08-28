@@ -71,8 +71,27 @@ navegador comum não há sintoma; ainda assim, vale trocar essa espera por
 Vite. `fixtures/golden/G001` inalterado e `npm run verify:g001` continua `pass`
 com tolerância zero.
 
+## O DENGUE ABRIU NO NAVEGADOR
+
+O `DENGBR25.dbc` verdadeiro, 63,2 MiB, foi carregado pelo seletor de arquivos
+da interface e tabulado:
+
+- estatísticas: **1.643.215 registros ativos, 121 campos**, 63.2 MB, SHA-256
+  `87831a1ee6`;
+- tabela `MUNICIPIO` por `Freqüência`, **1.927 linhas localizadas**, total
+  **99.257**, primeira linha `0` com **33.232**;
+- **38 MiB de heap JavaScript na thread principal** — para um arquivo cujo DBF
+  declara 511 MiB.
+
+Conferido contra uma execução independente em Node sobre o mesmo arquivo e o
+mesmo plano: 1.927 linhas, 1.643.215 vistos, 99.257 aceitos, total 99.257,
+primeira linha `0` com 33.232. **Idêntico.**
+
+O total de 99.257 não é erro: `MUNICIPIO` é pouco preenchido no SINAN Dengue, e
+registro sem valor de linha não entra na tabela — semântica do executor que já
+existia e não foi tocada.
+
 ## AINDA NÃO FEITO
 
-O `DENGBR25.dbc` **não foi aberto numa sessão real de navegador**. O caminho
-está pronto e medido fora do navegador (13,2 s para tabular), mas a prova em
-navegador com esse arquivo continua pendente.
+Reanálise continua custando uma passada inteira, porque nada é guardado entre
+pedidos. É aí que entra o cache de resultado L3 previsto na arquitetura.
