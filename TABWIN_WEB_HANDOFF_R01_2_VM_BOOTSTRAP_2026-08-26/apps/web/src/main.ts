@@ -1904,7 +1904,8 @@ function selectedCatalogValues(select: HTMLSelectElement): string[] {
 }
 
 function catalogQueryLabel(query: DatasusSearchQuery): string {
-  return [query.year, query.month, query.uf ?? 'Brasil'].filter(Boolean).join(' · ');
+  const coverage = !query.uf || query.uf === 'BR' ? 'Brasil' : query.uf;
+  return [query.year, query.month, coverage].filter(Boolean).join(' · ');
 }
 
 function renderAvailabilityManifest(manifest: DatasusAvailabilityManifest): void {

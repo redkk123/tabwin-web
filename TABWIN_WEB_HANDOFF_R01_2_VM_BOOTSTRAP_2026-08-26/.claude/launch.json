@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "tabwin-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "web:dev", "--", "--port", "5173"],
+      "port": 5173
+    }
+  ]
+}

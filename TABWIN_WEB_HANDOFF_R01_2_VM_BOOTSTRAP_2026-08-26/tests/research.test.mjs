@@ -25,7 +25,9 @@ test('research request expands deterministically without interpreting user conce
   assert.equal(plan.estimate.bytes, null);
   assert.deepEqual(plan.request.conceptTerms, ['B57']);
   assert.deepEqual(plan.datasets[0].queries[0], { system: 'SIHSUS', fileType: 'RD', year: '2023', month: '01', uf: 'AC' });
-  assert.deepEqual(plan.datasets[1].queries[0], { system: 'SIM', fileType: 'DO', year: '2023' });
+  // National coverage travels as the explicit BR token; omitting it makes the
+  // official catalog answer empty.
+  assert.deepEqual(plan.datasets[1].queries[0], { system: 'SIM', fileType: 'DO', year: '2023', uf: 'BR' });
   assert.equal(serializeResearchPlan(plan), serializeResearchPlan(createResearchPlan(parseResearchRequest(JSON.stringify(request)))));
 });
 

@@ -62,30 +62,36 @@ Dois exemplos concretos observados na página do TabNet:
 Ausência de um agravo no seletor de download portanto **não** é defeito do
 catálogo quando o DATASUS não publica arquivo para ele.
 
-## LACUNA REAL ENCONTRADA
+## SINAN_P NÃO É UMA LACUNA — CORREÇÃO
 
-O script oficial declara 18 fontes:
+Uma versão anterior deste documento afirmou que `SINAN_P` e `ESUSNOTIFICA_p`
+eram fontes ausentes que precisavam ser implementadas. **Isso estava errado** e
+fica registrado aqui em vez de ser apagado.
 
-```text
-CIH CIHA CNES ESUSNOTIFICA ESUSNOTIFICA_p IBGE PCE PO RESP
-SIASUS SIHSUS SIM SINAN SINAN_P SINASC SISCOLO SISMAMA SISPRENATAL
-```
+O script oficial declara 18 fontes e o aplicativo modela 16, mas as duas
+restantes são apelidos, não conteúdo novo. Observado no endpoint oficial em
+2026-08-28, `fonte=SINAN` e `fonte=SINAN_P` devolvem resposta **idêntica**:
 
-O aplicativo implementa 16. Faltam as duas variantes **preliminares**:
+| Consulta | Arquivo | Modalidade retornada | Endereço |
+| --- | --- | --- | --- |
+| `SINAN` / DENG / 2024 | `DENGBR24.dbc` | Dados - Finais | `/SINAN/DADOS/FINAIS/` |
+| `SINAN_P` / DENG / 2024 | `DENGBR24.dbc` | Dados - Finais | `/SINAN/DADOS/FINAIS/` |
+| `SINAN` / DENG / 2026 | `DENGBR26.dbc` | Dados - Preliminares | `/SINAN/DADOS/PRELIM/` |
+| `SINAN_P` / DENG / 2026 | `DENGBR26.dbc` | Dados - Preliminares | `/SINAN/DADOS/PRELIM/` |
 
-- `SINAN_P` — dados preliminares do SINAN, com seus próprios **58 tipos**;
-- `ESUSNOTIFICA_p` — dados preliminares do e-SUS Notifica.
+O serviço resolve preliminar contra final **pelo ano consultado**, não pela
+fonte escolhida, e responde sempre com `fonte: "SINAN_p"`. Acrescentar
+`SINAN_P` ao seletor criaria uma entrada duplicada que devolve exatamente o
+mesmo arquivo — ruído de interface, não capacidade nova.
 
-Isso não é um erro da lista de finais auditada acima: são fontes irmãs que
-nunca foram modeladas. Um usuário que precise do ano corrente do SINAN só
-encontra o dado em `SINAN_P`, porque a base final ainda não foi fechada.
+A distinção que de fato importa já chega ao aplicativo: `parseSearchResponse`
+guarda `modality`, a lista do catálogo a exibe junto da fonte, e ela viaja com
+a origem do arquivo em cache. Um arquivo do ano corrente aparece como
+`Dados - Preliminares`.
 
-### Antes de implementar
-
-Preliminar e final não são intercambiáveis. A distinção precisa aparecer na
-proveniência e na auditoria do plano, nunca ser silenciosamente misturada numa
-mesma tabulação. Enquanto isso não estiver decidido, `SINAN_P` permanece
-registrado como lacuna conhecida e não como suporte parcial.
+Trabalho remanescente sobre isso, agora corretamente descrito: garantir que a
+modalidade preliminar apareça também na auditoria do plano e na receita, e não
+apenas no momento da escolha. Não é fonte faltando; é proveniência a propagar.
 
 ## EVIDÊNCIA REPRODUZÍVEL
 

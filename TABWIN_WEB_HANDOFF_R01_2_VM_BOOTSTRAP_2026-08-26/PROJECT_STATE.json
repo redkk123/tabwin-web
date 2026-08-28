@@ -1,5 +1,5 @@
 {
-  "revision": "R09-0-A-bounded-record-stream",
+  "revision": "critical-national-catalog-uf-fix",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
@@ -141,6 +141,7 @@
     ,"measured-flat-peak-record-memory-independent-of-file-size"
     ,"batch-boundary-cooperative-stream-cancellation"
     ,"sinan-finals-catalog-audited-against-official-transfer-script"
+    ,"explicit-br-token-for-national-coverage-catalog-queries"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -180,7 +181,7 @@
     ,"multi-period-null-category-and-schema-drift-diagnostics"
     ,"large-national-dbc-streaming-and-chunked-execution"
     ,"sinan-def-cnv-and-tabnet-dimension-registry"
-    ,"sinan-p-and-esusnotifica-p-preliminary-sources-not-modeled"
+    ,"preliminary-modality-propagated-to-plan-audit-and-recipe"
     ,"worker-side-aggregation-over-bounded-record-batches"
     ,"message-driven-cancellation-of-an-in-flight-synchronous-decode"
     ,"large-national-dbc-connected-to-the-interface"
@@ -210,7 +211,8 @@
     "aggregate-bounded-record-batches-inside-the-decode-worker",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
-    "decide-preliminary-versus-final-provenance-before-adding-sinan-p",
+    "propagate-preliminary-modality-into-plan-audit-and-recipe",
+    "add-cross-field-data-quality-rules-for-implausible-record-combinations",
     "resolve-research-plan-queries-into-observed-source-manifests",
     "extend-data-quality-to-explicit-cross-field-rules-after-catalog-core",
     "close-cataloged-tabwin-415-feature-families",

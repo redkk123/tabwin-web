@@ -58,8 +58,18 @@ test('expands multi-UF and multi-period selections in a stable, deduplicated ord
     system: 'SIM', fileType: 'DO', years: ['2024'], ufs: ['BR', 'AC'], annual: true,
   }), [
     { system: 'SIM', fileType: 'DO', year: '2024', uf: 'AC' },
-    { system: 'SIM', fileType: 'DO', year: '2024' },
+    { system: 'SIM', fileType: 'DO', year: '2024', uf: 'BR' },
   ]);
+  // Regression: national coverage must travel as an explicit BR token. The
+  // official endpoint returns an empty catalog when uf[] is omitted for
+  // SINAN/DENG, SINASC/DNEX, SIM/DO and PO/PO, observed on 2026-08-28.
+  assert.deepEqual(expandDatasusSearchSelection({
+    system: 'SINAN', fileType: 'DENG', years: ['2024'], ufs: ['BR'], annual: true,
+  }), [{ system: 'SINAN', fileType: 'DENG', year: '2024', uf: 'BR' }]);
+  assert.equal(buildSearchBody({
+    system: 'SINAN', fileType: 'DENG', year: '2024', uf: 'BR',
+  }).getAll('uf[]').join(), 'BR');
+
   assert.throws(() => expandDatasusSearchSelection({
     system: 'SIHSUS', fileType: 'RD', years: [], months: ['01'], ufs: ['AC'],
   }), /pelo menos um ano/);

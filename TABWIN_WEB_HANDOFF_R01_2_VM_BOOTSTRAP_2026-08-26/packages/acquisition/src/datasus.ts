@@ -256,9 +256,12 @@ export function expandDatasusSearchSelection(selection: DatasusSearchSelection):
         fileType: selection.fileType,
         year,
         ...(month ? { month } : {}),
-        // The official catalog represents national coverage by omitting UF.
-        // `BR` is only the explicit multi-select UI sentinel.
-        ...(uf === 'BR' ? {} : { uf }),
+        // National coverage is requested with the explicit `BR` token, not by
+        // omitting UF. Observed on 2026-08-28 against the official endpoint:
+        // SINAN/DENG/2024, SINASC/DNEX/2023, SIM/DO/2023 and PO/PO/2022 all
+        // return an empty catalog without `uf[]=BR` and return the file with
+        // it. No observed query lost results by sending it.
+        uf,
       });
     } else queries.push({ system: selection.system, fileType: selection.fileType, year, ...(month ? { month } : {}) });
   }
