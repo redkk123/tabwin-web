@@ -120,6 +120,7 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
     sourceHints: [{
       name: 'fixture.dbc', sha256: 'abc', size: 123,
       sourceUrl: 'ftp://ftp.datasus.gov.br/fixture.dbc',
+      modality: 'Dados - Preliminares',
       retrievedAt: '2026-08-27T12:00:00.000Z',
       archiveSha256: 'a'.repeat(64),
     }],
@@ -137,6 +138,7 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
   const b = serializeRecipe({ ...recipe });
   assert.equal(a, b);
   assert.deepEqual(parseRecipe(a), recipe);
+  assert.equal(parseRecipe(a).sourceHints[0].modality, 'Dados - Preliminares');
 });
 
 test('multiple filters are intersected deterministically', () => {
@@ -221,6 +223,11 @@ test('analysis recipe parsing rejects structurally invalid plans and fingerprint
       name: 'x.dbc', sha256: 'abc', size: 1, retrievedAt: 'ontem', archiveSha256: 'curto',
     }],
   })), /invalid retrieval time/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [{ name: 'x.dbc', sha256: 'abc', size: 1, modality: '' }],
+  })), /invalid source modality/);
   assert.throws(() => parseRecipe(JSON.stringify({
     schema: 'tabwin-web.recipe', version: 1,
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },

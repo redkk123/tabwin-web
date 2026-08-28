@@ -55,3 +55,17 @@ export function tabulationToXml(result: TabulationResult, context: TabulationExp
     '',
   ].join('\n');
 }
+
+/** Portable, deterministic result export with provenance and analytical metadata. */
+export function tabulationToJson(result: TabulationResult, context: TabulationExportContext): string {
+  return `${JSON.stringify({
+    schema: 'tabwin-web.tabulation',
+    version: 1,
+    provenance: {
+      source: context.sourceName,
+      generatedAt: context.generatedAt ?? new Date().toISOString(),
+    },
+    dimension: { label: context.rowLabel },
+    result,
+  }, null, 2)}\n`;
+}

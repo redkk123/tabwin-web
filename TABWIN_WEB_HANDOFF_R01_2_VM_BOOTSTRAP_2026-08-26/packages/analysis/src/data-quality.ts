@@ -71,11 +71,13 @@ export function createDistinctValueCollector(
       for (const record of records) {
         const raw = record[field];
         if (raw === null || raw === undefined) continue;
+        const value = String(raw);
+        if (values.has(value)) continue;
         if (values.size >= limit) {
           truncated = true;
           continue;
         }
-        values.add(String(raw));
+        values.add(value);
       }
     },
     finish() {

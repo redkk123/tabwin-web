@@ -16,10 +16,17 @@ Escalas usadas:
 
 ## Faixa 1 — horas
 
+**Estado em 2026-08-28:** concluída após auditoria Codex. Além dos três itens,
+foram corrigidos a preservação/restauração do Worker e um falso truncamento no
+coletor de valores distintos. Evidência em
+`docs/handoffs/CODEX_AUDIT_CLAUDE_2026-08-28.md`.
+
 Coisas que já estão prontas por baixo e só não aparecem, ou que são de uma
 linha. Melhor relação valor/esforço do projeto inteiro.
 
 ### 1.1 Trocar o `requestAnimationFrame` de `runAnalysis` por `setTimeout` de zero
+
+**Concluído.**
 
 **Esforço:** minutos · **Risco:** nenhum
 
@@ -29,6 +36,8 @@ mas amarra a análise à composição da página e trava em ambiente headless. O
 depender de renderização.
 
 ### 1.2 Propagar a modalidade preliminar até a auditoria e a receita
+
+**Concluído.**
 
 **Esforço:** horas · **Risco:** baixo · **Valor:** alto para quem analisa ano corrente
 
@@ -40,6 +49,8 @@ preliminar e a receita não registra.
 Falta carregar `modality` até `datasetSources` na auditoria e até a receita.
 
 ### 1.3 Export JSON do resultado
+
+**Concluído.**
 
 **Esforço:** horas · **Risco:** nenhum
 

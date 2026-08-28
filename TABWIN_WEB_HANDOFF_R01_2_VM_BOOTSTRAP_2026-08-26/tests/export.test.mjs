@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tabulationToCsv, tabulationToXml } from '../dist/packages/export/src/tabulation.js';
+import { tabulationToCsv, tabulationToJson, tabulationToXml } from '../dist/packages/export/src/tabulation.js';
 import { tabulationToXlsx } from '../dist/packages/export/src/xlsx.js';
 import { strFromU8, unzipSync } from 'fflate';
 
@@ -28,6 +28,25 @@ test('exports deterministic, escaped XML with provenance', () => {
   assert.match(xml, /label="A &amp; B"/);
   assert.match(xml, /<cell column="0">12<\/cell>/);
   assert.match(xml, /seen="13" accepted="12"/);
+});
+
+test('exports deterministic JSON with provenance and the complete analytical result', () => {
+  const context = {
+    sourceName: 'teste.dbc',
+    rowLabel: 'Categoria',
+    generatedAt: '2026-08-27T00:00:00.000Z',
+  };
+  const first = tabulationToJson(result, context);
+  assert.equal(first, tabulationToJson(result, context));
+  const parsed = JSON.parse(first);
+  assert.equal(parsed.schema, 'tabwin-web.tabulation');
+  assert.equal(parsed.version, 1);
+  assert.deepEqual(parsed.provenance, {
+    source: 'teste.dbc',
+    generatedAt: '2026-08-27T00:00:00.000Z',
+  });
+  assert.deepEqual(parsed.dimension, { label: 'Categoria' });
+  assert.deepEqual(parsed.result, result);
 });
 
 test('exports a deterministic two-sheet XLSX with numeric cells and audit metadata', () => {

@@ -45,7 +45,7 @@ import {
   type DatasusRemoteFile,
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
-import { tabulationToCsv, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
+import { tabulationToCsv, tabulationToJson, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import {
@@ -102,6 +102,8 @@ interface LoadedSource {
   retrievedAt?: string;
   archiveSha256?: string;
   cacheKey?: string;
+  /** Official catalog modality, retained when the source is preliminary. */
+  modality?: string;
   /** Explicit catalog selection for an acquired official data source. */
   catalogQuery?: DatasusSearchQuery | undefined;
 }
@@ -184,6 +186,7 @@ const discriminateUnclassified = element<HTMLInputElement>('#discriminate-unclas
 const discriminateColumnUnclassified = element<HTMLInputElement>('#discriminate-column-unclassified');
 const runButton = element<HTMLButtonElement>('#run-button');
 const exportCsvButton = element<HTMLButtonElement>('#export-csv-button');
+const exportJsonButton = element<HTMLButtonElement>('#export-json-button');
 const exportXlsxButton = element<HTMLButtonElement>('#export-xlsx-button');
 const exportXmlButton = element<HTMLButtonElement>('#export-xml-button');
 const chartPngButton = element<HTMLButtonElement>('#chart-png-button');
@@ -298,6 +301,8 @@ let toastTimer = 0;
 const cnvByName = new Map<string, CnvDefinition>();
 const loadedSources: LoadedSource[] = [];
 const activeDatasetSources: LoadedSource[] = [];
+/** Source handles retained so a terminated Worker can be rebuilt after cancellation. */
+const activeDatasetFiles: File[] = [];
 let activeFilterConversion = '';
 let activeFilterStartPosition: number | undefined;
 let configuredFilters: FilterSpec[] = [];
@@ -842,6 +847,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   // input must leave the previous dataset and its provenance intact.
   rememberSource(source);
   activeDatasetSources.splice(0, activeDatasetSources.length, source);
+  activeDatasetFiles.splice(0, activeDatasetFiles.length, file);
   dbfHeader = header;
   currentDatasetFile = file;
   currentCompatibilityProfile = 'tabwin-4.15';
@@ -902,6 +908,7 @@ async function appendCompatibleDbf(
   }
   rememberSource(source);
   activeDatasetSources.push(source);
+  activeDatasetFiles.push(file);
   currentDatasetFile = null;
   sourceDbfButton.disabled = true;
   datasetName = activeDatasetSources.map((item) => item.name).join(' + ');
@@ -930,11 +937,13 @@ function disposeDatasetWorker(): void {
   datasetWorker = null;
 }
 
-function datasetWorkerInstance(): Worker {
-  if (!datasetWorker) {
-    datasetWorker = new Worker(new URL('./dataset-worker.ts', import.meta.url), { type: 'module' });
-  }
-  return datasetWorker;
+function createDatasetWorker(): Worker {
+  return new Worker(new URL('./dataset-worker.ts', import.meta.url), { type: 'module' });
+}
+
+function terminateDatasetWorker(worker: Worker): void {
+  worker.terminate();
+  if (datasetWorker === worker) datasetWorker = null;
 }
 
 interface DatasetAskOptions {
@@ -949,17 +958,22 @@ interface DatasetAskOptions {
  * Cancellation terminates the Worker rather than sending a message: the Worker
  * runs a synchronous decode loop and cannot process messages while it does.
  */
-function askDataset<T>(message: Record<string, unknown>, options: DatasetAskOptions): Promise<T> {
-  const worker = datasetWorkerInstance();
+function askDatasetWorker<T>(
+  worker: Worker,
+  message: Record<string, unknown>,
+  options: DatasetAskOptions,
+): Promise<T> {
   const requestId = ++datasetRequestId;
   return new Promise<T>((resolve, reject) => {
     let settled = false;
+    let control: { cancel: () => void };
     const finish = (action: () => void): void => {
       if (settled) return;
       settled = true;
       worker.removeEventListener('message', onMessage);
       worker.removeEventListener('error', onFailure);
-      activeDecode = null;
+      worker.removeEventListener('messageerror', onMessageFailure);
+      if (activeDecode === control) activeDecode = null;
       action();
     };
     const onMessage = (event: MessageEvent<Record<string, unknown>>): void => {
@@ -976,23 +990,74 @@ function askDataset<T>(message: Record<string, unknown>, options: DatasetAskOpti
       finish(() => resolve(data as T));
     };
     const onFailure = (): void => {
-      disposeDatasetWorker();
+      terminateDatasetWorker(worker);
       finish(() => reject(new Error(`${options.label} falhou no trabalhador local`)));
+    };
+    const onMessageFailure = (): void => {
+      terminateDatasetWorker(worker);
+      finish(() => reject(new Error(`${options.label} produziu uma resposta que não pôde ser recebida`)));
     };
     worker.addEventListener('message', onMessage);
     worker.addEventListener('error', onFailure, { once: true });
-    activeDecode = {
+    worker.addEventListener('messageerror', onMessageFailure, { once: true });
+    control = {
       cancel: () => {
-        disposeDatasetWorker();
+        terminateDatasetWorker(worker);
         finish(() => reject(new Error(`${options.label} cancelada`)));
       },
     };
+    activeDecode = control;
     try {
       worker.postMessage({ ...message, requestId }, options.transfer ?? []);
     } catch (error) {
       finish(() => reject(error instanceof Error ? error : new Error(String(error))));
     }
   });
+}
+
+async function restoreDatasetWorker(): Promise<void> {
+  if (datasetWorker) return;
+  if (!dbfHeader || !activeDatasetFiles.length) {
+    throw new Error('Nenhum conjunto de dados aberto no trabalhador local');
+  }
+
+  const firstExtension = extensionOf(activeDatasetFiles[0]!.name);
+  let sources: DatasetWorkerSource[];
+  let fields: DbfField[] | undefined;
+  if (firstExtension === 'CSV' || firstExtension === 'TSV') {
+    const file = activeDatasetFiles[0]!;
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    let text: string;
+    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+    catch { text = textDecoder.decode(bytes); }
+    const parsed = parseDelimited(text, firstExtension === 'TSV' ? { delimiter: '\t' } : {});
+    sources = [{ kind: 'records', name: file.name, records: parsed.records as DbfRecord[] }];
+    fields = parsed.fields;
+  } else {
+    sources = await Promise.all(activeDatasetFiles.map(async (file) => {
+      const extension = extensionOf(file.name);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      return {
+        kind: 'binary' as const,
+        name: file.name,
+        bytes: transferableBytes(bytes),
+        isDbc: extension === 'DBC',
+      };
+    }));
+  }
+
+  const expectedSignature = schemaSignature(dbfHeader);
+  const expectedRecords = datasetRecordCount;
+  const restored = await openDataset(sources, 'Restauração do conjunto após interrupção', fields);
+  if (schemaSignature(restored) !== expectedSignature || datasetRecordCount !== expectedRecords) {
+    disposeDatasetWorker();
+    throw new Error('O conjunto restaurado divergiu da fonte aberta; reabra os arquivos');
+  }
+}
+
+async function askDataset<T>(message: Record<string, unknown>, options: DatasetAskOptions): Promise<T> {
+  if (!datasetWorker) await restoreDatasetWorker();
+  return askDatasetWorker<T>(datasetWorker!, message, options);
 }
 
 function datasetProgress(label: string) {
@@ -1008,12 +1073,22 @@ async function openDataset(
   label: string,
   fields?: DbfField[],
 ): Promise<DbfHeader> {
-  disposeDatasetWorker();
+  const candidate = createDatasetWorker();
   const transfer = sources.flatMap((source) => (source.kind === 'binary' ? [source.bytes] : []));
-  const reply = await askDataset<{ header: DbfHeader; recordCount: number }>(
-    { type: 'open', sources, ...(fields ? { fields } : {}) },
-    { label, transfer },
-  );
+  let reply: { header: DbfHeader; recordCount: number };
+  try {
+    reply = await askDatasetWorker(
+      candidate,
+      { type: 'open', sources, ...(fields ? { fields } : {}) },
+      { label, transfer },
+    );
+  } catch (error) {
+    terminateDatasetWorker(candidate);
+    throw error;
+  }
+  const previous = datasetWorker;
+  datasetWorker = candidate;
+  if (previous && previous !== candidate) previous.terminate();
   datasetRecordCount = reply.recordCount;
   return reply.header;
 }
@@ -1042,8 +1117,6 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
   catch { text = textDecoder.decode(bytes); }
   const dataset = parseDelimited(text, extensionOf(file.name) === 'TSV' ? { delimiter: '\t' } : {});
-  rememberSource(source);
-  activeDatasetSources.splice(0, activeDatasetSources.length, source);
   const fields = dataset.fields;
   // A parsed CSV becomes a dataset source like any other, so the same Worker
   // answers every request and this thread keeps no records for it either.
@@ -1052,6 +1125,9 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
     `Leitura de ${file.name}`,
     fields,
   );
+  rememberSource(source);
+  activeDatasetSources.splice(0, activeDatasetSources.length, source);
+  activeDatasetFiles.splice(0, activeDatasetFiles.length, file);
   dbfHeader = { ...dbfHeader, dateOfLastUpdate: new Date(file.lastModified || Date.now()) };
   currentDatasetFile = null;
   currentCompatibilityProfile = 'modern';
@@ -1223,7 +1299,9 @@ function conversionsForPlan(plan: QueryPlan): Record<string, CnvDefinition> {
 async function runAnalysis(): Promise<void> {
   if (!dbfHeader || !datasetRecordCount || !rowField.value) return;
   setBusy('Montando a tabela…');
-  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  setControlsEnabled(false);
+  selectedDbfButton.disabled = true;
+  await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   decodeCancelButton.hidden = false;
   try {
     const plan = buildPlan();
@@ -1246,6 +1324,7 @@ async function runAnalysis(): Promise<void> {
     tableFooter.value = '';
     renderResult();
     exportCsvButton.disabled = false;
+    exportJsonButton.disabled = false;
     exportXlsxButton.disabled = false;
     exportXmlButton.disabled = false;
     chartPngButton.disabled = false;
@@ -1260,7 +1339,8 @@ async function runAnalysis(): Promise<void> {
     resultKicker.textContent = 'Análise interrompida';
     resultTitle.textContent = message;
     showToast(message, true);
-    setControlsEnabled(true);
+    setControlsEnabled(Boolean(dbfHeader));
+    selectedDbfButton.disabled = !dbfHeader || !currentPlan || !currentResult;
   } finally {
     decodeCancelButton.hidden = true;
   }
@@ -2376,6 +2456,7 @@ async function openOfficialFile(
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
     if (source) {
       source.origin = remote.address;
+      if (remote.modality.trim()) source.modality = remote.modality;
       source.retrievedAt = downloaded.provenance.retrievedAt;
       source.archiveSha256 = downloaded.provenance.archiveSha256;
       source.cacheKey = downloaded.provenance.cacheKey;
@@ -2445,6 +2526,7 @@ async function openRecentArchive(summary: CachedArchiveSummary): Promise<void> {
       const cachedSource = summary.sources.find((item) => item.name.toLowerCase() === source.name.toLowerCase())
         ?? summary.sources[0];
       if (cachedSource?.address) source.origin = cachedSource.address;
+      if (cachedSource?.modality.trim()) source.modality = cachedSource.modality;
       if (cachedSource?.catalogQuery) source.catalogQuery = { ...cachedSource.catalogQuery };
       source.retrievedAt = new Date(summary.savedAt).toISOString();
       source.archiveSha256 = summary.sha256 || await sha256(cached.bytes);
@@ -2648,6 +2730,7 @@ function saveRecipe(): void {
       sha256: source.sha256,
       size: source.size,
       ...(source.origin ? { sourceUrl: source.origin } : {}),
+      ...(source.modality ? { modality: source.modality } : {}),
       ...(source.retrievedAt ? { retrievedAt: source.retrievedAt } : {}),
       ...(source.archiveSha256 ? { archiveSha256: source.archiveSha256 } : {}),
     })),
@@ -2749,6 +2832,7 @@ async function openPortableTable(file: File): Promise<void> {
   cnvByName.clear();
   loadedSources.splice(0, loadedSources.length);
   activeDatasetSources.splice(0, activeDatasetSources.length);
+  activeDatasetFiles.splice(0, activeDatasetFiles.length);
   datasetName = table.source?.name ?? file.name;
   datasetFingerprint = table.source ? {
     ...table.source,
@@ -2789,6 +2873,7 @@ async function openPortableTable(file: File): Promise<void> {
   saveRecipeButton.disabled = true;
   saveTableButton.disabled = false;
   exportCsvButton.disabled = false;
+  exportJsonButton.disabled = false;
   exportXlsxButton.disabled = false;
   exportXmlButton.disabled = false;
   chartPngButton.disabled = false;
@@ -2905,6 +2990,15 @@ function exportCsv(): void {
     rowLabel: activeRowLabel(),
   });
   downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${exportBaseName()}.csv`);
+}
+
+function exportJson(): void {
+  if (!currentResult) return;
+  const json = tabulationToJson(currentResult, {
+    sourceName: datasetName,
+    rowLabel: activeRowLabel(),
+  });
+  downloadBlob(new Blob([json], { type: 'application/json;charset=utf-8' }), `${exportBaseName()}.json`);
 }
 
 function exportXml(): void {
@@ -3130,6 +3224,7 @@ for (const button of document.querySelectorAll<HTMLButtonElement>('[data-view]')
   button.addEventListener('click', () => showView(button.dataset.view as ViewName));
 }
 exportCsvButton.addEventListener('click', exportCsv);
+exportJsonButton.addEventListener('click', exportJson);
 exportXlsxButton.addEventListener('click', exportXlsx);
 exportXmlButton.addEventListener('click', exportXml);
 tableOperationKind.addEventListener('change', updateTableOperationControls);

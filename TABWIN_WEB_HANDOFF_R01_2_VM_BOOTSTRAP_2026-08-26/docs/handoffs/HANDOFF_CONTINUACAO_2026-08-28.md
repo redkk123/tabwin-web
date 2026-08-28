@@ -5,9 +5,19 @@ Para quem continuar o TabWin Web, humano ou modelo. Leia junto com
 
 ## ESTADO
 
-Tudo commitado e enviado para a `main` de `redkk123/tabwin-web`. Working tree
-limpo. `npm run check` verde com **148 testes**. G001 inalterado e ainda `pass`
+O estado recebido estava commitado e enviado para a `main` de
+`redkk123/tabwin-web`. `npm run check` ficou verde com **149 testes** após a
+auditoria Codex. G001 permaneceu inalterado e ainda `pass`
 com tolerância zero.
+
+### Atualização posterior — auditoria Codex
+
+A Faixa 1 de `docs/product/ROADMAP_POR_COMPLEXIDADE.md` foi encerrada: yield de
+análise independente de quadro, modalidade final/preliminar em auditoria e
+receita, e exportação JSON. A auditoria também corrigiu preservação/restauração
+do Worker em abertura, falha e cancelamento, além do falso truncamento de
+valores distintos. Relatório completo em
+`docs/handoffs/CODEX_AUDIT_CLAUDE_2026-08-28.md`.
 
 O site publicado no GitHub Pages **continua atrás de todos os commits abaixo**,
 inclusive da correção da busca nacional. Nenhum deploy foi autorizado.

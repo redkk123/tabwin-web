@@ -11,6 +11,8 @@ export interface ConversionFingerprint {
 export interface RecipeSourceHint extends Pick<SourceFingerprint, 'name' | 'sha256' | 'size'> {
   /** Official catalog address when the source was acquired from DATASUS. */
   sourceUrl?: string;
+  /** Official catalog modality, such as final or preliminary data. */
+  modality?: string;
   /** ISO-8601 time at which the containing official archive was retrieved. */
   retrievedAt?: string;
   /** SHA-256 of the official ZIP envelope, distinct from the extracted source hash. */
@@ -106,6 +108,9 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
     }
     if (source.sourceUrl !== undefined && typeof source.sourceUrl !== 'string') {
       throw new Error('invalid source URL in TabWin Web recipe');
+    }
+    if (source.modality !== undefined && (typeof source.modality !== 'string' || !source.modality.trim())) {
+      throw new Error('invalid source modality in TabWin Web recipe');
     }
     if (source.retrievedAt !== undefined
       && (typeof source.retrievedAt !== 'string' || !Number.isFinite(Date.parse(source.retrievedAt)))) {

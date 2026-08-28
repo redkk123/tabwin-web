@@ -86,6 +86,12 @@ test('the distinct value collector stays bounded and stays sorted for people', (
   const capped = feed(createDistinctValueCollector('UF', 2), RECORDS, 4);
   assert.equal(capped.values.length, 2);
   assert.equal(capped.truncated, true);
+
+  const exact = feed(createDistinctValueCollector('UF', 2), [
+    { UF: 'AC' }, { UF: 'SP' }, { UF: 'AC' }, { UF: 'SP' },
+  ], 1);
+  assert.deepEqual(exact.values, ['AC', 'SP']);
+  assert.equal(exact.truncated, false, 'duplicates at the exact limit do not prove truncation');
   assert.throws(() => createDistinctValueCollector('UF', 0), /limite inválido/);
 });
 
