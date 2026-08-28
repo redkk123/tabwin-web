@@ -86,11 +86,16 @@ comum sem escrever código.
 
 ### 2.2 Interface do perfil de combinações raras
 
+**Concluído em 2026-08-28.** Seleção de dois campos, ranking limitado das
+combinações menos frequentes e criação de regra em modo de sinalização a partir
+de uma linha observada. Evidência em
+`docs/handoffs/R09_2_RARE_COMBINATION_PROFILE_UI_REPORT.md`.
+
 **Esforço:** um dia · **Risco:** baixo
 
 `profileFieldCombinations` devolve as combinações mais raras com participação
-no total. Falta escolher dois campos e mostrar a tabela, com um caminho de um
-clique de "combinação rara" para "criar regra a partir dela".
+no total. A interface agora escolhe dois campos, mostra a lista e oferece o
+caminho explícito de "combinação rara" para "criar regra a partir dela".
 
 ### 2.3 Tabela virtualizada
 

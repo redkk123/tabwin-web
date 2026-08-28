@@ -1,5 +1,5 @@
 {
-  "revision": "R09-1-cross-field-quality-ui",
+  "revision": "R09-2-rare-combination-profile-ui",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
@@ -166,6 +166,8 @@
     ,"versioned-json-tabulation-result-export"
     ,"cross-field-quality-rule-builder-ui"
     ,"visible-per-rule-quality-outcomes-and-action-toggle"
+    ,"worker-backed-rare-combination-profile-ui"
+    ,"observed-combination-to-flag-rule-bridge"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -232,7 +234,7 @@
     "add-an-l3-result-cache-so-reanalysis-does-not-repeat-a-full-pass",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
-    "surface-rare-combination-profile-and-create-rule-bridge-in-the-interface",
+    "virtualize-large-result-tables-without-truncating-the-visible-workspace",
     "resolve-research-plan-queries-into-observed-source-manifests",
     "capture-oracle-evidence-before-shipping-any-clinical-cleaning-preset",
     "close-cataloged-tabwin-415-feature-families",

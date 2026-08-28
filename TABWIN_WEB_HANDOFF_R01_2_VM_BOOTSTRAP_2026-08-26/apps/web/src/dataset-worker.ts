@@ -30,7 +30,9 @@ import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
 import type { QueryPlan, TabulationResult } from '../../../packages/core/src/model.ts';
 import {
   createDistinctValueCollector,
+  createFieldCombinationProfiler,
   createNumericFieldProfiler,
+  type FieldCombinationProfile,
   type NumericFieldProfile,
 } from '../../../packages/analysis/src/data-quality.ts';
 import { createSelectedRecordCollector } from '../../../packages/export/src/selected-records.ts';
@@ -80,6 +82,13 @@ interface DistinctRequest {
   limit?: number;
 }
 
+interface CombinationProfileRequest {
+  type: 'profile-combinations';
+  requestId: number;
+  fields: string[];
+  limit?: number;
+}
+
 interface SelectedDbfRequest {
   type: 'selected-dbf';
   requestId: number;
@@ -96,7 +105,7 @@ interface AppendRequest {
 
 type DatasetRequest =
   | OpenRequest | AppendRequest | TabulateRequest
-  | NumericProfileRequest | DistinctRequest | SelectedDbfRequest;
+  | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest;
 
 const workerScope: Worker = self as unknown as Worker;
 const BATCH_RECORDS = 5_000;
@@ -241,6 +250,13 @@ function handle(request: DatasetRequest): void {
       streamAll(request.requestId, [request.field], (batch) => profiler.push(batch.records));
       const profile: NumericFieldProfile = profiler.finish();
       post({ type: 'numeric-profile', requestId: request.requestId, profile });
+      return;
+    }
+    case 'profile-combinations': {
+      const profiler = createFieldCombinationProfiler(request.fields, { limit: request.limit ?? 50 });
+      streamAll(request.requestId, request.fields, (batch) => profiler.push(batch.records));
+      const profile: FieldCombinationProfile = profiler.finish();
+      post({ type: 'combination-profile', requestId: request.requestId, profile });
       return;
     }
     case 'distinct': {

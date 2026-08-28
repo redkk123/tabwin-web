@@ -29,6 +29,16 @@ Teste real no `RDAC2401.dbc`: `MUNIC_RES = 120040` e `IDADE >= 0` encontrou
 1.789 registros tanto em sinalização quanto em exclusão, sem erros no console.
 Relatório em `docs/handoffs/R09_1_CROSS_FIELD_QUALITY_UI_REPORT.md`.
 
+### Atualização posterior — Faixa 2.2
+
+O perfil de combinações raras também ganhou interface. Dois campos são
+processados no Worker, as 50 combinações menos frequentes aparecem com
+frequência e participação, e uma combinação observada pode virar regra em modo
+de sinalização. Nenhuma raridade é classificada automaticamente como erro.
+Teste real no `RDAC2401.dbc`: `MUNIC_RES=110045` + `SEXO=3` apareceu com 1
+registro (0,023%) e gerou regra com contagem 1. Relatório em
+`docs/handoffs/R09_2_RARE_COMBINATION_PROFILE_UI_REPORT.md`.
+
 O site publicado no GitHub Pages **continua atrás de todos os commits abaixo**,
 inclusive da correção da busca nacional. Nenhum deploy foi autorizado.
 

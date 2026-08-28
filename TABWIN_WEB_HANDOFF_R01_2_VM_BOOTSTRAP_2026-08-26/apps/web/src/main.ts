@@ -82,7 +82,10 @@ import {
   pearsonCorrelation,
   simpleLinearRegression,
 } from '../../../packages/analysis/src/statistics.ts';
-import type { NumericFieldProfile } from '../../../packages/analysis/src/data-quality.ts';
+import type {
+  FieldCombinationProfile,
+  NumericFieldProfile,
+} from '../../../packages/analysis/src/data-quality.ts';
 import {
   applyTableOperation,
   calculateColumnTotal,
@@ -200,6 +203,14 @@ const crossFieldAction = element<HTMLButtonElement>('#cross-field-action');
 const crossFieldAdd = element<HTMLButtonElement>('#cross-field-add');
 const crossFieldCount = element<HTMLElement>('#cross-field-count');
 const activeCrossFieldList = element<HTMLElement>('#active-cross-field-list');
+const combinationFields = [
+  element<HTMLSelectElement>('#combination-field-1'),
+  element<HTMLSelectElement>('#combination-field-2'),
+] as const;
+const combinationCount = element<HTMLElement>('#combination-count');
+const combinationSummary = element<HTMLElement>('#combination-summary');
+const combinationProfileButton = element<HTMLButtonElement>('#combination-profile-button');
+const combinationList = element<HTMLElement>('#combination-list');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
 const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
 const recipeInput = element<HTMLInputElement>('#recipe-input');
@@ -340,6 +351,7 @@ let activeFilterStartPosition: number | undefined;
 let configuredFilters: FilterSpec[] = [];
 let configuredCrossFieldRules: CrossFieldRuleSpec[] = [];
 let crossFieldRuleSequence = 0;
+let lastCombinationProfile: FieldCombinationProfile | null = null;
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -426,7 +438,7 @@ function setControlsEnabled(enabled: boolean): void {
     filterKind, filterValueSearch, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition, columnStartPosition,
     qualityField, qualityMinimum, qualityMaximum, suppressZero, suppressZeroColumns, discriminateUnclassified,
     discriminateColumnUnclassified, crossFieldLabel, ...crossFieldFields, ...crossFieldOperators, ...crossFieldValues,
-    ...crossFieldSecondValues, runButton]) {
+    ...crossFieldSecondValues, ...combinationFields, runButton]) {
     control.disabled = !enabled;
   }
   if (enabled) updateMeasureControls();
@@ -439,9 +451,11 @@ function setControlsEnabled(enabled: boolean): void {
     qualityApplyButton.disabled = true;
     crossFieldAction.disabled = true;
     crossFieldAdd.disabled = true;
+    combinationProfileButton.disabled = true;
   } else {
     crossFieldAction.disabled = false;
     updateCrossFieldAddState();
+    updateCombinationProfileState();
   }
   for (const button of activeCrossFieldList.querySelectorAll<HTMLButtonElement>('button')) button.disabled = !enabled;
 }
@@ -495,6 +509,7 @@ function populateControls(preferredField?: string): void {
   populateFilterFields();
   populateQualityFields();
   populateCrossFieldFields();
+  populateCombinationFields();
   populateConversions();
   setControlsEnabled(true);
 }
@@ -902,7 +917,7 @@ function addCrossFieldRule(): void {
   if (conditions[0]!.field === conditions[1]!.field) throw new Error('Escolha dois campos diferentes');
   const generatedLabel = conditions.map(describeCrossFieldCondition).join(' + ');
   const rule: CrossFieldRuleSpec = {
-    id: `regra-cruzada-${Date.now().toString(36)}-${++crossFieldRuleSequence}`,
+    id: nextCrossFieldRuleId(),
     label: crossFieldLabel.value.trim() || generatedLabel,
     conditions,
     action: crossFieldAction.dataset.action === 'exclude' ? 'exclude' : 'flag',
@@ -961,6 +976,102 @@ function toggleCrossFieldAction(): void {
   const next = crossFieldAction.dataset.action === 'exclude' ? 'flag' : 'exclude';
   crossFieldAction.dataset.action = next;
   crossFieldAction.textContent = next === 'exclude' ? 'Excluir correspondências' : 'Apenas sinalizar';
+}
+
+function nextCrossFieldRuleId(): string {
+  return `regra-cruzada-${Date.now().toString(36)}-${++crossFieldRuleSequence}`;
+}
+
+function populateCombinationFields(): void {
+  if (!dbfHeader) return;
+  for (const [index, select] of combinationFields.entries()) {
+    const previous = select.value;
+    select.replaceChildren(new Option(index === 0 ? 'Escolha um campo' : 'Escolha outro campo', ''));
+    for (const field of dbfHeader.fields) select.add(new Option(selectionLabel(field.name), field.name));
+    select.value = dbfHeader.fields.some((field) => field.name === previous) ? previous : '';
+  }
+  clearCombinationProfile();
+  updateCombinationProfileState();
+}
+
+function updateCombinationProfileState(): void {
+  combinationProfileButton.disabled = !dbfHeader || runButton.disabled
+    || !combinationFields[0].value || !combinationFields[1].value
+    || combinationFields[0].value === combinationFields[1].value;
+}
+
+function clearCombinationProfile(): void {
+  lastCombinationProfile = null;
+  combinationList.replaceChildren();
+  combinationCount.textContent = 'não analisadas';
+  combinationSummary.textContent = 'O perfil mostra frequência; raridade não significa erro.';
+}
+
+async function profileCombinations(): Promise<void> {
+  const fields = combinationFields.map((select) => select.value);
+  if (!fields[0] || !fields[1] || fields[0] === fields[1]) return;
+  combinationProfileButton.disabled = true;
+  combinationSummary.textContent = 'Perfilando combinações no conjunto inteiro…';
+  try {
+    const { profile } = await askDataset<{ profile: FieldCombinationProfile }>(
+      { type: 'profile-combinations', fields, limit: 50 },
+      { label: 'Perfil de combinações', progress: datasetProgress('Perfilando combinações') },
+    );
+    lastCombinationProfile = profile;
+    renderCombinationProfile(profile);
+  } catch (error) {
+    combinationSummary.textContent = error instanceof Error ? error.message : String(error);
+  } finally {
+    updateCombinationProfileState();
+  }
+}
+
+function displayCombinationValue(value: string | null): string {
+  return value === null ? '(ausente)' : value;
+}
+
+function renderCombinationProfile(profile: FieldCombinationProfile): void {
+  combinationList.replaceChildren();
+  combinationCount.textContent = `${integerFormat.format(profile.distinctCombinations)} distinta(s)`;
+  combinationSummary.textContent = `${integerFormat.format(profile.combinations.length)} combinação(ões) menos frequente(s) de ${integerFormat.format(profile.totalRecords)} registro(s)${profile.truncated ? ' · ranking parcial por limite de cardinalidade' : ''}.`;
+  for (const combination of profile.combinations) {
+    const row = document.createElement('div');
+    row.className = 'combination-row';
+    for (const [index, value] of combination.values.entries()) {
+      const cell = document.createElement('span');
+      const field = document.createElement('small');
+      field.textContent = selectionLabel(profile.fields[index]!);
+      cell.append(field, document.createTextNode(displayCombinationValue(value)));
+      row.append(cell);
+    }
+    const action = document.createElement('span');
+    const frequency = document.createElement('small');
+    frequency.textContent = `${integerFormat.format(combination.records)} registro(s) · ${new Intl.NumberFormat('pt-BR', { style: 'percent', maximumFractionDigits: 3 }).format(combination.share)}`;
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Criar regra';
+    button.addEventListener('click', () => createRuleFromCombination(profile, combination.values));
+    action.append(frequency, button);
+    row.append(action);
+    combinationList.append(row);
+  }
+}
+
+function createRuleFromCombination(profile: FieldCombinationProfile, values: Array<string | null>): void {
+  const conditions = profile.fields.map((field, index): FilterSpec => ({
+    field,
+    acceptedCategories: [values[index] ?? ''],
+  }));
+  const label = conditions.map(describeCrossFieldCondition).join(' + ');
+  configuredCrossFieldRules.push({
+    id: nextCrossFieldRuleId(),
+    label,
+    conditions,
+    action: 'flag',
+  });
+  renderCrossFieldRules();
+  showToast('Regra criada em modo de sinalização; revise antes de excluir');
+  void runAnalysis();
 }
 
 function populateConversions(): void {
@@ -1102,6 +1213,7 @@ async function appendCompatibleDbf(
   sourceDbfButton.disabled = true;
   datasetName = activeDatasetSources.map((item) => item.name).join(' + ');
   datasetFingerprint = null;
+  clearCombinationProfile();
   updateDatasetStats();
   await runAnalysis();
 }
@@ -3047,6 +3159,7 @@ async function openPortableTable(file: File): Promise<void> {
   configuredFilters = [];
   configuredCrossFieldRules = [];
   renderCrossFieldRules();
+  clearCombinationProfile();
   activeDef = null;
   activeMap = null;
   mapNameByGeocode.clear();
@@ -3411,6 +3524,11 @@ crossFieldAdd.addEventListener('click', () => {
   try { addCrossFieldRule(); }
   catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
 });
+for (const field of combinationFields) field.addEventListener('change', () => {
+  clearCombinationProfile();
+  updateCombinationProfileState();
+});
+combinationProfileButton.addEventListener('click', () => void profileCombinations());
 for (const control of [filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum]) {
   control.addEventListener('input', updateFilterCount);
   control.addEventListener('change', updateFilterCount);
