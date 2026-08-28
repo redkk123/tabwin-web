@@ -13,8 +13,10 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
-import { dbcToDbf, readDbcMetadata, readDbfRecords } from '@precisa-saude/datasus-dbc';
+import { dbcToDbf, readDbcMetadata, readDbfHeader, readDbfRecords } from '@precisa-saude/datasus-dbc';
 import { streamDbcRecords } from '../dist/packages/acquisition/src/dbf-record-stream.js';
+import { compileQueryPlan } from '../dist/packages/core/src/plan.js';
+import { createTabulationAccumulator, executeInMemory } from '../dist/packages/core/src/execute.js';
 
 function normalizeWindowsNpmArgument(value) {
   if (!value || process.platform !== 'win32') return value;
@@ -52,6 +54,33 @@ assert.equal(compared, referenceRecords.length, 'o fluxo em blocos não entregou
 assert.ok(peakBatchRecords <= batchSize, 'lote excedeu o limite pedido');
 assert.ok(summary.maxChunkBytes <= 4096, 'o decodificador emitiu um bloco acima da janela de 4 KiB');
 
+// The Worker path: assemble in bounded batches and fold straight into the
+// accumulator, never holding the records. It must equal the materialized
+// tabulation cell for cell.
+// The most discriminating character field, so the comparison covers many rows
+// instead of collapsing into a single group.
+const header = readDbfHeader(dbcToDbf(dbc));
+const groupField = header.fields
+  .filter((field) => field.type === 'C')
+  .map((field) => ({
+    name: field.name,
+    distinct: new Set(referenceRecords.map((record) => String(record[field.name] ?? ''))).size,
+  }))
+  .sort((left, right) => right.distinct - left.distinct || left.name.localeCompare(right.name))[0]?.name
+  ?? header.fields[0].name;
+const plan = compileQueryPlan({
+  rows: { field: groupField },
+  measure: { kind: 'count' },
+  filters: [],
+});
+
+const materializedTable = executeInMemory(referenceRecords, plan);
+const streamedAccumulator = createTabulationAccumulator(plan);
+streamDbcRecords(dbc, (batch) => streamedAccumulator.push(batch.records), { batchSize });
+const streamedTable = streamedAccumulator.finish();
+
+assert.deepEqual(streamedTable, materializedTable, 'a tabulação em blocos divergiu da materializada');
+
 const report = {
   file: path.basename(dbcPath),
   sha256: createHash('sha256').update(dbc).digest('hex'),
@@ -77,6 +106,12 @@ const report = {
   },
   equalRecords: compared,
   divergentRecords: 0,
+  tabulation: {
+    groupField,
+    rows: streamedTable.rows.length,
+    recordsAccepted: streamedTable.recordsAccepted,
+    identicalToMaterialized: true,
+  },
   pass: true,
 };
 

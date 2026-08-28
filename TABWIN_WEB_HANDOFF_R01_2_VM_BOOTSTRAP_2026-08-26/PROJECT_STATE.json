@@ -1,10 +1,10 @@
 {
-  "revision": "cross-field-data-quality-rules",
+  "revision": "R09-0-B-worker-side-aggregation",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 132,
-    "passed": 132,
+    "total": 137,
+    "passed": 137,
     "failed": 0,
     "command": "npm run check"
   },
@@ -147,6 +147,10 @@
     ,"cross-field-conditions-validated-by-the-shared-filter-validator"
     ,"recipe-persisted-and-replayable-cross-field-rules"
     ,"semantics-free-rare-field-combination-profile"
+    ,"incremental-tabulation-accumulator-bounded-by-distinct-cells"
+    ,"batched-accumulation-identical-to-one-shot-execution"
+    ,"worker-tabulation-that-never-returns-records-to-the-main-thread"
+    ,"streamed-tabulation-identical-to-materialized-on-real-rdac2401"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -186,7 +190,6 @@
     ,"large-national-dbc-streaming-and-chunked-execution"
     ,"sinan-def-cnv-and-tabnet-dimension-registry"
     ,"preliminary-modality-propagated-to-plan-audit-and-recipe"
-    ,"worker-side-aggregation-over-bounded-record-batches"
     ,"message-driven-cancellation-of-an-in-flight-synchronous-decode"
     ,"large-national-dbc-connected-to-the-interface"
   ],
@@ -212,7 +215,7 @@
     "run-docs-testing-r06-1-short-oracle-cases",
     "capture-focused-post-table-tabwin-415-oracles",
     "audit-include-table-and-paste-semantics-without-guessing",
-    "aggregate-bounded-record-batches-inside-the-decode-worker",
+    "route-large-official-files-through-the-worker-tabulation-path-in-the-ui",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
     "propagate-preliminary-modality-into-plan-audit-and-recipe",

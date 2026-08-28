@@ -256,15 +256,33 @@ function propagateRowSubtotals(rows: ResultAxisItem[], cells: number[][]): void 
     }
   }
 }
-export function executeInMemory(
-  records: Iterable<DataRecord>,
+export interface TabulationAccumulator {
+  /** Feeds one bounded batch. Call as many times as needed. */
+  push(records: Iterable<DataRecord>): void;
+  /** Materializes the current result; the accumulator remains usable. */
+  finish(): TabulationResult;
+}
+
+/**
+ * Incremental form of {@link executeInMemory}.
+ *
+ * Peak memory is bounded by the number of distinct row x column combinations,
+ * never by the number of records, so a national DBC can be tabulated from
+ * bounded batches without the dataset ever being resident.
+ *
+ * Semantics are not a variant: {@link executeInMemory} is a thin wrapper over
+ * this accumulator, so both paths are the same code. Per-cell additions still
+ * happen in record order, which keeps floating-point results identical to the
+ * previous implementation.
+ */
+export function createTabulationAccumulator(
   plan: QueryPlan,
   conversions: ConversionRegistry = {},
-): TabulationResult {
+): TabulationAccumulator {
   const warnings = new Set(plan.warnings);
   const observedRows = new Map<string, string>();
   const observedColumns = new Map<string, string>();
-  const accepted: Array<{ rowKey: string; columnKey: string; value: number }> = [];
+  const totals = new Map<string, Map<string, number>>();
   let recordsSeen = 0;
   let recordsAccepted = 0;
 
@@ -273,34 +291,62 @@ export function executeInMemory(
   const rules = plan.spec.crossFieldRules ?? [];
   const ruleMatches = rules.map(() => 0);
 
-  for (const record of records) {
-    recordsSeen++;
-    rules.forEach((rule, index) => {
-      if (crossFieldRuleMatches(record, rule, conversions)) ruleMatches[index]! += 1;
-    });
-    const resolved = resolvePlanRecord(record, plan, conversions);
-    if (!resolved) continue;
+  function push(records: Iterable<DataRecord>): void {
+    for (const record of records) {
+      recordsSeen++;
+      rules.forEach((rule, index) => {
+        if (crossFieldRuleMatches(record, rule, conversions)) ruleMatches[index]! += 1;
+      });
+      const resolved = resolvePlanRecord(record, plan, conversions);
+      if (!resolved) continue;
 
-    observedRows.set(resolved.rowKey, resolved.rowLabel);
-    observedColumns.set(resolved.columnKey, resolved.columnLabel);
-    accepted.push({ rowKey: resolved.rowKey, columnKey: resolved.columnKey, value: measureValue(record, plan, warnings) });
-    recordsAccepted++;
+      observedRows.set(resolved.rowKey, resolved.rowLabel);
+      observedColumns.set(resolved.columnKey, resolved.columnLabel);
+      let row = totals.get(resolved.rowKey);
+      if (!row) totals.set(resolved.rowKey, row = new Map<string, number>());
+      row.set(resolved.columnKey, (row.get(resolved.columnKey) ?? 0) + measureValue(record, plan, warnings));
+      recordsAccepted++;
+    }
   }
+
+  function finish(): TabulationResult {
+    return materializeTabulation({
+      plan, conversions, warnings, observedRows, observedColumns, totals,
+      recordsSeen, recordsAccepted, rules, ruleMatches,
+    });
+  }
+
+  return { push, finish };
+}
+
+interface TabulationState {
+  plan: QueryPlan;
+  conversions: ConversionRegistry;
+  warnings: Set<string>;
+  observedRows: Map<string, string>;
+  observedColumns: Map<string, string>;
+  totals: Map<string, Map<string, number>>;
+  recordsSeen: number;
+  recordsAccepted: number;
+  rules: readonly CrossFieldRuleSpec[];
+  ruleMatches: readonly number[];
+}
+
+function materializeTabulation(state: TabulationState): TabulationResult {
+  const {
+    plan, conversions, warnings, observedRows, observedColumns, totals,
+    recordsSeen, recordsAccepted, rules, ruleMatches,
+  } = state;
 
   let rows = axisFromDimension(plan.spec.rows, conversions, observedRows);
   let columns = plan.spec.columns
     ? axisFromDimension(plan.spec.columns, conversions, observedColumns)
     : [{ key: '__single__', label: singleColumnLabel(plan), source: 'raw' as const }];
 
-  const rowIndex = new Map(rows.map((row, index) => [row.key, index]));
-  const columnIndex = new Map(columns.map((column, index) => [column.key, index]));
-  let cells = rows.map(() => columns.map(() => 0));
-
-  for (const item of accepted) {
-    const r = rowIndex.get(item.rowKey);
-    const c = columnIndex.get(item.columnKey);
-    if (r !== undefined && c !== undefined) cells[r]![c] = (cells[r]![c] ?? 0) + item.value;
-  }
+  let cells = rows.map((row) => {
+    const accumulated = totals.get(row.key);
+    return columns.map((column) => accumulated?.get(column.key) ?? 0);
+  });
 
   if (plan.spec.rows.conversionId) propagateRowSubtotals(rows, cells);
 
@@ -336,4 +382,14 @@ export function executeInMemory(
       })),
     } : {}),
   };
+}
+
+export function executeInMemory(
+  records: Iterable<DataRecord>,
+  plan: QueryPlan,
+  conversions: ConversionRegistry = {},
+): TabulationResult {
+  const accumulator = createTabulationAccumulator(plan, conversions);
+  accumulator.push(records);
+  return accumulator.finish();
 }
