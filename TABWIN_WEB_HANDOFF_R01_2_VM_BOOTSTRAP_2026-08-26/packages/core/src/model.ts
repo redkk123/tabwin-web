@@ -88,6 +88,15 @@ export type TotalPolicy =
 export interface MeasureSpec {
   kind: 'count' | 'sum';
   field?: string;
+  /**
+   * Column header for a sum, taken verbatim from the DEF increment (`I`)
+   * whose field this is — "Valor Total" for `VAL_TOT`, not a generic word.
+   * Established by G003 against the real engine, which labels the column with
+   * the increment's own name. Absent when a sum runs over a raw field with no
+   * DEF increment behind it; there is no TabWin precedent for that case, so
+   * the executor falls back to a neutral header rather than inventing one.
+   */
+  label?: string;
   /** DEF G semantics: grouped records contribute this field instead of a literal 1 to frequency. */
   weightField?: string;
   totalPolicy?: TotalPolicy;

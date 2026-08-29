@@ -1,0 +1,42 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G003",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the lossless BIFF export; SHA-256 8712DE38B0D9EC4F17572ED27F13CBF5E98407146AFC29941367F50993CB3B7A. TabWin's own Total row/column are recorded as evidence, not compared."
+  },
+  "rows": [
+    {
+      "label": "Atenção Básica"
+    },
+    {
+      "label": "Média complexidade"
+    },
+    {
+      "label": "Alta complexidade"
+    },
+    {
+      "label": "Não se aplica"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Valor Total"
+    }
+  ],
+  "cells": [
+    [
+      0
+    ],
+    [
+      3016736.9200000037
+    ],
+    [
+      1291335.84
+    ],
+    [
+      0
+    ]
+  ]
+}

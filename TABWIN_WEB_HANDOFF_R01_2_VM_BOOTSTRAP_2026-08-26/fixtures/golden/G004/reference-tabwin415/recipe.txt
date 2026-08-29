@@ -1,0 +1,12 @@
+Reference engine: TabWin 4.15
+Definition: RD2008.DEF
+Source file: RDAC2401.dbc
+Row: Complexidade do Procedimento
+Column: not active
+Increment: Frequência
+Selections: Caráter atendimento, only "01 Eletivo" ticked (CARATEND.CNV category 1)
+Zero suppression: disabled
+
+Captured by the user in the isolated TabWin 4.15 directory on 2026-08-29.
+Result shape: 4 row(s) x 1 column(s).
+Records: 4315 seen, 2092 accepted.

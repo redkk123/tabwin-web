@@ -10,6 +10,7 @@ import {
   parseRecipe,
   serializePortableTable,
   serializeRecipe,
+  sumMeasureFromDefIncrement,
   type AnalysisRecipeV1,
   type CrossFieldRuleSpec,
   type FilterSpec,
@@ -2162,8 +2163,15 @@ function buildPlan(): QueryPlan {
     ...(conversionName ? { conversionId: conversionName, startPosition: Number(startPosition.value) } : {}),
     ...(discriminateUnclassified.checked ? { unclassifiedPolicy: 'discriminate' as const } : {}),
   };
+  // G003: the real engine headers a sum with the DEF increment's own label
+  // ("Valor Total"), so route through the DEF bridge when the DEF declares
+  // this field as an increment; a raw field with no increment keeps the
+  // neutral header, which is the case TabWin has no precedent for.
+  const increment = activeDef?.increments.find(
+    (candidate) => candidate.field.toUpperCase() === measureField.value.toUpperCase(),
+  );
   const measure = measureKind.value === 'sum'
-    ? { kind: 'sum' as const, field: measureField.value }
+    ? (increment ? sumMeasureFromDefIncrement(increment) : { kind: 'sum' as const, field: measureField.value })
     : { kind: 'count' as const };
   const spec = {
     compatibilityProfile: currentCompatibilityProfile,

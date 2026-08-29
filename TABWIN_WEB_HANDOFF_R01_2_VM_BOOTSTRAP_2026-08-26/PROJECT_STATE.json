@@ -1,10 +1,10 @@
 {
-  "revision": "faixa-3-2-def-cnv-editor-inspector",
+  "revision": "g002-g005-golden-corpus",
   "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 207,
-    "passed": 207,
+    "total": 215,
+    "passed": 215,
     "failed": 0,
     "command": "npm run check"
   },
@@ -68,137 +68,144 @@
     "tabwin-biff-reference-export-parser",
     "real-g001-zero-tolerance-golden-equivalence",
     "lossless-six-field-def-metadata-preservation",
-    "profile-scoped-tabwin-frequency-header"
-    ,"immutable-post-tabulation-result-operations"
-    ,"table-add-subtract-multiply-divide-min-max-percentage"
-    ,"table-factor-cumulative-absolute-integer-sequence-constant"
-    ,"explicit-derived-column-total-policies"
-    ,"recipe-persisted-table-operation-replay"
-    ,"table-operation-undo-reset-and-audit-ui"
-    ,"stable-nonmutating-table-sort"
-    ,"accent-insensitive-row-location"
-    ,"table-decimal-and-key-visibility-controls"
-    ,"spreadsheet-ready-table-tsv-clipboard"
-    ,"browser-table-print-stylesheet"
-    ,"recipe-persisted-table-presentation"
-    ,"raw-and-cnv-backed-exclusion-filters"
-    ,"inclusive-or-exclusive-numeric-range-filters"
-    ,"filter-select-all-and-clear-controls"
-    ,"explicit-unclassified-filter-selection"
-    ,"explicit-unclassified-axis-discrimination"
-    ,"safe-table-expression-parser-without-eval"
-    ,"expression-column-cnn-key-and-bracketed-title-references"
-    ,"expression-parentheses-unary-precedence-and-powers"
-    ,"recipe-persisted-expression-columns"
-    ,"recipe-persisted-column-rename-move-and-delete"
-    ,"reversible-row-suppression"
-    ,"reversible-row-sum-aggregation"
-    ,"table-editing-guards-against-final-column-deletion"
-    ,"audited-r05-3-c-r06-0-and-worker-tree-integration"
-    ,"multi-uf-and-multi-period-official-acquisition-selection"
-    ,"schema-checked-multi-source-tabulation"
-    ,"explicit-manual-auxiliary-selection-without-rule-guessing"
-    ,"cancellable-dbc-dbf-web-worker-decoding"
-    ,"independent-row-and-column-zero-suppression"
-    ,"column-cnv-start-position-and-unclassified-controls"
-    ,"deterministic-6000-column-cardinality-regression"
-    ,"modern-accent-insensitive-variable-and-category-search"
-    ,"immutable-replayable-table-transpose"
-    ,"recipe-and-portable-table-title-subtitle-footer"
-    ,"accessible-table-caption-and-print-footer"
-    ,"strict-replayable-portable-table-include-by-exact-row-key"
-    ,"presentation-only-bundled-municipality-code-name-bridge"
-    ,"municipality-name-aware-table-location"
-    ,"non-destructive-numeric-data-quality-profile"
-    ,"manual-inclusive-valid-range-cleaning-rules"
-    ,"review-before-apply-iqr-range-suggestion"
-    ,"recipe-and-audit-persisted-data-quality-filter-origin"
-    ,"typed-datasus-periodicity-geography-and-auxiliary-capabilities"
-    ,"query-time-only-file-availability-policy"
-    ,"visible-multi-selection-request-count"
-    ,"official-query-result-availability-manifest"
-    ,"explicit-missing-period-and-uf-diagnostics"
-    ,"versioned-portable-official-source-query-manifest"
-    ,"deterministic-source-manifest-serialization-and-validation"
-    ,"source-manifest-file-and-query-availability-diff"
-    ,"bounded-browser-source-manifest-comparison"
-    ,"reviewed-explicit-new-source-download-from-manifest-diff"
-    ,"incremental-batch-schema-compatibility-stop"
-    ,"versioned-research-request-model"
-    ,"deterministic-multi-dataset-research-query-plan"
-    ,"explicit-unknown-file-count-and-byte-estimates-before-catalog-observation"
-    ,"non-interpreted-user-authored-research-concept-terms"
-    ,"officially-observed-58-type-sinan-catalog-snapshot"
-    ,"preflight-decoded-dbf-memory-capacity-diagnostic"
-    ,"large-official-dbc-not-misclassified-as-corrupt"
-    ,"failed-official-decode-preserves-previous-dataset"
-    ,"bounded-4kib-chunk-emitting-pkware-dcl-decoder"
-    ,"byte-exact-streamed-dcl-equivalence-on-real-g001-dbc"
-    ,"explicit-optional-dbf-eof-byte-policy"
-    ,"dbf-record-assembly-across-arbitrary-chunk-boundaries"
-    ,"bounded-batch-record-delivery-without-materializing-the-dbf"
-    ,"streamed-record-equality-with-published-reader-on-real-rdac2401"
-    ,"measured-flat-peak-record-memory-independent-of-file-size"
-    ,"batch-boundary-cooperative-stream-cancellation"
-    ,"sinan-finals-catalog-audited-against-official-transfer-script"
-    ,"explicit-br-token-for-national-coverage-catalog-queries"
-    ,"user-authored-cross-field-implausibility-rules"
-    ,"flag-or-exclude-action-with-per-rule-matched-record-counts"
-    ,"cross-field-conditions-validated-by-the-shared-filter-validator"
-    ,"recipe-persisted-and-replayable-cross-field-rules"
-    ,"semantics-free-rare-field-combination-profile"
-    ,"incremental-tabulation-accumulator-bounded-by-distinct-cells"
-    ,"batched-accumulation-identical-to-one-shot-execution"
-    ,"worker-tabulation-that-never-returns-records-to-the-main-thread"
-    ,"streamed-tabulation-identical-to-materialized-on-real-rdac2401"
-    ,"measured-decode-cost-breakdown-locating-the-record-object-wall"
-    ,"plan-field-projection-at-the-decoding-source"
-    ,"real-dengbr25-read-end-to-end-in-bounded-memory"
-    ,"worker-owned-dataset-with-no-records-on-the-main-thread"
-    ,"single-streaming-path-for-every-file-size"
-    ,"browser-verified-worker-open-tabulate-profile-distinct-and-export"
-    ,"real-dengbr25-opened-and-tabulated-in-a-browser-session"
-    ,"candidate-worker-open-preserves-active-dataset-on-failure-or-cancel"
-    ,"worker-rehydration-from-retained-source-files-after-cancel"
-    ,"distinct-value-truncation-only-on-new-value-beyond-cap"
-    ,"headless-safe-analysis-yield"
-    ,"preliminary-modality-propagated-to-plan-audit-and-recipe"
-    ,"versioned-json-tabulation-result-export"
-    ,"cross-field-quality-rule-builder-ui"
-    ,"visible-per-rule-quality-outcomes-and-action-toggle"
-    ,"worker-backed-rare-combination-profile-ui"
-    ,"observed-combination-to-flag-rule-bridge"
-    ,"pure-table-window-helper-for-scroll-based-virtualization"
-    ,"virtualized-result-table-with-no-500-row-cap"
-    ,"atomic-tbody-swap-avoiding-a-scroll-resetting-empty-frame"
-    ,"full-table-render-on-beforeprint-restored-on-afterprint"
-    ,"browser-verified-1927-row-scroll-and-print-on-real-dengue-tabulation"
-    ,"modern-session-tabulation-log-explicitly-not-lst-equivalent"
-    ,"per-entry-and-copy-all-tabulation-log-clipboard-export"
-    ,"tabulation-log-persists-across-dataset-changes-until-cleared"
-    ,"l3-tabulation-result-cache-keyed-by-plan-and-conversions"
-    ,"result-cache-cleared-on-every-dataset-open-or-append"
-    ,"lru-eviction-past-a-bounded-cache-capacity"
-    ,"visible-cache-hit-indicator-in-toast-and-tabulation-log"
-    ,"browser-verified-cache-hit-miss-and-reopen-invalidation-on-real-files"
-    ,"key-based-structural-and-numeric-tabulation-diff"
-    ,"tabulation-log-entry-full-result-snapshot-for-comparison"
-    ,"compare-log-entry-with-current-tabulation-ui"
-    ,"browser-verified-tabulation-diff-on-real-rdac2401-two-dimensional-change"
-    ,"geojson-featurecollection-to-tabwin-map-conversion"
-    ,"explicit-geocode-and-name-property-picker-no-guessing"
-    ,"multipolygon-point-and-linestring-geometry-support"
-    ,"interior-ring-conversion-with-explicit-hole-limitation-warning"
-    ,"browser-verified-geojson-import-choropleth-render-on-real-rdac2401"
-    ,"windows-1252-encoder-matching-the-native-decoder-byte-for-byte"
-    ,"deterministic-fixed-column-cnv-serializer"
-    ,"cnv-serializer-refuses-new-format-and-overwidth-fields-instead-of-corrupting"
-    ,"model-level-cnv-structural-diagnostics"
-    ,"cnv-editor-ui-with-live-classification-preview-against-the-open-dataset"
-    ,"cnv-editor-apply-to-current-dataset-and-download-cnv-actions"
-    ,"read-only-def-inspector-with-per-line-detail-and-unknown-line-surfacing"
-    ,"browser-verified-cnv-editor-round-trip-and-precedence-fix-on-real-complex2-cnv"
-    ,"browser-verified-def-inspector-on-real-rd2008-def-surfacing-x-directive-lines"
+    "profile-scoped-tabwin-frequency-header",
+    "immutable-post-tabulation-result-operations",
+    "table-add-subtract-multiply-divide-min-max-percentage",
+    "table-factor-cumulative-absolute-integer-sequence-constant",
+    "explicit-derived-column-total-policies",
+    "recipe-persisted-table-operation-replay",
+    "table-operation-undo-reset-and-audit-ui",
+    "stable-nonmutating-table-sort",
+    "accent-insensitive-row-location",
+    "table-decimal-and-key-visibility-controls",
+    "spreadsheet-ready-table-tsv-clipboard",
+    "browser-table-print-stylesheet",
+    "recipe-persisted-table-presentation",
+    "raw-and-cnv-backed-exclusion-filters",
+    "inclusive-or-exclusive-numeric-range-filters",
+    "filter-select-all-and-clear-controls",
+    "explicit-unclassified-filter-selection",
+    "explicit-unclassified-axis-discrimination",
+    "safe-table-expression-parser-without-eval",
+    "expression-column-cnn-key-and-bracketed-title-references",
+    "expression-parentheses-unary-precedence-and-powers",
+    "recipe-persisted-expression-columns",
+    "recipe-persisted-column-rename-move-and-delete",
+    "reversible-row-suppression",
+    "reversible-row-sum-aggregation",
+    "table-editing-guards-against-final-column-deletion",
+    "audited-r05-3-c-r06-0-and-worker-tree-integration",
+    "multi-uf-and-multi-period-official-acquisition-selection",
+    "schema-checked-multi-source-tabulation",
+    "explicit-manual-auxiliary-selection-without-rule-guessing",
+    "cancellable-dbc-dbf-web-worker-decoding",
+    "independent-row-and-column-zero-suppression",
+    "column-cnv-start-position-and-unclassified-controls",
+    "deterministic-6000-column-cardinality-regression",
+    "modern-accent-insensitive-variable-and-category-search",
+    "immutable-replayable-table-transpose",
+    "recipe-and-portable-table-title-subtitle-footer",
+    "accessible-table-caption-and-print-footer",
+    "strict-replayable-portable-table-include-by-exact-row-key",
+    "presentation-only-bundled-municipality-code-name-bridge",
+    "municipality-name-aware-table-location",
+    "non-destructive-numeric-data-quality-profile",
+    "manual-inclusive-valid-range-cleaning-rules",
+    "review-before-apply-iqr-range-suggestion",
+    "recipe-and-audit-persisted-data-quality-filter-origin",
+    "typed-datasus-periodicity-geography-and-auxiliary-capabilities",
+    "query-time-only-file-availability-policy",
+    "visible-multi-selection-request-count",
+    "official-query-result-availability-manifest",
+    "explicit-missing-period-and-uf-diagnostics",
+    "versioned-portable-official-source-query-manifest",
+    "deterministic-source-manifest-serialization-and-validation",
+    "source-manifest-file-and-query-availability-diff",
+    "bounded-browser-source-manifest-comparison",
+    "reviewed-explicit-new-source-download-from-manifest-diff",
+    "incremental-batch-schema-compatibility-stop",
+    "versioned-research-request-model",
+    "deterministic-multi-dataset-research-query-plan",
+    "explicit-unknown-file-count-and-byte-estimates-before-catalog-observation",
+    "non-interpreted-user-authored-research-concept-terms",
+    "officially-observed-58-type-sinan-catalog-snapshot",
+    "preflight-decoded-dbf-memory-capacity-diagnostic",
+    "large-official-dbc-not-misclassified-as-corrupt",
+    "failed-official-decode-preserves-previous-dataset",
+    "bounded-4kib-chunk-emitting-pkware-dcl-decoder",
+    "byte-exact-streamed-dcl-equivalence-on-real-g001-dbc",
+    "explicit-optional-dbf-eof-byte-policy",
+    "dbf-record-assembly-across-arbitrary-chunk-boundaries",
+    "bounded-batch-record-delivery-without-materializing-the-dbf",
+    "streamed-record-equality-with-published-reader-on-real-rdac2401",
+    "measured-flat-peak-record-memory-independent-of-file-size",
+    "batch-boundary-cooperative-stream-cancellation",
+    "sinan-finals-catalog-audited-against-official-transfer-script",
+    "explicit-br-token-for-national-coverage-catalog-queries",
+    "user-authored-cross-field-implausibility-rules",
+    "flag-or-exclude-action-with-per-rule-matched-record-counts",
+    "cross-field-conditions-validated-by-the-shared-filter-validator",
+    "recipe-persisted-and-replayable-cross-field-rules",
+    "semantics-free-rare-field-combination-profile",
+    "incremental-tabulation-accumulator-bounded-by-distinct-cells",
+    "batched-accumulation-identical-to-one-shot-execution",
+    "worker-tabulation-that-never-returns-records-to-the-main-thread",
+    "streamed-tabulation-identical-to-materialized-on-real-rdac2401",
+    "measured-decode-cost-breakdown-locating-the-record-object-wall",
+    "plan-field-projection-at-the-decoding-source",
+    "real-dengbr25-read-end-to-end-in-bounded-memory",
+    "worker-owned-dataset-with-no-records-on-the-main-thread",
+    "single-streaming-path-for-every-file-size",
+    "browser-verified-worker-open-tabulate-profile-distinct-and-export",
+    "real-dengbr25-opened-and-tabulated-in-a-browser-session",
+    "candidate-worker-open-preserves-active-dataset-on-failure-or-cancel",
+    "worker-rehydration-from-retained-source-files-after-cancel",
+    "distinct-value-truncation-only-on-new-value-beyond-cap",
+    "headless-safe-analysis-yield",
+    "preliminary-modality-propagated-to-plan-audit-and-recipe",
+    "versioned-json-tabulation-result-export",
+    "cross-field-quality-rule-builder-ui",
+    "visible-per-rule-quality-outcomes-and-action-toggle",
+    "worker-backed-rare-combination-profile-ui",
+    "observed-combination-to-flag-rule-bridge",
+    "pure-table-window-helper-for-scroll-based-virtualization",
+    "virtualized-result-table-with-no-500-row-cap",
+    "atomic-tbody-swap-avoiding-a-scroll-resetting-empty-frame",
+    "full-table-render-on-beforeprint-restored-on-afterprint",
+    "browser-verified-1927-row-scroll-and-print-on-real-dengue-tabulation",
+    "modern-session-tabulation-log-explicitly-not-lst-equivalent",
+    "per-entry-and-copy-all-tabulation-log-clipboard-export",
+    "tabulation-log-persists-across-dataset-changes-until-cleared",
+    "l3-tabulation-result-cache-keyed-by-plan-and-conversions",
+    "result-cache-cleared-on-every-dataset-open-or-append",
+    "lru-eviction-past-a-bounded-cache-capacity",
+    "visible-cache-hit-indicator-in-toast-and-tabulation-log",
+    "browser-verified-cache-hit-miss-and-reopen-invalidation-on-real-files",
+    "key-based-structural-and-numeric-tabulation-diff",
+    "tabulation-log-entry-full-result-snapshot-for-comparison",
+    "compare-log-entry-with-current-tabulation-ui",
+    "browser-verified-tabulation-diff-on-real-rdac2401-two-dimensional-change",
+    "geojson-featurecollection-to-tabwin-map-conversion",
+    "explicit-geocode-and-name-property-picker-no-guessing",
+    "multipolygon-point-and-linestring-geometry-support",
+    "interior-ring-conversion-with-explicit-hole-limitation-warning",
+    "browser-verified-geojson-import-choropleth-render-on-real-rdac2401",
+    "windows-1252-encoder-matching-the-native-decoder-byte-for-byte",
+    "deterministic-fixed-column-cnv-serializer",
+    "cnv-serializer-refuses-new-format-and-overwidth-fields-instead-of-corrupting",
+    "model-level-cnv-structural-diagnostics",
+    "cnv-editor-ui-with-live-classification-preview-against-the-open-dataset",
+    "cnv-editor-apply-to-current-dataset-and-download-cnv-actions",
+    "read-only-def-inspector-with-per-line-detail-and-unknown-line-surfacing",
+    "browser-verified-cnv-editor-round-trip-and-precedence-fix-on-real-complex2-cnv",
+    "browser-verified-def-inspector-on-real-rd2008-def-surfacing-x-directive-lines",
+    "real-g002-row-by-column-golden-equivalence",
+    "real-g003-sum-measure-golden-equivalence",
+    "real-g004-cnv-backed-selection-golden-equivalence",
+    "real-g005-zero-suppression-golden-equivalence",
+    "def-increment-label-as-sum-column-header",
+    "golden-comparison-at-source-declared-decimal-precision",
+    "generalized-multi-case-golden-verifier"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -210,7 +217,10 @@
     "record_size": 702,
     "auxiliary_bundle": "TAB_SIH.zip",
     "auxiliary_entries": 886,
-    "verified_auxiliaries": ["RD2008.DEF", "COMPLEX2.CNV"]
+    "verified_auxiliaries": [
+      "RD2008.DEF",
+      "COMPLEX2.CNV"
+    ]
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
@@ -220,37 +230,43 @@
     "advanced-chart-editing-axes-zoom-and-print",
     "legacy-map-manual-breaks-label-layers-and-selection-bridge",
     "parquet-geojson-kml-and-legacy-table-exports",
-    "golden-cases-beyond-g001"
-    ,"github-actions-runner-blocked-by-account-billing-lock"
-    ,"golden-equivalence-for-post-tabulation-operations"
-    ,"table-normalization-and-advanced-header-footnote-editing"
-    ,"r06-1-top-n-tie-order-and-total-semantics-await-oracle"
-    ,"r06-1-multiple-increment-layout-and-totals-await-oracle"
-    ,"column-def-cnv-ui-real-browser-release-smoke"
-    ,"r06-2-post-table-operations-await-focused-goldens"
-    ,"legacy-include-table-mismatch-paste-column-width-key-length-and-normalization"
-    ,"legacy-header1-header2-footer-and-print-pagination"
-    ,"dynamic-official-catalog-period-availability"
-    ,"geographic-label-registries-beyond-bundled-municipalities"
-    ,"raw-sentinel-code-meaning-without-def-cnv-evidence"
-    ,"clinical-cleaning-presets-without-authoritative-source"
-    ,"multi-period-null-category-and-schema-drift-diagnostics"
-    ,"sinan-def-cnv-and-tabnet-dimension-registry"
-    ,"message-driven-cancellation-of-an-in-flight-synchronous-decode"
+    "github-actions-runner-blocked-by-account-billing-lock",
+    "golden-equivalence-for-post-tabulation-operations",
+    "table-normalization-and-advanced-header-footnote-editing",
+    "r06-1-top-n-tie-order-and-total-semantics-await-oracle",
+    "r06-1-multiple-increment-layout-and-totals-await-oracle",
+    "column-def-cnv-ui-real-browser-release-smoke",
+    "r06-2-post-table-operations-await-focused-goldens",
+    "legacy-include-table-mismatch-paste-column-width-key-length-and-normalization",
+    "legacy-header1-header2-footer-and-print-pagination",
+    "dynamic-official-catalog-period-availability",
+    "geographic-label-registries-beyond-bundled-municipalities",
+    "raw-sentinel-code-meaning-without-def-cnv-evidence",
+    "clinical-cleaning-presets-without-authoritative-source",
+    "multi-period-null-category-and-schema-drift-diagnostics",
+    "sinan-def-cnv-and-tabnet-dimension-registry",
+    "message-driven-cancellation-of-an-in-flight-synchronous-decode",
+    "golden-cases-beyond-g005",
+    "g006-nonclassified-needs-a-different-dbc-or-field"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
     "fflate": "0.8.2",
     "typescript": "5.8.3",
-    "vite": "8.2.2"
-    ,"wrangler": "4.127.0"
+    "vite": "8.2.2",
+    "wrangler": "4.127.0"
   },
   "g001": {
     "status": "pass-exact-structural-and-numeric-equality",
     "row": "Complexidade do Procedimento / COMPLEX / COMPLEX2.CNV",
     "comparison_tolerance": 0,
     "reference_export_sha256": "2ECF97628F3658C98A7F366A3419C1388E024F2FAE94F81A66C10A77EB019D16",
-    "records_declared_decoded_seen_accepted": [4315, 4315, 4315, 4315],
+    "records_declared_decoded_seen_accepted": [
+      4315,
+      4315,
+      4315,
+      4315
+    ],
     "cell_differences": 0,
     "golden_created_from_reference_export": true,
     "golden_modified_to_pass": false
@@ -268,7 +284,18 @@
     "close-cataloged-tabwin-415-feature-families",
     "surface-all-evidence-backed-DEF-driven-increments-and-selections",
     "continue-TAB-archaeology-against-portable-recipe-model",
-    "expand-chart-and-map-families"
-    ,"after-functional-matrix-generate-short-seeded-pairwise-oracle-corpus"
-  ]
+    "expand-chart-and-map-families",
+    "after-functional-matrix-generate-short-seeded-pairwise-oracle-corpus"
+  ],
+  "goldens": {
+    "passing": [
+      "G001",
+      "G002",
+      "G003",
+      "G004",
+      "G005"
+    ],
+    "tolerance": 0,
+    "notes": "G003 compares at VAL_TOT declared 2 decimals; TabWin and this executor land 1 ULP apart on a 4153-record float sum, with our value closer to exact. Counts stay exact."
+  }
 }

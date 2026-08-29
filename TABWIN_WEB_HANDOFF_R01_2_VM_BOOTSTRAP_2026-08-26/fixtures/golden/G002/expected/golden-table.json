@@ -1,0 +1,77 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G002",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the lossless BIFF export; SHA-256 0E983D3E77ADB42DBD6D87E7B7FF87195599924F41D5C641329DD406D91F155D. TabWin's own Total row/column are recorded as evidence, not compared."
+  },
+  "rows": [
+    {
+      "label": "Atenção Básica"
+    },
+    {
+      "label": "Média complexidade"
+    },
+    {
+      "label": "Alta complexidade"
+    },
+    {
+      "label": "Não se aplica"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Eletivo"
+    },
+    {
+      "label": "Urgência"
+    },
+    {
+      "label": "Acid local trab"
+    },
+    {
+      "label": "Acid trajeto"
+    },
+    {
+      "label": "Outros ac trab"
+    },
+    {
+      "label": "Outras caus ext"
+    }
+  ],
+  "cells": [
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      1968,
+      2185,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      124,
+      38,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ]
+}

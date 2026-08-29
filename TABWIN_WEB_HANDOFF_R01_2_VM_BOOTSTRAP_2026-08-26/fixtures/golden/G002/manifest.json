@@ -1,0 +1,68 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G002",
+  "capturedAt": "2026-08-29",
+  "semantic": "row x column tabulation",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "RD2008.DEF",
+      "bytes": 33581,
+      "sha256": "15376FB2E56917B4122FA475B15F1E270E9DAA4238F518D75E6BB6044372C652"
+    },
+    {
+      "name": "COMPLEX2.CNV",
+      "bytes": 265,
+      "sha256": "680EB03BD06964CF4DAE4B571BC757990688279ADB164B54D5253009D8A3975F"
+    },
+    {
+      "name": "CARATENDc.CNV",
+      "bytes": 389,
+      "sha256": "03773387349528331EEDB6E2158BFEE02AEC245A770826A28F45733BA3679537"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 1133,
+      "sha256": "0E983D3E77ADB42DBD6D87E7B7FF87195599924F41D5C641329DD406D91F155D"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 423,
+      "sha256": "BE6874FFC0C5AE411B456BC4F471ACFDFEB6F2E8AA250F4500B652FFCA97B670"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 1135,
+      "sha256": "C3A4AC7498A1DAB2DF057EF8712F57FAF473BA6A3184E0832663606FC5FE1A25"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 1106,
+      "sha256": "03EE5EBD8D60B2FA58A11BE175BAB6BC24B0FEEECD88EE0247AB55E295246551"
+    }
+  ],
+  "comparison": {
+    "tolerance": 0,
+    "comparedAtDecimalPlaces": null,
+    "recordsDeclared": 4315,
+    "recordsDecoded": 4315,
+    "recordsSeen": 4315,
+    "recordsAccepted": 4315,
+    "rowLabelsMatch": true,
+    "columnLabelsMatch": true,
+    "shapeMatch": true,
+    "cellDiffCount": 0,
+    "pass": true
+  }
+}

@@ -292,17 +292,33 @@ deve ser feito sem captura pareada no TabWin 4.15.
 
 ### 4.1 Bateria de goldens G002–G023+
 
-**Em captura desde 2026-08-29.** Protocolo de G002–G006 publicado em
-`docs/testing/G002_G006_CAPTURE_PROTOCOL.md`, pastas de destino criadas.
-Fila reconciliada de G007 em diante — três planos conflitantes do projeto
-(estratégia antiga, plano remanescente, recordação do Codex) unificados em
-`docs/testing/GOLDEN_CORPUS_QUEUE.md`, com correção de uma afirmação do
-Codex sem lastro na reverse-spec.
+**Primeira bateria fechada em 2026-08-29: G002–G005 capturados e aprovados
+com tolerância zero.** A compatibilidade deixou de se apoiar em um caso e
+passou a cobrir cinco semânticas independentes: frequência 1D com CNV
+(G001), linha × coluna (G002), medida de soma (G003), seleção ancorada em
+CNV (G004) e supressão de zeros (G005).
+
+O G003 achou **duas divergências reais** — foi o que justificou a bateria:
+
+1. Cabeçalho da coluna de soma: o TabWin usa o rótulo do incremento do DEF
+   ("Valor Total"), não uma palavra genérica. Corrigido no executor (o
+   próprio código já dizia estar esperando exatamente este golden).
+2. Soma de 4.153 doubles: TabWin e nosso executor caem a **1 ULP** de
+   distância, com o **nosso** valor mais perto do exato. Investigado contra
+   seis hipóteses de acumulação; nenhuma ordem reproduz o valor do TabWin.
+   Resolvido comparando na precisão que o campo declara no cabeçalho do DBF
+   (`VAL_TOT`, 2 decimais) — não uma tolerância afrouxada: contagens seguem
+   exatas e um erro de um centavo continua reprovando.
+
+Fila reconciliada de G007 em diante em `docs/testing/GOLDEN_CORPUS_QUEUE.md`.
+G006 (não classificados) segue adiado: nenhum campo do arquivo AC/2024-01
+produz valor fora da cobertura da sua CNV. Evidência completa em
+`docs/handoffs/R10_0_G002_G005_GOLDEN_RESULTS.md`.
 
 **Esforço:** semanas de captura, pouco código · **Risco:** é o que reduz risco
 
-Hoje a compatibilidade se apoia em **um** caso. O documento mestre pede bateria
-por subsistema: CNV, DEF, motor, quadro, persistência, geografia.
+O documento mestre pede bateria por subsistema: CNV, DEF, motor, quadro,
+persistência, geografia. Cinco casos cobrem o motor; o resto continua aberto.
 
 O trabalho é operar o TabWin 4.15 e capturar, não programar. Deve começar cedo
 mesmo sendo longo, porque é o que autoriza a palavra "compatível".

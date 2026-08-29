@@ -61,5 +61,8 @@ export function frequencyMeasureFromDef(definition: DefDefinition): MeasureSpec 
 }
 
 export function sumMeasureFromDefIncrement(increment: DefIncrement): MeasureSpec {
-  return { kind: 'sum', field: increment.field };
+  // G003 established that the real engine headers the column with the
+  // increment's own label ("Valor Total"), so it travels with the measure.
+  const label = increment.label.trim();
+  return { kind: 'sum', field: increment.field, ...(label ? { label } : {}) };
 }

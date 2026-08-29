@@ -325,7 +325,11 @@ test('DEF bridge compiles conversion option, filter, frequency and increment mea
     field: 'SEXO', conversionId: 'SEXO.CNV', startPosition: 1, acceptedCategories: ['1', '2'],
   });
   assert.deepEqual(frequencyMeasureFromDef(def), { kind: 'count', weightField: 'QUANTIDADE' });
-  assert.deepEqual(sumMeasureFromDefIncrement(def.increments[0]), { kind: 'sum', field: 'VALOR_TOT' });
+  // The increment's label travels with the measure since G003 proved the real
+  // engine uses it as the column header.
+  assert.deepEqual(sumMeasureFromDefIncrement(def.increments[0]), {
+    kind: 'sum', field: 'VALOR_TOT', label: 'Valor Total',
+  });
 });
 
 test('golden comparator requires exact labels, shape and cells by default', () => {
@@ -347,4 +351,62 @@ test('golden comparator requires exact labels, shape and cells by default', () =
   const diff = compareWithGolden(result, golden);
   assert.equal(diff.pass, false);
   assert.deepEqual(diff.cellDiffs, [{ row: 1, column: 0, expected: 3, actual: 2, delta: -1 }]);
+});
+
+test('golden comparison at a declared decimal precision forgives last-bit float drift but not a real difference', () => {
+  const synthetic = (cells) => ({
+    rows: [{ key: 'a', label: 'A', source: 'raw' }],
+    columns: [{ key: 'v', label: 'Valor Total', source: 'raw' }],
+    cells, warnings: [], recordsSeen: 1, recordsAccepted: 1,
+  });
+  const golden = {
+    schema: 'tabwin-web.golden-table', version: 1, id: 'SYNTH-FLOAT',
+    source: { referenceEngine: 'TabWin 4.15 synthetic capture' },
+    rows: [{ label: 'A' }], columns: [{ label: 'Valor Total' }],
+    // The exact double G003 captured from the real engine.
+    cells: [[3016736.9200000037]],
+  };
+
+  // The exact double this executor produces: 1 ULP below, same cent.
+  const ourValue = 3016736.920000003;
+  assert.notEqual(ourValue, golden.cells[0][0], 'the two doubles really are different');
+  assert.equal(compareWithGolden(synthetic([[ourValue]]), golden).pass, false, 'exact mode still sees it');
+  assert.equal(
+    compareWithGolden(synthetic([[ourValue]]), golden, { decimalPlaces: 2 }).pass,
+    true,
+    'at the declared 2 decimals of VAL_TOT the two agree',
+  );
+
+  // A genuine one-cent error must still fail at that same precision.
+  const offByOneCent = compareWithGolden(synthetic([[3016736.93]]), golden, { decimalPlaces: 2 });
+  assert.equal(offByOneCent.pass, false, 'one cent is a real difference, not rounding noise');
+  assert.equal(offByOneCent.cellDiffs.length, 1);
+  // Diffs report the raw doubles, so evidence keeps what each engine produced.
+  assert.equal(offByOneCent.cellDiffs[0].expected, 3016736.9200000037);
+  assert.equal(offByOneCent.cellDiffs[0].actual, 3016736.93);
+
+  assert.throws(() => compareWithGolden(synthetic([[1]]), golden, { decimalPlaces: -1 }), /non-negative integer/);
+});
+
+test('a DEF increment carries its own label into the measure, and the executor uses it as the column header', () => {
+  const definition = parseDef(['RTeste', 'IValor Total                   ,VAL_TOT'].join('\n'));
+  const measure = sumMeasureFromDefIncrement(definition.increments[0]);
+  assert.deepEqual(measure, { kind: 'sum', field: 'VAL_TOT', label: 'Valor Total' });
+
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure, filters: [],
+  });
+  const result = executeInMemory([{ UF: 'AC', VAL_TOT: 10.5 }], plan);
+  assert.deepEqual(result.columns.map((column) => column.label), ['Valor Total']);
+});
+
+test('a sum with no DEF increment behind it keeps the neutral header instead of inventing one', () => {
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15',
+    rows: { field: 'UF' },
+    measure: { kind: 'sum', field: 'VAL_TOT' },
+    filters: [],
+  });
+  const result = executeInMemory([{ UF: 'AC', VAL_TOT: 10.5 }], plan);
+  assert.deepEqual(result.columns.map((column) => column.label), ['Valor']);
 });

@@ -29,8 +29,11 @@ const UNCLASSIFIED_LABEL = 'Não classificados';
 
 function singleColumnLabel(plan: QueryPlan): string {
   // G001's lossless TabWin 4.15 export establishes the count header exactly.
-  // Sum headers remain "Valor" until a focused increment golden captures them.
-  if (plan.spec.measure.kind !== 'count') return 'Valor';
+  // G003 established the sum header: the real engine uses the DEF increment's
+  // own label ("Valor Total" for VAL_TOT), not a generic word. "Valor" remains
+  // only for a sum with no increment label behind it — a case TabWin has no
+  // precedent for, since its sums always come from a DEF increment.
+  if (plan.spec.measure.kind !== 'count') return plan.spec.measure.label ?? 'Valor';
   return plan.spec.compatibilityProfile === 'tabwin-4.15' ? 'Freqüência' : 'Frequência';
 }
 

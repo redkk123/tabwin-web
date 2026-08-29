@@ -1,6 +1,31 @@
 # G002–G006 — first batch of the differential compatibility corpus
 
-Status: **READY FOR REFERENCE CAPTURE — updated 2026-08-29 with real CNVs**
+Status: **CAPTURED AND PASSING — 2026-08-29.** G002, G003, G004 and G005 were
+captured by the user against the real TabWin 4.15 and all four now pass with
+tolerance zero. Fixtures live in `fixtures/golden/G002`–`G005`; full results,
+including the two real divergences G003 found, are in
+`docs/handoffs/R10_0_G002_G005_GOLDEN_RESULTS.md`. G006 remains deferred for
+the reason documented in its section below.
+
+Two predictions in this document were confirmed and one open question was
+answered by the capture:
+
+- **G002's open question is settled:** TabWin **shows** all six
+  `CARATENDc.CNV` categories, including the four with no data. It does not
+  hide empty columns.
+- **G003 diverged twice** — the sum column header is the DEF increment label
+  (`Valor Total`), not a generic word; and a 4,153-record float sum lands 1 ULP
+  away from ours, with our value closer to exact. Both investigated to root
+  cause; see the results report.
+- G004's accepted-record count (2,092) independently matches the `Eletivo`
+  column total TabWin reports in G002.
+
+The capture instructions below are kept verbatim as the historical record of
+what was asked for.
+
+---
+
+Original status: **READY FOR REFERENCE CAPTURE — updated 2026-08-29 with real CNVs**
 Follows the same discipline as `G001_CAPTURE_PROTOCOL.md`. Read that document
 first — this one does not repeat the shared rules (pass criteria, failure
 classification, hashing, normalized format).
