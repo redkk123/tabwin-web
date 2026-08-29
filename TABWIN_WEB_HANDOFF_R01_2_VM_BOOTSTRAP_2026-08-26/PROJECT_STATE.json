@@ -1,10 +1,10 @@
 {
-  "revision": "g017-multi-measure-tabulation",
+  "revision": "chatgpt-audit-round1-g017-hardening-worker-fix-g012-tool",
   "date": "2026-08-29",
   "phase": "golden-driven-compatibility-progression",
   "tests": {
-    "total": 236,
-    "passed": 236,
+    "total": 241,
+    "passed": 241,
     "failed": 0,
     "command": "npm run check"
   },
@@ -226,7 +226,12 @@
     "simultaneous-multi-measure-tabulation-columns",
     "multi-measure-recipe-persistence",
     "multi-measure-and-column-dimension-mutual-exclusion-guard",
-    "real-g017-multi-measure-golden-equivalence"
+    "real-g017-multi-measure-golden-equivalence",
+    "runtime-json-boundary-validation-for-measure-and-measures",
+    "measure-equals-measures0-invariant-enforced",
+    "worker-recovery-preserves-appended-binary-sources-after-csv-combine",
+    "worker-crash-vs-application-error-distinguished-with-auto-restore",
+    "read-only-new-format-cnv-inspector-tool"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",

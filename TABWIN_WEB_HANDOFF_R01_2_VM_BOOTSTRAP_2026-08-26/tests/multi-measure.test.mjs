@@ -80,6 +80,42 @@ test('a weightField inside `measures` is rejected on a sum entry, same as the si
   );
 });
 
+test('the required primary measure must stay coherent with measures[0]', () => {
+  assert.throws(
+    () => compileQueryPlan({
+      compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' },
+      measure: { kind: 'count' },
+      measures: [{ kind: 'sum', field: 'VAL' }, { kind: 'sum', field: 'OBITO' }],
+      filters: [],
+    }),
+    /measure must equal measures\[0\]/,
+  );
+});
+
+test('runtime JSON cannot smuggle an empty weightField into a multi-measure count', () => {
+  assert.throws(
+    () => plan([{ kind: 'count' }, { kind: 'count', weightField: '   ' }]),
+    /measures\[1\] weightField cannot be empty/,
+  );
+});
+
+test('runtime JSON cannot smuggle an unknown measure kind into G017', () => {
+  assert.throws(
+    () => plan([{ kind: 'count' }, { kind: 'average', field: 'VAL' }]),
+    /measures\[1\] kind is invalid/,
+  );
+});
+
+test('runtime JSON must provide `measures` as an array', () => {
+  assert.throws(
+    () => compileQueryPlan({
+      compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' },
+      measure: { kind: 'count' }, measures: { 0: { kind: 'count' } }, filters: [],
+    }),
+    /measures must be an array/,
+  );
+});
+
 test('row subtotal propagation still sums every measure column, not just the first', () => {
   const provider = parseCnv(['2 2', row(2, 'Detalhe', '10', '1'), row(1, 'Grupo', '99')].join('\n'));
   const measures = [{ kind: 'count' }, { kind: 'sum', field: 'VAL', label: 'Valor' }];

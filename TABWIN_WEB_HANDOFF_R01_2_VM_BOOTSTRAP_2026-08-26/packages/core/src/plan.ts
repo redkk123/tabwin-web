@@ -1,4 +1,4 @@
-import type { FilterSpec, QueryPlan, TabulationSpec } from './model.js';
+import type { FilterSpec, MeasureSpec, QueryPlan, TabulationSpec, TotalPolicy } from './model.js';
 
 export class QueryPlanError extends Error {
   constructor(message: string) {
@@ -40,6 +40,45 @@ function validateFilter(filter: FilterSpec, label: string): void {
   }
 }
 
+const TOTAL_POLICIES = new Set<TotalPolicy>([
+  'none', 'sum', 'product', 'mean', 'initial', 'final', 'min', 'max', 'precalculated',
+]);
+
+/**
+ * Recipes are JSON input, so the runtime boundary must not rely only on the
+ * TypeScript shape. Keep the single- and multi-measure paths on one validator
+ * so G017 cannot silently accept a malformed entry that the legacy path would
+ * reject (or vice versa).
+ */
+function validateMeasure(measure: MeasureSpec, label: string): void {
+  if (!measure || typeof measure !== 'object') throw new QueryPlanError(`${label} is invalid`);
+  if (measure.kind !== 'count' && measure.kind !== 'sum') {
+    throw new QueryPlanError(`${label} kind is invalid`);
+  }
+  if (measure.kind === 'sum' && (typeof measure.field !== 'string' || !measure.field.trim())) {
+    throw new QueryPlanError(`${label} sum requires a field`);
+  }
+  if (measure.weightField !== undefined) {
+    if (typeof measure.weightField !== 'string' || !measure.weightField.trim()) {
+      throw new QueryPlanError(`${label} weightField cannot be empty`);
+    }
+    if (measure.kind === 'sum') {
+      throw new QueryPlanError(`${label} weightField is only valid for count/frequency measures`);
+    }
+  }
+  if (measure.totalPolicy !== undefined && !TOTAL_POLICIES.has(measure.totalPolicy)) {
+    throw new QueryPlanError(`${label} totalPolicy is invalid`);
+  }
+}
+
+function measuresEqual(left: MeasureSpec, right: MeasureSpec): boolean {
+  return left.kind === right.kind
+    && left.field === right.field
+    && left.label === right.label
+    && left.weightField === right.weightField
+    && left.totalPolicy === right.totalPolicy;
+}
+
 export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
   const warnings: string[] = [];
 
@@ -67,14 +106,9 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
       throw new QueryPlanError(`${label} unclassifiedPolicy is invalid`);
     }
   }
-  if (spec.measure.kind === 'sum' && !spec.measure.field?.trim()) {
-    throw new QueryPlanError('sum measure requires a field');
-  }
-  if (spec.measure.weightField !== undefined && !spec.measure.weightField.trim()) {
-    throw new QueryPlanError('weightField cannot be empty');
-  }
-  if (spec.measure.kind === 'sum' && spec.measure.weightField) {
-    throw new QueryPlanError('weightField is only valid for count/frequency measures');
+  validateMeasure(spec.measure, 'measure');
+  if (spec.measures !== undefined && !Array.isArray(spec.measures)) {
+    throw new QueryPlanError('measures must be an array');
   }
   if (spec.measures) {
     if (spec.measures.length < 2) {
@@ -85,10 +119,10 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
     }
     for (const [index, measure] of spec.measures.entries()) {
       const label = `measures[${index}]`;
-      if (measure.kind === 'sum' && !measure.field?.trim()) throw new QueryPlanError(`${label} sum requires a field`);
-      if (measure.kind === 'sum' && measure.weightField) {
-        throw new QueryPlanError(`${label} weightField is only valid for count/frequency measures`);
-      }
+      validateMeasure(measure, label);
+    }
+    if (!measuresEqual(spec.measure, spec.measures[0]!)) {
+      throw new QueryPlanError('measure must equal measures[0] when multiple measures are present');
     }
   }
   for (const [index, filter] of spec.filters.entries()) {

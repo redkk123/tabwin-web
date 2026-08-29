@@ -1430,6 +1430,13 @@ interface DatasetAskOptions {
   progress?: (recordsRead: number, recordCount: number) => void;
 }
 
+class DatasetWorkerInterruptedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DatasetWorkerInterruptedError';
+  }
+}
+
 /**
  * Sends one request and resolves with its reply.
  *
@@ -1469,11 +1476,11 @@ function askDatasetWorker<T>(
     };
     const onFailure = (): void => {
       terminateDatasetWorker(worker);
-      finish(() => reject(new Error(`${options.label} falhou no trabalhador local`)));
+      finish(() => reject(new DatasetWorkerInterruptedError(`${options.label} falhou no trabalhador local`)));
     };
     const onMessageFailure = (): void => {
       terminateDatasetWorker(worker);
-      finish(() => reject(new Error(`${options.label} produziu uma resposta que não pôde ser recebida`)));
+      finish(() => reject(new DatasetWorkerInterruptedError(`${options.label} produziu uma resposta que não pôde ser recebida`)));
     };
     worker.addEventListener('message', onMessage);
     worker.addEventListener('error', onFailure, { once: true });
@@ -1509,7 +1516,24 @@ async function restoreDatasetWorker(): Promise<void> {
     try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
     catch { text = textDecoder.decode(bytes); }
     const parsed = parseDelimited(text, firstExtension === 'TSV' ? { delimiter: '\t' } : {});
-    sources = [{ kind: 'records', name: file.name, records: parsed.records as DbfRecord[] }];
+    // A delimited file can be followed by compatible DBC/DBF files through
+    // the existing "combinar" flow. Preserve those retained File handles on
+    // recovery too; rebuilding only the first CSV/TSV silently dropped every
+    // appended binary source after a Worker cancellation/failure.
+    const appended = await Promise.all(activeDatasetFiles.slice(1).map(async (candidate) => {
+      const extension = extensionOf(candidate.name);
+      if (extension !== 'DBC' && extension !== 'DBF') {
+        throw new Error(`${candidate.name}: fonte combinada não pode ser restaurada`);
+      }
+      const candidateBytes = new Uint8Array(await candidate.arrayBuffer());
+      return {
+        kind: 'binary' as const,
+        name: candidate.name,
+        bytes: transferableBytes(candidateBytes),
+        isDbc: extension === 'DBC',
+      };
+    }));
+    sources = [{ kind: 'records', name: file.name, records: parsed.records as DbfRecord[] }, ...appended];
     fields = parsed.fields;
   } else {
     sources = await Promise.all(activeDatasetFiles.map(async (file) => {
@@ -1526,7 +1550,15 @@ async function restoreDatasetWorker(): Promise<void> {
 
   const expectedSignature = schemaSignature(dbfHeader);
   const expectedRecords = datasetRecordCount;
-  const restored = await openDataset(sources, 'Restauração do conjunto após interrupção', fields);
+  let restored: DbfHeader;
+  try {
+    // openDataset builds the replacement Worker transactionally: the rebuilt
+    // dataset becomes active only after every retained source has been checked.
+    restored = await openDataset(sources, 'Restauração do conjunto após interrupção', fields);
+  } catch (error) {
+    disposeDatasetWorker();
+    throw error;
+  }
   if (schemaSignature(restored) !== expectedSignature || datasetRecordCount !== expectedRecords) {
     disposeDatasetWorker();
     throw new Error('O conjunto restaurado divergiu da fonte aberta; reabra os arquivos');
@@ -1535,7 +1567,22 @@ async function restoreDatasetWorker(): Promise<void> {
 
 async function askDataset<T>(message: Record<string, unknown>, options: DatasetAskOptions): Promise<T> {
   if (!datasetWorker) await restoreDatasetWorker();
-  return askDatasetWorker<T>(datasetWorker!, message, options);
+  try {
+    return await askDatasetWorker<T>(datasetWorker!, message, options);
+  } catch (error) {
+    if (!(error instanceof DatasetWorkerInterruptedError)) throw error;
+    // Do not replay an interrupted request automatically: append requests may
+    // carry transferred buffers, and a blind retry could make side effects
+    // ambiguous. Rebuild the last *committed* dataset instead, then tell the
+    // caller to repeat the operation explicitly.
+    try {
+      await restoreDatasetWorker();
+    } catch (restoreError) {
+      const detail = restoreError instanceof Error ? restoreError.message : String(restoreError);
+      throw new Error(`${error.message}. A restauração automática também falhou: ${detail}`);
+    }
+    throw new Error(`${error.message}. O conjunto foi restaurado automaticamente; repita a operação.`);
+  }
 }
 
 function datasetProgress(label: string) {

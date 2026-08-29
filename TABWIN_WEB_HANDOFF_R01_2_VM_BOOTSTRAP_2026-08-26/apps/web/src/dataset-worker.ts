@@ -187,16 +187,30 @@ function headerForSources(request: OpenRequest): DbfHeader {
   if (first.kind === 'records') {
     const fields = request.fields ?? [];
     if (!fields.length) throw new Error('Uma fonte de registros exige a lista de campos');
-    const records = request.sources.reduce(
-      (total, source) => total + (source.kind === 'records' ? source.records.length : 0), 0);
-    return {
+    const base: DbfHeader = {
       version: 0x03,
       dateOfLastUpdate: new Date(),
-      recordCount: records,
+      recordCount: 0,
       headerLength: 32 + fields.length * 32 + 1,
       recordLength: 1 + fields.reduce((sum, field) => sum + field.length, 0),
       fields,
     };
+    let recordCount = 0;
+    for (const source of request.sources) {
+      if (source.kind === 'records') {
+        recordCount += source.records.length;
+        continue;
+      }
+      const bytes = new Uint8Array(source.bytes);
+      const incoming = source.isDbc
+        ? readDbfHeader(bytes.subarray(0, readDbcMetadata(bytes).headerSize))
+        : readDbfHeader(bytes);
+      if (schemaSignature(base) !== schemaSignature(incoming)) {
+        throw new Error(`${source.name}: esquema incompatível com a fonte de registros`);
+      }
+      recordCount += incoming.recordCount;
+    }
+    return { ...base, recordCount };
   }
 
   let recordCount = 0;
