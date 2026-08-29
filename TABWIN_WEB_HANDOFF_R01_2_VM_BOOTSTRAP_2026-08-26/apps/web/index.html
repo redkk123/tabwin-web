@@ -54,6 +54,11 @@
           <span>Combinar próximos DBC/DBF somente quando o esquema for compatível</span>
         </label>
 
+        <div class="source-actions">
+          <button class="secondary-button" id="cnv-editor-button" type="button">Editor de CNV</button>
+          <button class="secondary-button" id="def-inspector-button" type="button" disabled>Inspetor de DEF</button>
+        </div>
+
         <div class="recipe-actions" aria-label="Análise reproduzível">
           <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>
           <button class="secondary-button" id="save-recipe-button" type="button" disabled>Salvar análise</button>
@@ -467,6 +472,58 @@
           <button class="primary-button" id="geojson-import-confirm" type="submit">Importar</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="cnv-editor-dialog" class="cnv-editor-dialog">
+      <button class="dialog-close" id="cnv-editor-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Editor</span>
+      <h2>Editor de CNV</h2>
+      <p>Edite as categorias e códigos de uma tabela de conversão já carregada, ou crie uma nova do zero. Nada é gravado até você aplicar ao conjunto atual ou baixar o arquivo.</p>
+
+      <div class="cnv-editor-toolbar">
+        <label><span>Arquivo</span><select id="cnv-editor-source"></select></label>
+        <button class="secondary-button" id="cnv-editor-new" type="button">Nova CNV</button>
+      </div>
+      <div class="cnv-editor-header-fields">
+        <label><span>Nome do arquivo ao salvar</span><input id="cnv-editor-filename" type="text" placeholder="minha.cnv" /></label>
+        <label><span>Modo</span><select id="cnv-editor-mode">
+          <option value="short">Curto</option>
+          <option value="literal">Literal</option>
+          <option value="numeric-ranges">Faixas numéricas</option>
+        </select></label>
+        <label><span>Tamanho do código</span><input id="cnv-editor-code-length" type="number" min="1" max="999" value="2" /></label>
+      </div>
+
+      <div class="cnv-editor-table-wrap">
+        <table class="cnv-editor-table">
+          <thead><tr><th>Seq.</th><th>Rótulo</th><th>Subtotal / #</th><th id="cnv-editor-codes-header">Códigos / faixas</th><th></th></tr></thead>
+          <tbody id="cnv-editor-rows"></tbody>
+        </table>
+      </div>
+      <button class="secondary-button" id="cnv-editor-add-category" type="button">+ Nova categoria</button>
+
+      <div class="cnv-editor-diagnostics" id="cnv-editor-diagnostics"></div>
+
+      <div class="cnv-editor-preview">
+        <div class="cnv-editor-toolbar">
+          <label><span>Prévia contra o campo</span><select id="cnv-editor-preview-field"></select></label>
+          <button class="secondary-button" id="cnv-editor-preview-button" type="button">Atualizar prévia</button>
+        </div>
+        <div id="cnv-editor-preview-result" class="cnv-editor-preview-result"></div>
+      </div>
+
+      <div class="dialog-form-actions cnv-editor-actions">
+        <button class="secondary-button" id="cnv-editor-download" type="button">Baixar .CNV</button>
+        <button class="primary-button" id="cnv-editor-apply" type="button">Aplicar ao conjunto atual</button>
+      </div>
+    </dialog>
+
+    <dialog id="def-inspector-dialog" class="cnv-editor-dialog">
+      <button class="dialog-close" id="def-inspector-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Inspetor</span>
+      <h2>Inspetor de DEF</h2>
+      <p>Somente leitura: mostra exatamente o que o parser entendeu de cada linha do arquivo DEF carregado, incluindo linhas não reconhecidas. A semântica de <code>X</code> e do layout <code>N</code> não é inventada aqui — veja os avisos.</p>
+      <div id="def-inspector-body"></div>
     </dialog>
 
     <dialog id="catalog-dialog" class="catalog-dialog">

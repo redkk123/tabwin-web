@@ -21,7 +21,9 @@ import {
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
+  classifyCnv,
   convertGeoJsonToTabwinMap,
+  encodeWindows1252,
   GeoJsonMapError,
   listGeoJsonFeatureProperties,
   optionsForRole,
@@ -29,7 +31,13 @@ import {
   parseDelimited,
   parseDef,
   parseTabwinMap,
+  serializeCnv,
+  validateCnvDefinition,
+  type CnvCategory,
+  type CnvCodeRange,
   type CnvDefinition,
+  type CnvDiagnostic,
+  type CnvRuleLine,
   type DefDefinition,
   type MapCoordinate,
   type TabwinMapDefinition,
@@ -254,6 +262,27 @@ const geojsonNameProperty = element<HTMLSelectElement>('#geojson-name-property')
 const geojsonImportSummary = element<HTMLElement>('#geojson-import-summary');
 const geojsonImportClose = element<HTMLButtonElement>('#geojson-import-close');
 const geojsonImportCancel = element<HTMLButtonElement>('#geojson-import-cancel');
+const cnvEditorButton = element<HTMLButtonElement>('#cnv-editor-button');
+const cnvEditorDialog = element<HTMLDialogElement>('#cnv-editor-dialog');
+const cnvEditorClose = element<HTMLButtonElement>('#cnv-editor-close');
+const cnvEditorSource = element<HTMLSelectElement>('#cnv-editor-source');
+const cnvEditorNew = element<HTMLButtonElement>('#cnv-editor-new');
+const cnvEditorFilename = element<HTMLInputElement>('#cnv-editor-filename');
+const cnvEditorModeSelect = element<HTMLSelectElement>('#cnv-editor-mode');
+const cnvEditorCodeLengthInput = element<HTMLInputElement>('#cnv-editor-code-length');
+const cnvEditorCodesHeader = element<HTMLElement>('#cnv-editor-codes-header');
+const cnvEditorRowsBody = element<HTMLElement>('#cnv-editor-rows');
+const cnvEditorAddCategory = element<HTMLButtonElement>('#cnv-editor-add-category');
+const cnvEditorDiagnosticsOutput = element<HTMLElement>('#cnv-editor-diagnostics');
+const cnvEditorPreviewField = element<HTMLSelectElement>('#cnv-editor-preview-field');
+const cnvEditorPreviewButton = element<HTMLButtonElement>('#cnv-editor-preview-button');
+const cnvEditorPreviewResult = element<HTMLElement>('#cnv-editor-preview-result');
+const cnvEditorDownload = element<HTMLButtonElement>('#cnv-editor-download');
+const cnvEditorApply = element<HTMLButtonElement>('#cnv-editor-apply');
+const defInspectorButton = element<HTMLButtonElement>('#def-inspector-button');
+const defInspectorDialog = element<HTMLDialogElement>('#def-inspector-dialog');
+const defInspectorClose = element<HTMLButtonElement>('#def-inspector-close');
+const defInspectorBody = element<HTMLElement>('#def-inspector-body');
 const resultKicker = element<HTMLElement>('#result-kicker');
 const resultTitle = element<HTMLElement>('#result-title');
 const datasetStats = element<HTMLElement>('#dataset-stats');
@@ -358,6 +387,20 @@ let activeMap: TabwinMapDefinition | null = null;
 let activeMapSource = '';
 /** Parsed but not-yet-converted GeoJSON, held between file pick and property confirmation. */
 let pendingGeoJson: { source: unknown; fileName: string } | null = null;
+
+interface CnvEditorRow {
+  sequence: number;
+  label: string;
+  /** '', '#' (exclude from total), or a category sequence as a string. */
+  subtotal: string;
+  /** Comma-separated codes/ranges ("01,10-20"), or a single number in numeric-ranges mode. */
+  codesText: string;
+}
+
+/** Editor state, independent of any loaded CnvDefinition until "Aplicar" or "Baixar". */
+let cnvEditorRows: CnvEditorRow[] = [];
+let cnvEditorMode: CnvDefinition['mode'] = 'short';
+let cnvEditorCodeLength = 2;
 let mapNameByGeocode = new Map<string, string>();
 let currentPlan: QueryPlan | null = null;
 let baseResult: TabulationResult | null = null;
@@ -1508,6 +1551,7 @@ async function loadFile(file: File): Promise<void> {
   }
   if (extension === 'DEF') {
     activeDef = parseDef(textDecoder.decode(bytes));
+    defInspectorButton.disabled = false;
     if (dbfHeader) populateControls(rowField.value);
     showToast(`${file.name}: ${activeDef.options.length} opções de análise encontradas`);
     return;
@@ -1567,6 +1611,481 @@ function confirmGeoJsonImport(): void {
   } catch (error) {
     showToast(error instanceof GeoJsonMapError ? error.message : (error instanceof Error ? error.message : String(error)), true);
   }
+}
+
+/**
+ * CNV editor (Faixa 3.2). Works entirely on the {@link CnvDefinition} model
+ * — never on raw text — via a small, explicit editable-row shape
+ * (`CnvEditorRow`) that round-trips through `parseCodesText`/`codesTextOf`
+ * using the exact same token grammar `cnv-parser.ts` reads (comma-separated
+ * codes, `from-to` for a range). `cnvEditorDefinition()` rebuilds a full
+ * `CnvDefinition` from that state on demand, so diagnostics, the
+ * classification preview, "Aplicar" and "Baixar" all read one live model
+ * with nothing to keep in sync.
+ */
+function codesTextOf(rule: CnvRuleLine | undefined, mode: CnvDefinition['mode']): string {
+  if (!rule) return '';
+  if (mode === 'numeric-ranges') return rule.numericUpperInclusive !== undefined ? String(rule.numericUpperInclusive) : '';
+  return [...rule.exactCodes, ...rule.ranges.map((range) => `${range.from}-${range.to}`)].join(',');
+}
+
+function subtotalTextOf(category: CnvCategory): string {
+  if (category.excludeFromTotal) return '#';
+  if (category.subtotalTarget !== undefined) return String(category.subtotalTarget);
+  return '';
+}
+
+function parseCodesText(
+  text: string,
+  mode: CnvDefinition['mode'],
+): { exactCodes: string[]; ranges: CnvCodeRange[]; numericUpperInclusive?: number } {
+  const trimmed = text.trim();
+  if (mode === 'numeric-ranges') {
+    const value = Number(trimmed);
+    return { exactCodes: [], ranges: [], ...(Number.isFinite(value) ? { numericUpperInclusive: value } : {}) };
+  }
+  const exactCodes: string[] = [];
+  const ranges: CnvCodeRange[] = [];
+  for (const rawToken of trimmed.split(',')) {
+    const token = rawToken.trim();
+    if (!token) continue;
+    const hyphen = token.indexOf('-');
+    if (hyphen > 0 && hyphen < token.length - 1) {
+      ranges.push({ from: token.slice(0, hyphen).trim(), to: token.slice(hyphen + 1).trim() });
+    } else {
+      exactCodes.push(token);
+    }
+  }
+  return { exactCodes, ranges };
+}
+
+function rowsFromDefinition(definition: CnvDefinition): CnvEditorRow[] {
+  // Row order here becomes rule precedence order again in cnvEditorDefinition()
+  // (source order = array index) — it must be the file's real rule order, never
+  // definition.categories, which cnv-parser.ts sorts by sequence number for
+  // display. A broad fallback declared *before* its specific overrides (the
+  // common real layout: 00-99 first, 01/02/03 after) would silently become the
+  // rule that always wins if categories' sequence order were used instead.
+  const categoryBySequence = new Map(definition.categories.map((category) => [category.sequence, category]));
+  const orderedRules = [...definition.rules].sort((a, b) => a.sourceOrder - b.sourceOrder);
+  return orderedRules.map((rule) => {
+    const category = categoryBySequence.get(rule.categorySequence);
+    return {
+      sequence: rule.categorySequence,
+      label: category?.label ?? '',
+      subtotal: category ? subtotalTextOf(category) : '',
+      codesText: codesTextOf(rule, definition.mode),
+    };
+  });
+}
+
+function cnvEditorDefinition(): CnvDefinition {
+  const categories: CnvCategory[] = cnvEditorRows.map((row) => {
+    const subtotal = row.subtotal.trim();
+    const subtotalTarget = subtotal && subtotal !== '#' ? Number(subtotal) : undefined;
+    return {
+      sequence: row.sequence,
+      label: row.label,
+      ...(subtotal === '#' ? { excludeFromTotal: true } : {}),
+      ...(subtotalTarget !== undefined && Number.isFinite(subtotalTarget) ? { subtotalTarget } : {}),
+    };
+  });
+  const rules: CnvRuleLine[] = cnvEditorRows.map((row, index) => {
+    const parsed = parseCodesText(row.codesText, cnvEditorMode);
+    return {
+      categorySequence: row.sequence,
+      exactCodes: parsed.exactCodes,
+      ranges: parsed.ranges,
+      ...(parsed.numericUpperInclusive !== undefined ? { numericUpperInclusive: parsed.numericUpperInclusive } : {}),
+      sourceOrder: index,
+      sourceLine: index + 2,
+    };
+  });
+  return {
+    categoryCount: categories.length,
+    codeLength: Number.isFinite(cnvEditorCodeLength) && cnvEditorCodeLength > 0 ? cnvEditorCodeLength : 1,
+    mode: cnvEditorMode,
+    precedence: cnvEditorMode === 'literal' ? 'first-match-wins' : 'last-match-wins',
+    categories,
+    rules,
+    comments: [],
+    warnings: [],
+    headerLine: 1,
+  };
+}
+
+function renderCnvEditorDiagnostics(): CnvDiagnostic[] {
+  const diagnostics = validateCnvDefinition(cnvEditorDefinition());
+  const bySequence = new Map<number, CnvDiagnostic[]>();
+  const headerDiagnostics: CnvDiagnostic[] = [];
+  for (const diagnostic of diagnostics) {
+    if (diagnostic.scope === 'header' || diagnostic.categorySequence === undefined) {
+      headerDiagnostics.push(diagnostic);
+      continue;
+    }
+    const list = bySequence.get(diagnostic.categorySequence) ?? [];
+    list.push(diagnostic);
+    bySequence.set(diagnostic.categorySequence, list);
+  }
+  cnvEditorDiagnosticsOutput.replaceChildren(
+    ...headerDiagnostics.map((diagnostic) => {
+      const line = document.createElement('div');
+      line.className = `cnv-editor-diagnostic ${diagnostic.severity}`;
+      line.textContent = diagnostic.message;
+      return line;
+    }),
+  );
+  for (const rowElement of [...cnvEditorRowsBody.children] as HTMLElement[]) {
+    const sequence = Number(rowElement.dataset.sequence);
+    const rowDiagnostics = bySequence.get(sequence) ?? [];
+    rowElement.classList.toggle('cnv-editor-row-invalid', rowDiagnostics.some((d) => d.severity === 'error'));
+    rowElement.title = rowDiagnostics.map((d) => d.message).join(' · ');
+  }
+  return diagnostics;
+}
+
+function renderCnvEditorRow(row: CnvEditorRow, index: number): HTMLElement {
+  const tr = document.createElement('tr');
+  tr.dataset.sequence = String(row.sequence);
+
+  const sequenceInput = document.createElement('input');
+  sequenceInput.type = 'number';
+  sequenceInput.className = 'cnv-editor-sequence';
+  sequenceInput.value = String(row.sequence);
+  sequenceInput.addEventListener('input', () => {
+    const value = Number(sequenceInput.value);
+    if (Number.isFinite(value)) row.sequence = value;
+    tr.dataset.sequence = String(row.sequence);
+    renderCnvEditorDiagnostics();
+  });
+
+  const labelInput = document.createElement('input');
+  labelInput.type = 'text';
+  labelInput.value = row.label;
+  labelInput.addEventListener('input', () => { row.label = labelInput.value; renderCnvEditorDiagnostics(); });
+
+  const subtotalInput = document.createElement('input');
+  subtotalInput.type = 'text';
+  subtotalInput.className = 'cnv-editor-subtotal';
+  subtotalInput.placeholder = '# ou nº';
+  subtotalInput.value = row.subtotal;
+  subtotalInput.addEventListener('input', () => { row.subtotal = subtotalInput.value; renderCnvEditorDiagnostics(); });
+
+  const codesInput = document.createElement('input');
+  codesInput.type = 'text';
+  codesInput.placeholder = cnvEditorMode === 'numeric-ranges' ? 'limite superior' : '01,10-20';
+  codesInput.value = row.codesText;
+  codesInput.addEventListener('input', () => { row.codesText = codesInput.value; renderCnvEditorDiagnostics(); });
+
+  const removeCell = document.createElement('td');
+  removeCell.className = 'cnv-editor-row-remove';
+  const removeButton = document.createElement('button');
+  removeButton.type = 'button';
+  removeButton.className = 'secondary-button';
+  removeButton.textContent = '×';
+  removeButton.title = 'Remover categoria';
+  removeButton.addEventListener('click', () => {
+    cnvEditorRows.splice(index, 1);
+    renderCnvEditorTable();
+  });
+  removeCell.append(removeButton);
+
+  for (const input of [sequenceInput, labelInput, subtotalInput, codesInput]) {
+    const td = document.createElement('td');
+    td.append(input);
+    tr.append(td);
+  }
+  tr.append(removeCell);
+  return tr;
+}
+
+function renderCnvEditorTable(): void {
+  cnvEditorCodesHeader.textContent = cnvEditorMode === 'numeric-ranges' ? 'Limite superior' : 'Códigos / faixas';
+  cnvEditorRowsBody.replaceChildren(...cnvEditorRows.map((row, index) => renderCnvEditorRow(row, index)));
+  renderCnvEditorDiagnostics();
+}
+
+function resetCnvEditorToBlank(): void {
+  cnvEditorRows = [{ sequence: 1, label: '', subtotal: '', codesText: '' }];
+  cnvEditorMode = 'short';
+  cnvEditorCodeLength = 2;
+  cnvEditorFilename.value = '';
+  cnvEditorModeSelect.value = cnvEditorMode;
+  cnvEditorCodeLengthInput.value = String(cnvEditorCodeLength);
+  renderCnvEditorTable();
+}
+
+function loadCnvIntoEditor(name: string): void {
+  const definition = cnvByName.get(name);
+  if (!definition) return;
+  cnvEditorRows = rowsFromDefinition(definition);
+  cnvEditorMode = definition.mode === 'new-format' ? 'short' : definition.mode;
+  cnvEditorCodeLength = definition.codeLength;
+  cnvEditorFilename.value = name;
+  cnvEditorModeSelect.value = cnvEditorMode;
+  cnvEditorCodeLengthInput.value = String(cnvEditorCodeLength);
+  if (definition.mode === 'new-format') {
+    showToast(`${name}: layout N não é editável aqui; carregado como "curto" — revise antes de aplicar`, true);
+  }
+  renderCnvEditorTable();
+}
+
+function populateCnvEditorSourceList(): void {
+  const previous = cnvEditorSource.value;
+  cnvEditorSource.replaceChildren(new Option('Nova CNV…', ''));
+  for (const name of [...cnvByName.keys()].sort((a, b) => a.localeCompare(b))) {
+    cnvEditorSource.add(new Option(name, name));
+  }
+  cnvEditorSource.value = cnvByName.has(previous) ? previous : '';
+}
+
+function populateCnvEditorPreviewField(): void {
+  cnvEditorPreviewField.replaceChildren();
+  if (!dbfHeader) {
+    cnvEditorPreviewField.add(new Option('Abra um conjunto de dados para pré-visualizar', ''));
+    cnvEditorPreviewField.disabled = true;
+    cnvEditorPreviewButton.disabled = true;
+    return;
+  }
+  cnvEditorPreviewField.disabled = false;
+  cnvEditorPreviewButton.disabled = false;
+  for (const field of dbfHeader.fields) cnvEditorPreviewField.add(new Option(fieldLabel(field.name), field.name));
+}
+
+async function updateCnvEditorPreview(): Promise<void> {
+  const field = cnvEditorPreviewField.value;
+  if (!field) return;
+  cnvEditorPreviewResult.textContent = 'Lendo os valores do campo…';
+  try {
+    const definition = cnvEditorDefinition();
+    const { values, truncated } = await askDataset<{ values: string[]; truncated: boolean }>(
+      { type: 'distinct', field, limit: 500 },
+      { label: 'Prévia de classificação' },
+    );
+    const counts = new Map<string, number>();
+    let unclassified = 0;
+    for (const value of values) {
+      const match = classifyCnv(definition, value);
+      if (!match) { unclassified++; continue; }
+      counts.set(match.label, (counts.get(match.label) ?? 0) + 1);
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    thead.innerHTML = '<tr><th>Categoria</th><th>Valores distintos</th></tr>';
+    const tbody = document.createElement('tbody');
+    for (const category of definition.categories) {
+      const row = document.createElement('tr');
+      const labelCell = document.createElement('td');
+      labelCell.textContent = category.label || `(sequência ${category.sequence})`;
+      const countCell = document.createElement('td');
+      countCell.textContent = integerFormat.format(counts.get(category.label) ?? 0);
+      row.append(labelCell, countCell);
+      tbody.append(row);
+    }
+    const unclassifiedRow = document.createElement('tr');
+    const unclassifiedLabel = document.createElement('td');
+    unclassifiedLabel.textContent = 'Não classificado';
+    const unclassifiedCount = document.createElement('td');
+    unclassifiedCount.textContent = integerFormat.format(unclassified);
+    unclassifiedRow.append(unclassifiedLabel, unclassifiedCount);
+    tbody.append(unclassifiedRow);
+    table.append(thead, tbody);
+    const note = document.createElement('p');
+    note.className = 'dialog-note';
+    note.textContent = `${integerFormat.format(values.length)}${truncated ? '+' : ''} valor(es) distinto(s) de "${field}" — contagem de valores distintos, não de registros.`;
+    cnvEditorPreviewResult.replaceChildren(note, table);
+  } catch (error) {
+    cnvEditorPreviewResult.textContent = error instanceof Error ? error.message : String(error);
+  }
+}
+
+function openCnvEditor(name?: string): void {
+  populateCnvEditorSourceList();
+  populateCnvEditorPreviewField();
+  cnvEditorPreviewResult.replaceChildren();
+  if (name && cnvByName.has(name)) {
+    cnvEditorSource.value = name;
+    loadCnvIntoEditor(name);
+  } else {
+    cnvEditorSource.value = '';
+    resetCnvEditorToBlank();
+  }
+  cnvEditorDialog.showModal();
+}
+
+function requireCnvEditorFilename(): string {
+  const raw = cnvEditorFilename.value.trim() || 'nova.cnv';
+  return /\.cnv$/i.test(raw) ? raw : `${raw}.cnv`;
+}
+
+function applyCnvEditor(): void {
+  const diagnostics = renderCnvEditorDiagnostics();
+  if (diagnostics.some((d) => d.severity === 'error')) {
+    showToast('Corrija os erros listados antes de aplicar', true);
+    return;
+  }
+  const name = requireCnvEditorFilename();
+  cnvByName.set(name, cnvEditorDefinition());
+  populateConversions();
+  if (dbfHeader && (rowConversion.value === name || columnConversion.value === name)) void runAnalysis();
+  showToast(`${name}: aplicado ao conjunto atual (${cnvEditorRows.length} categorias)`);
+}
+
+function downloadCnvEditorFile(): void {
+  const diagnostics = renderCnvEditorDiagnostics();
+  if (diagnostics.some((d) => d.severity === 'error')) {
+    showToast('Corrija os erros listados antes de baixar', true);
+    return;
+  }
+  try {
+    const text = serializeCnv(cnvEditorDefinition());
+    const bytes = encodeWindows1252(text);
+    downloadBlob(new Blob([bytes], { type: 'text/plain' }), requireCnvEditorFilename());
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+}
+
+/**
+ * DEF inspector (Faixa 3.2), read-only by design: shows exactly what
+ * `def-parser.ts` understood from each source line, unknown lines included.
+ * Unlike the CNV editor, DEF has no writer here — several directives (`X`,
+ * and the trailing fields real contemporary files carry) have no documented
+ * executable semantics yet (see `def-model.ts`), and an editor that let
+ * someone "fix" a DEF would have to guess at exactly the parts this project
+ * has deliberately refused to guess elsewhere. Inspecting what was actually
+ * parsed, line by line, is the useful and honest half of this feature.
+ */
+function defOptionDetail(option: DefDefinition['options'][number]): string {
+  if (option.kind === 'conversion') return `${option.conversionFile} (posição ${option.startPosition})`;
+  if (option.kind === 'dbf-lookup') return `DBF: ${option.lookupFile} (rótulo em ${option.lookupLabelField})`;
+  return `recurso externo: ${option.resourceFile} (rótulo em ${option.lookupLabelField})`;
+}
+
+function renderDefInspector(): void {
+  if (!activeDef) return;
+  const def = activeDef;
+  const sections: HTMLElement[] = [];
+
+  const summary = document.createElement('p');
+  summary.className = 'dialog-note';
+  summary.textContent = def.description ? def.description : '(sem descrição no arquivo)';
+  sections.push(summary);
+
+  const makeTable = (title: string, headers: string[], rows: string[][]): HTMLElement => {
+    const section = document.createElement('div');
+    section.className = 'def-inspector-section';
+    const heading = document.createElement('h3');
+    heading.textContent = title;
+    section.append(heading);
+    if (!rows.length) {
+      const empty = document.createElement('p');
+      empty.className = 'def-inspector-empty';
+      empty.textContent = 'nenhum(a)';
+      section.append(empty);
+      return section;
+    }
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    for (const header of headers) {
+      const th = document.createElement('th');
+      th.textContent = header;
+      headRow.append(th);
+    }
+    thead.append(headRow);
+    const tbody = document.createElement('tbody');
+    for (const rowValues of rows) {
+      const tr = document.createElement('tr');
+      for (const value of rowValues) {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+    table.append(thead, tbody);
+    section.append(table);
+    return section;
+  };
+
+  sections.push(makeTable(
+    'Fontes de dados (A)',
+    ['Padrão', 'Consulta SQL', 'Linha'],
+    def.dataSources.map((source) => [source.pattern, source.sqlQuery ?? '—', String(source.sourceLine)]),
+  ));
+
+  sections.push(makeTable(
+    'Opções de análise (S/L/C/Q/D/T)',
+    ['Diretiva', 'Rótulo', 'Campo', 'Papéis', 'Origem', 'Campos à direita não interpretados', 'Linha'],
+    def.options.map((option) => [
+      option.directive,
+      option.label,
+      option.field,
+      option.roles.join(', '),
+      defOptionDetail(option),
+      option.trailingFields?.join(', ') ?? '—',
+      String(option.sourceLine),
+    ]),
+  ));
+
+  sections.push(makeTable(
+    'Incrementos (I)',
+    ['Rótulo', 'Campo', 'Linha'],
+    def.increments.map((increment) => [increment.label, increment.field, String(increment.sourceLine)]),
+  ));
+
+  if (def.groupedCountField || def.reportFile) {
+    sections.push(makeTable(
+      'Outras diretivas',
+      ['Diretiva', 'Valor'],
+      [
+        ...(def.groupedCountField ? [['G', def.groupedCountField]] : []),
+        ...(def.reportFile ? [['R', def.reportFile]] : []),
+      ],
+    ));
+  }
+
+  if (def.warnings.length) {
+    const section = document.createElement('div');
+    section.className = 'def-inspector-section';
+    const heading = document.createElement('h3');
+    heading.textContent = `Avisos (${def.warnings.length})`;
+    section.append(heading);
+    for (const warning of def.warnings) {
+      const line = document.createElement('div');
+      line.className = 'def-inspector-warning';
+      line.textContent = warning;
+      section.append(line);
+    }
+    sections.push(section);
+  }
+
+  const unknownSection = document.createElement('div');
+  unknownSection.className = 'def-inspector-section';
+  const unknownHeading = document.createElement('h3');
+  unknownHeading.textContent = `Linhas não reconhecidas (${def.unknownLines.length})`;
+  unknownSection.append(unknownHeading);
+  if (!def.unknownLines.length) {
+    const empty = document.createElement('p');
+    empty.className = 'def-inspector-empty';
+    empty.textContent = 'nenhuma — toda linha do arquivo foi interpretada';
+    unknownSection.append(empty);
+  } else {
+    for (const unknown of def.unknownLines) {
+      const line = document.createElement('div');
+      line.className = 'def-inspector-unknown';
+      line.textContent = `linha ${unknown.sourceLine} [${unknown.directive || '?'}]: ${unknown.raw}`;
+      unknownSection.append(line);
+    }
+  }
+  sections.push(unknownSection);
+
+  if (def.comments.length) {
+    sections.push(makeTable('Comentários preservados', ['Texto'], def.comments.map((comment) => [comment])));
+  }
+
+  defInspectorBody.replaceChildren(...sections);
 }
 
 async function downloadSourceDbf(): Promise<void> {
@@ -3530,6 +4049,7 @@ async function openPortableTable(file: File): Promise<void> {
   renderCrossFieldRules();
   clearCombinationProfile();
   activeDef = null;
+  defInspectorButton.disabled = true;
   activeMap = null;
   mapNameByGeocode.clear();
   activeMapSource = '';
@@ -4125,6 +4645,39 @@ geojsonImportClose.addEventListener('click', () => { pendingGeoJson = null; geoj
 geojsonImportCancel.addEventListener('click', () => { pendingGeoJson = null; geojsonImportDialog.close(); });
 geojsonImportDialog.addEventListener('click', (event) => {
   if (event.target === geojsonImportDialog) { pendingGeoJson = null; geojsonImportDialog.close(); }
+});
+cnvEditorButton.addEventListener('click', () => openCnvEditor(rowConversion.value || columnConversion.value || undefined));
+cnvEditorClose.addEventListener('click', () => cnvEditorDialog.close());
+cnvEditorDialog.addEventListener('click', (event) => {
+  if (event.target === cnvEditorDialog) cnvEditorDialog.close();
+});
+cnvEditorSource.addEventListener('change', () => {
+  if (cnvEditorSource.value) loadCnvIntoEditor(cnvEditorSource.value);
+  else resetCnvEditorToBlank();
+});
+cnvEditorNew.addEventListener('click', () => { cnvEditorSource.value = ''; resetCnvEditorToBlank(); });
+cnvEditorModeSelect.addEventListener('change', () => {
+  cnvEditorMode = cnvEditorModeSelect.value as CnvDefinition['mode'];
+  renderCnvEditorTable();
+});
+cnvEditorCodeLengthInput.addEventListener('input', () => {
+  cnvEditorCodeLength = Number(cnvEditorCodeLengthInput.value);
+});
+cnvEditorAddCategory.addEventListener('click', () => {
+  const nextSequence = cnvEditorRows.reduce((max, row) => Math.max(max, row.sequence), 0) + 1;
+  cnvEditorRows.push({ sequence: nextSequence, label: '', subtotal: '', codesText: '' });
+  renderCnvEditorTable();
+});
+cnvEditorPreviewButton.addEventListener('click', () => { void updateCnvEditorPreview(); });
+cnvEditorApply.addEventListener('click', applyCnvEditor);
+cnvEditorDownload.addEventListener('click', downloadCnvEditorFile);
+defInspectorButton.addEventListener('click', () => {
+  renderDefInspector();
+  defInspectorDialog.showModal();
+});
+defInspectorClose.addEventListener('click', () => defInspectorDialog.close());
+defInspectorDialog.addEventListener('click', (event) => {
+  if (event.target === defInspectorDialog) defInspectorDialog.close();
 });
 element<HTMLButtonElement>('#catalog-button').addEventListener('click', () => {
   catalogDialog.showModal();

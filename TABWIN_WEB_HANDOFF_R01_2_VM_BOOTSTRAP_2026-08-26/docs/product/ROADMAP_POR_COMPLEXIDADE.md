@@ -133,6 +133,9 @@ que não é equivalência.
 
 ## Faixa 3 — dias
 
+**Estado em 2026-08-29: concluída.** Os quatro itens (3.1–3.4) fechados
+nesta mesma sessão, um commit cada, gate verde em todos.
+
 ### 3.1 Cache de resultado L3
 
 **Concluído em 2026-08-29.** Cache no Worker por chave estável de plano mais
@@ -155,13 +158,64 @@ instantâneo.
 
 ### 3.2 Editor e inspetor DEF/CNV
 
-**Esforço:** dias · **Risco:** médio
+**Concluído em 2026-08-29.** Escopo assimétrico de propósito: CNV ganhou
+**editor** completo (formato totalmente documentado e reversível); DEF
+ganhou **inspetor** somente-leitura (`X` e os campos à direita de DEFs
+contemporâneos seguem sem semântica documentada — um editor teria que
+adivinhar exatamente o que este projeto se recusa a adivinhar em todo outro
+lugar).
 
-Os modelos já são parseados e validados. Falta editor sobre o modelo, não
+**CNV** — `packages/formats/src/windows-1252.ts` (encoder Windows-1252,
+contraparte de escrita do `TextDecoder` já usado em todo o projeto;
+round-trip verificado contra os 256 valores de byte possíveis, não uma
+amostra) + `cnv-serializer.ts` (`serializeCnv`, grava de volta o layout de
+colunas fixas exato que `cnv-parser.ts` lê; recusa `new-format` (`N`) e
+falha alto — nunca trunca silenciosamente — quando um rótulo ou código
+excede a largura fixa ou contém `;`) + `cnv-validate.ts`
+(`validateCnvDefinition`, os mesmos diagnósticos do parser reaplicados ao
+modelo, para um editor onde linha original deixa de fazer sentido assim que
+alguém edita, adiciona ou remove uma categoria).
+
+Interface: diálogo com tabela editável de categorias (sequência, rótulo,
+subtotal/#, códigos/faixas), diagnósticos por linha destacando a linha com
+erro, prévia de classificação que lê valores distintos do campo escolhido no
+conjunto **realmente aberto** e classifica cada um com `classifyCnv` contra
+o modelo em edição, e duas ações: aplicar ao conjunto atual (substitui a
+entrada em uso, re-tabula na hora se estiver em uso) ou baixar `.CNV` em
+Windows-1252.
+
+**Bug real pego na própria verificação, corrigido antes de commitar:** a
+primeira versão listava as categorias na ordem de `categories` (que
+`cnv-parser.ts` ordena por sequência para exibição), não na ordem real das
+regras no arquivo — para CNVs onde o fallback amplo vem **primeiro** no
+arquivo (layout real observado: `00-99` antes de `01`/`02`/`03`), isso
+invertia silenciosamente a precedência de sobreposição, fazendo o fallback
+vencer sobre os códigos específicos. Corrigido lendo a ordem de
+`rules[].sourceOrder`, não de `categories`. Verificado com o `COMPLEX2.CNV`
+real: antes do fix, os únicos dois valores reais do campo `COMPLEX`
+(`02`/`03`) caíam ambos em "Não se aplica"; depois do fix, cada um caiu na
+categoria correta, e uma tabulação real com a mudança aplicada reproduziu
+exatamente os números já conferidos contra o TabWin 4.15 real
+(4.153/162 — os mesmos do G001).
+
+**DEF** — inspetor somente-leitura mostra, por linha: diretiva, rótulo,
+campo, papéis, origem (CNV/DBF/recurso externo) e campos à direita não
+interpretados; incrementos; avisos; e as linhas não reconhecidas com texto
+bruto e número da linha. Verificado com o `RD2008.DEF` real (arquivo
+nacional de produção): surfaceou as 48 linhas `X` e os 65 avisos
+correspondentes que hoje só apareciam como uma contagem no JSON de
+auditoria — agora visíveis linha a linha.
+
+Verificado em navegador real: download do CNV editado inspecionado byte a
+byte (`Média complexidade` virou `Média complexidade (editado)`, `ã`
+codificado como `0xE3`, quebras de linha CRLF, layout de colunas intacto).
+Evidência em `docs/handoffs/R09_8_CNV_EDITOR_DEF_INSPECTOR_REPORT.md`.
+
+**Esforço:** dias · **Risco:** médio · **Valor:** alto
+
+Os modelos já eram parseados e validados; faltava editor sobre o modelo, não
 sobre string, com diagnóstico por linha, prévia da classificação contra o
 conjunto aberto e gravação determinística em Windows-1252.
-
-Nunca serializar especulativamente `X` nem o novo formato `N`.
 
 ### 3.3 Import geográfico GeoJSON
 

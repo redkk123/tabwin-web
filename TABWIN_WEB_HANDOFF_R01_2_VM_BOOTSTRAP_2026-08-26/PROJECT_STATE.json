@@ -1,10 +1,10 @@
 {
-  "revision": "faixa-3-3-geojson-import",
+  "revision": "faixa-3-2-def-cnv-editor-inspector",
   "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 184,
-    "passed": 184,
+    "total": 207,
+    "passed": 207,
     "failed": 0,
     "command": "npm run check"
   },
@@ -190,6 +190,15 @@
     ,"multipolygon-point-and-linestring-geometry-support"
     ,"interior-ring-conversion-with-explicit-hole-limitation-warning"
     ,"browser-verified-geojson-import-choropleth-render-on-real-rdac2401"
+    ,"windows-1252-encoder-matching-the-native-decoder-byte-for-byte"
+    ,"deterministic-fixed-column-cnv-serializer"
+    ,"cnv-serializer-refuses-new-format-and-overwidth-fields-instead-of-corrupting"
+    ,"model-level-cnv-structural-diagnostics"
+    ,"cnv-editor-ui-with-live-classification-preview-against-the-open-dataset"
+    ,"cnv-editor-apply-to-current-dataset-and-download-cnv-actions"
+    ,"read-only-def-inspector-with-per-line-detail-and-unknown-line-surfacing"
+    ,"browser-verified-cnv-editor-round-trip-and-precedence-fix-on-real-complex2-cnv"
+    ,"browser-verified-def-inspector-on-real-rd2008-def-surfacing-x-directive-lines"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
