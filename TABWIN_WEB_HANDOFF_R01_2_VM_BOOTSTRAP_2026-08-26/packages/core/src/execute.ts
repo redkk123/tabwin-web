@@ -78,10 +78,16 @@ function extractSourceValue(
   const raw = record[field];
   if (raw === null || raw === undefined) return raw;
 
-  // Numeric range CNVs operate on the numeric value itself when the documented
-  // position is the default 1. Converting a numeric DBF field to text and slicing
-  // it would corrupt decimal semantics.
-  if (conversion?.mode === 'numeric-ranges' && (startPosition ?? 1) === 1) return raw;
+  // A numeric-range CNV always classifies the value itself, never a slice of
+  // its text — the DEF's start position simply does not apply to this mode.
+  //
+  // G009 proved this against the real engine. AIH_MA.DEF declares position 2
+  // for DIAS_PERM, and we previously honoured it for any position other than
+  // 1: String(2).slice(1) is "", which Number() turns into 0, so 3,932 of
+  // 4,315 records collapsed into the "0 dias" band. TabWin puts only 212
+  // there and reproduces the real length-of-stay distribution, which is
+  // exactly what reading the numeric value gives.
+  if (conversion?.mode === 'numeric-ranges') return raw;
 
   if (startPosition === undefined && conversion === undefined) return raw;
   const start = (startPosition ?? 1) - 1;

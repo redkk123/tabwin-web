@@ -1,10 +1,10 @@
 {
-  "revision": "g012-resolved-new-format-subtotal-indicator",
+  "revision": "g009-numeric-range-start-position-fix",
   "date": "2026-08-29",
   "phase": "golden-driven-compatibility-progression",
   "tests": {
-    "total": 242,
-    "passed": 242,
+    "total": 244,
+    "passed": 244,
     "failed": 0,
     "command": "npm run check"
   },
@@ -234,7 +234,9 @@
     "read-only-new-format-cnv-inspector-tool",
     "new-format-cnv-subtotal-indicator-is-four-columns-proven-by-experiment",
     "new-format-cnv-executable-not-writable",
-    "real-g012-new-format-golden-equivalence"
+    "real-g012-new-format-golden-equivalence",
+    "numeric-range-cnv-ignores-def-start-position",
+    "real-g009-numeric-range-golden-equivalence"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -332,12 +334,11 @@
       "G018",
       "G021",
       "G017",
-      "G012"
-    ],
-    "evidence_only_or_blocked": [
+      "G012",
       "G009"
     ],
+    "evidence_only_or_blocked": [],
     "tolerance": 0,
-    "notes": "G003 e G017 comparam na precisao declarada de VAL_TOT (2 casas). Todos os 14 goldens capturados passam com tolerancia zero. G009 continua sendo erro de protocolo de captura, nao do motor: AIH_MA.DEF nao combina com RD*.DBC."
+    "notes": "Todos os 15 goldens capturados passam com tolerancia zero. G003 e G017 comparam na precisao declarada de VAL_TOT (2 casas). G009 exigiu copia renomeada do DBC porque AIH_MA.DEF filtra por MA*.DBC, e revelou um defeito real: a posicao inicial do DEF estava sendo aplicada a CNV de faixa numerica."
   }
 }

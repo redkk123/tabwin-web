@@ -3,22 +3,71 @@
   "version": 1,
   "id": "G009",
   "capturedAt": "2026-08-29",
-  "semantic": "numeric-range F CNV classification",
+  "semantic": "numeric-range CNV classification of a length-of-stay field",
   "referenceEngine": {
     "name": "TabWin 4.15",
     "executable": "TabWin415.exe"
   },
-  "committedEvidence": [
+  "externalInputs": [
     {
-      "path": "reference-tabwin415/capture-blocker.png",
-      "bytes": 49829,
-      "sha256": "A31832F005598D1E2E9994D24A8C3290C55069BF1087AFB18B33B64B19A1BBAA"
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "AIH_MA.DEF",
+      "bytes": 3845,
+      "sha256": "C05E368467C40EDDE3A58C6EF4D490C2371ACD4E0A1D29B516042901781286E6"
+    },
+    {
+      "name": "PERM.CNV",
+      "bytes": 800,
+      "sha256": "6DA4C99C15E1261BCFCD5CE0E4D2260A7C195C303E9153D8FEFAAB04D6557FA7"
     }
   ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 636,
+      "sha256": "91A73041C94F5A619162B238DECEF9E031F8572BE85AC70C1DB12F28FC208033"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 588,
+      "sha256": "7E203F4F279E605DF79780DBC5C555E3138E110C5589C189F0CD560CDFA886D4"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 1719,
+      "sha256": "6AB37312692DE8C929753126F38CF72D94FC2741A78053136253D9C9A318C748"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 1152,
+      "sha256": "8FDE1A14236DEBFF7C45B20AADEE1ECD7E495D2E93FF9D3A9C9D3A483B567632"
+    },
+    {
+      "path": "reference-tabwin415/first-attempt-file-pattern-blocker.png",
+      "bytes": 49829,
+      "sha256": "A31832F005598D1E2E9994D24A8C3290C55069BF1087AFB18B33B64B19A1BBAA",
+      "note": "First attempt: TabWin refused to list RDAC2401.dbc because AIH_MA.DEF filters on MA*.DBC. Kept as the record of why the capture needed a renamed copy."
+    }
+  ],
+  "tabwinPresentation": {
+    "title": "Movimento de AIH - Maranhão",
+    "subtitle": "Freqüência segundo Permanência",
+    "rowDimensionLabel": "Permanência",
+    "tabwinTotals": [
+      4315
+    ]
+  },
   "comparison": {
-    "status": "capture-blocked",
-    "tolerance": null,
-    "pass": null,
-    "blocker": "AIH_MA.DEF admits only D:\\MA\\MA\\MA*.DBC and cannot open RDAC2401.dbc"
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 4315,
+    "accepted": 4315,
+    "cellDiffCount": 0,
+    "pass": true,
+    "notes": "Caught a real defect: the DEF start position was being applied to a numeric-range CNV, collapsing 3,932 records into the zero band. Numeric-range mode classifies the value itself; the start position does not apply. See R10_7."
   }
 }

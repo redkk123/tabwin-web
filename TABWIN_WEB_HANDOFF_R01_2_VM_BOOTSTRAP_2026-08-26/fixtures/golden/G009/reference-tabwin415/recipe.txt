@@ -1,0 +1,15 @@
+Reference engine: TabWin 4.15
+Definition: AIH_MA.DEF
+Source file: MAAC2401.dbc  (byte-identical copy of RDAC2401.dbc, renamed only so
+             it matches the DEF's "A" file pattern D:\MA\MA\MA*.DBC; TabWin reads
+             fields by name, so the rename changes nothing that is tabulated)
+Row: Permanência  (DIAS_PERM, PERM.CNV, DEF start position 2)
+Column: not active
+Increment: Frequência
+Selections: none
+Zero suppression: rows and columns suppressed
+Não classificados: 0
+
+TabWin session log, as reported by the engine:
+  Registros_Processados = 4315
+  Tempo_Decorrido = 0:00

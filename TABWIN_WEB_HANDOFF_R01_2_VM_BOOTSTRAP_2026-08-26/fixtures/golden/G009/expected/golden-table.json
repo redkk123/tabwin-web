@@ -1,0 +1,90 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G009",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the lossless BIFF export; SHA-256 91A73041C94F5A619162B238DECEF9E031F8572BE85AC70C1DB12F28FC208033. TabWin's own Total row is recorded as evidence, not compared."
+  },
+  "rows": [
+    {
+      "label": "0 dias"
+    },
+    {
+      "label": "1 dia"
+    },
+    {
+      "label": "2 dias"
+    },
+    {
+      "label": "3 dias"
+    },
+    {
+      "label": "4 dias"
+    },
+    {
+      "label": "5 dias"
+    },
+    {
+      "label": "6 dias"
+    },
+    {
+      "label": "7 dias"
+    },
+    {
+      "label": "8-14 dias"
+    },
+    {
+      "label": "15-21 dias"
+    },
+    {
+      "label": "22-28 dias"
+    },
+    {
+      "label": "29 dias e +"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      212
+    ],
+    [
+      955
+    ],
+    [
+      998
+    ],
+    [
+      595
+    ],
+    [
+      325
+    ],
+    [
+      232
+    ],
+    [
+      200
+    ],
+    [
+      145
+    ],
+    [
+      425
+    ],
+    [
+      111
+    ],
+    [
+      46
+    ],
+    [
+      71
+    ]
+  ]
+}

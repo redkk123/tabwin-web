@@ -397,6 +397,27 @@ test('an N indicator that degrades to zero means "no parent", not a dangling poi
   assert.deepEqual(cnv.warnings.filter((w) => /subtotal target/.test(w)), []);
 });
 
+test('a numeric-range CNV ignores the DEF start position and classifies the value itself', () => {
+  // G009: AIH_MA.DEF declares start position 2 for DIAS_PERM. Honouring it
+  // turned String(2).slice(1) into "" -> 0, collapsing 3,932 of 4,315 real
+  // records into the "0 dias" band; the real engine puts only 212 there.
+  // The start position simply does not apply to numeric-range mode.
+  const band = (sequence, label, upper) =>
+    `${''.padStart(3)}${String(sequence).padStart(4)}  ${label.padEnd(50).slice(0, 50)} ${upper}`;
+  const cnv = parseCnv(['3 4 Faixas', band(1, '0 dias', '0'), band(2, '1 dia', '1'), band(3, '2+ dias', '9999')].join('\n'));
+
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15',
+    rows: { field: 'DIAS_PERM', conversionId: 'PERM.CNV', startPosition: 2 },
+    measure: { kind: 'count' }, filters: [],
+  });
+  const result = executeInMemory([{ DIAS_PERM: 2 }, { DIAS_PERM: 2 }, { DIAS_PERM: 1 }], plan, { 'PERM.CNV': cnv });
+  const byLabel = new Map(result.rows.map((row, index) => [row.label, result.cells[index][0]]));
+  assert.equal(byLabel.get('2+ dias'), 2, 'the value 2 must classify as itself, not as slice("2", 1) === ""');
+  assert.equal(byLabel.get('1 dia'), 1);
+  assert.equal(byLabel.get('0 dias'), 0, 'nothing collapses into the zero band');
+});
+
 test('golden comparator requires exact labels, shape and cells by default', () => {
   const plan = compileQueryPlan({
     compatibilityProfile: 'tabwin-4.15',

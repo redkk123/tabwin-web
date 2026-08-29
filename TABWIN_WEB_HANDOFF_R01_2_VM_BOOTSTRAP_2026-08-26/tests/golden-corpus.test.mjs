@@ -117,8 +117,8 @@ test('every committed golden records a passing zero-tolerance comparison and its
   }
 });
 
-const SECOND_BATCH_WITH_TABLES = ['G006', 'G008', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
-const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
+const SECOND_BATCH_WITH_TABLES = ['G006', 'G008', 'G009', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
+const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G009', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
 
 test('every second-batch normalized table agrees cell-for-cell with its original BIFF export', async () => {
   for (const id of SECOND_BATCH_WITH_TABLES) await assertGoldenAgreesWithExport(id);
@@ -160,7 +160,7 @@ test('G012 reproduces the derived subtotal row the real engine emits from a trun
   assert.equal(manifest.comparison.pass, true);
 });
 
-test('second-batch manifests hash the evidence bytes they name, and G009 records the protocol blocker', async () => {
+test('second-batch manifests hash the evidence bytes they name', async () => {
   for (const id of SECOND_BATCH_WITH_TABLES) {
     const base = new URL(`../fixtures/golden/${id}/`, import.meta.url);
     const { manifest } = await readCase(id);
@@ -170,10 +170,19 @@ test('second-batch manifests hash the evidence bytes they name, and G009 records
       assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), entry.sha256, `${id}: ${entry.path} hash`);
     }
   }
-  const g009Base = new URL('../fixtures/golden/G009/', import.meta.url);
-  const g009 = JSON.parse(await readFile(new URL('manifest.json', g009Base), 'utf8'));
-  const screenshot = await readFile(new URL(g009.committedEvidence[0].path, g009Base));
-  assert.equal(g009.comparison.status, 'capture-blocked');
-  assert.match(g009.comparison.blocker, /MA\\MA\\MA\*\.DBC/);
-  assert.equal(createHash('sha256').update(screenshot).digest('hex').toUpperCase(), g009.committedEvidence[0].sha256);
+});
+
+test('G009 classifies a numeric-range CNV by value, not by a slice of its text', () => {
+  // The DEF declares start position 2 for DIAS_PERM. Applying it collapsed
+  // 3,932 of 4,315 records into "0 dias"; the real engine puts 212 there.
+  // This golden is what caught that defect.
+  return readCase('G009').then(({ golden, manifest }) => {
+    assert.deepEqual(golden.rows.map((row) => row.label), [
+      '0 dias', '1 dia', '2 dias', '3 dias', '4 dias', '5 dias',
+      '6 dias', '7 dias', '8-14 dias', '15-21 dias', '22-28 dias', '29 dias e +',
+    ]);
+    assert.deepEqual(golden.cells.map(([value]) => value), [212, 955, 998, 595, 325, 232, 200, 145, 425, 111, 46, 71]);
+    assert.equal(golden.cells.reduce((sum, [value]) => sum + value, 0), 4315, 'bands partition every record exactly once');
+    assert.equal(manifest.tabwinPresentation.tabwinTotals[0], 4315);
+  });
 });

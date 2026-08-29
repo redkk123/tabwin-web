@@ -1,11 +1,11 @@
-# G009 blocked capture evidence
+# G009 fixture workspace
 
-Semantic intended: **numeric-range (`F`) CNV classification**.
+Semantic under test: **numeric-range CNV (F mode)**.
 
-No result table was captured. The supplied screenshot is retained because it
-proved that the published recipe was internally incompatible: `AIH_MA.DEF`
-declares `AD:\MA\MA\MA*.DBC`, so TabWin 4.15 does not offer
-`RDAC2401.dbc` as an admissible input.
+Captured 2026-08-29 with `AIH_MA.DEF` + `PERM.CNV` over a byte-identical,
+renamed copy of `RDAC2401.dbc` (see `reference-tabwin415/capture-notes.md`
+for why the rename was necessary and why it is safe).
 
-This is a protocol defect, not an operator failure. G009 remains open until a
-compatible DEF/input pair or a purpose-built, documented capture DEF is used.
+This case found a real executor defect — the DEF start position was being
+applied to numeric-range classification. This golden is immutable; if it
+fails, the change is wrong until proven otherwise.

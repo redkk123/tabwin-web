@@ -104,11 +104,13 @@ function option(def, role, label) {
   return found;
 }
 
-const [rdDef, spDef, january, february, procedures, hospitalRows] = await Promise.all([
-  definition('RD2008.DEF'), definition('SP2008.DEF'), records('RDAC2401.dbc'),
+const [rdDef, spDef, maDef, january, february, procedures, hospitalRows] = await Promise.all([
+  definition('RD2008.DEF'), definition('SP2008.DEF'), definition('AIH_MA.DEF'), records('RDAC2401.dbc'),
   records('RDAC2402.dbc'), records('SPAC2401.dbc'), dbfRecords(path.join('DBF', 'TCNESAC.DBF')),
 ]);
 const conversions = new Map();
+// AIH_MA.DEF references its CNVs without the CNV\ prefix RD2008.DEF uses.
+conversions.set('PERM.CNV', parseCnv(decoder.decode(await readFile(path.join(assetDirectory, 'PERM.CNV')))));
 for (const name of ['BR_PNDR.CNV', 'BR_CAPITAL.CNV', 'BR_REGIAOUF.CNV', 'CID10CAP.CNV', 'COMPLEX2.CNV', 'CARATEND.CNV', 'NATJUR.CNV']) {
   conversions.set(name.toUpperCase(), await conversion(name));
 }
@@ -166,6 +168,13 @@ const cases = [
     // the subtotal parent 399-9 rolls into, via the 4-column indicator.
     id: 'G012', records: january, checkTotal: true,
     spec: { rows: dimension(rdDef, 'Natureza Jurídica'), measure: { kind: 'count' }, filters: [], suppressZeroRows: true },
+  },
+  {
+    // G009: numeric-range CNV. AIH_MA.DEF declares start position 2 for
+    // DIAS_PERM, but that does not apply to range mode — the value classifies
+    // itself. Honouring it collapsed 3,932 of 4,315 records into "0 dias".
+    id: 'G009', records: january, checkTotal: true,
+    spec: { rows: dimension(maDef, 'Permanência'), measure: { kind: 'count' }, filters: [], suppressZeroRows: true },
   },
   {
     id: 'G021', records: [...january, ...february],
