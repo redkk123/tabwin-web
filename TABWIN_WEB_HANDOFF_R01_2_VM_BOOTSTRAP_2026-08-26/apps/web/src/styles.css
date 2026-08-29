@@ -254,6 +254,19 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .histogram-track { height: 13px; overflow: hidden; border-radius: 4px; background: #e8f0ed; }
 .histogram-fill { height: 100%; border-radius: 4px; background: #178b71; }
 .compatibility-note { margin: 10px 2px 0; color: #788986; font-size: 9px; }
+.tabulation-log { margin-bottom: 14px; padding: 12px 14px; border: 1px solid #cfe2dc; border-radius: 12px; background: #f4faf8; color: #385860; }
+.tabulation-log-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.tabulation-log-header strong { display: block; font-size: 12px; }
+.tabulation-log-header small { display: block; margin-top: 2px; color: #74878a; font-size: 9px; }
+.tabulation-log-actions { display: flex; gap: 6px; flex: 0 0 auto; }
+.tabulation-log-actions button { min-height: 30px; padding: 0 10px; font-size: 9px; }
+.tabulation-log .compatibility-note { margin: 8px 0; }
+#tabulation-log-list { display: grid; gap: 6px; max-height: 220px; overflow: auto; }
+.tabulation-log-entry { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; padding: 8px 9px; border-radius: 8px; background: white; font-size: 10px; }
+.tabulation-log-entry b { font-size: 11px; }
+.tabulation-log-entry time { color: #74878a; font-size: 9px; }
+.tabulation-log-entry span { grid-column: 1 / -1; color: #4d666b; font-size: 9px; }
+.tabulation-log-entry button { justify-self: end; min-height: 24px; padding: 0 8px; font-size: 9px; }
 .audit-intro { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 5px 2px 13px; font-size: 11px; }
 .audit-intro p { margin: 0; color: #738489; }
 .audit-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px #dcf7ee; }

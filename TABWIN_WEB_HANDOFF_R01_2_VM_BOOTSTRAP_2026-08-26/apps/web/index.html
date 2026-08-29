@@ -415,6 +415,17 @@
           </div>
 
           <div class="view-panel" id="audit-view" data-panel="audit" hidden>
+            <div class="tabulation-log">
+              <div class="tabulation-log-header">
+                <div><strong>Histórico da tabulação</strong><small id="tabulation-log-count">nenhuma tabulação nesta sessão</small></div>
+                <div class="tabulation-log-actions">
+                  <button type="button" class="secondary-button" id="tabulation-log-copy-all" disabled>Copiar tudo</button>
+                  <button type="button" class="secondary-button" id="tabulation-log-clear" disabled>Limpar</button>
+                </div>
+              </div>
+              <p class="compatibility-note">Log moderno da sessão, não uma reconstrução do <code>.LST</code> histórico do TabWin 4.15.</p>
+              <div id="tabulation-log-list"></div>
+            </div>
             <div class="audit-intro">
               <div><span class="audit-dot"></span><strong>Trilha reproduzível</strong></div>
               <p>O plano abaixo registra exatamente como este resultado foi produzido.</p>

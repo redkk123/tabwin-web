@@ -1,6 +1,6 @@
 {
-  "revision": "faixa-2-3-virtualized-table",
-  "date": "2026-08-28",
+  "revision": "faixa-2-4-modern-tabulation-log",
+  "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
     "total": 157,
@@ -173,6 +173,9 @@
     ,"atomic-tbody-swap-avoiding-a-scroll-resetting-empty-frame"
     ,"full-table-render-on-beforeprint-restored-on-afterprint"
     ,"browser-verified-1927-row-scroll-and-print-on-real-dengue-tabulation"
+    ,"modern-session-tabulation-log-explicitly-not-lst-equivalent"
+    ,"per-entry-and-copy-all-tabulation-log-clipboard-export"
+    ,"tabulation-log-persists-across-dataset-changes-until-cleared"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -236,7 +239,6 @@
     "audit-include-table-and-paste-semantics-without-guessing",
     "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
     "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
-    "add-a-modern-explicitly-non-.lst-tabulation-log-faixa-2-4",
     "add-an-l3-result-cache-so-reanalysis-does-not-repeat-a-full-pass",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "resolve-research-plan-queries-into-observed-source-manifests",

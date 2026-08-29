@@ -115,6 +115,13 @@ completo já existe em memória.
 
 ### 2.4 Log da tabulação
 
+**Concluído em 2026-08-29.** Histórico da sessão na aba Auditoria, mais
+recente primeiro, cada entrada com dimensões, medida, filtros, regras
+cruzadas, registros vistos/aceitos, forma da tabela e avisos. Botões "Copiar"
+por entrada e "Copiar tudo", persistente entre trocas de arquivo até
+"Limpar". Rótulo explícito de que é log moderno, não `.LST`. Evidência em
+`docs/handoffs/R09_4_TABULATION_LOG_REPORT.md`.
+
 **Esforço:** um dia · **Risco:** baixo
 
 O `.LST` do TabWin registra o que foi tabulado. Todo o conteúdo já existe no

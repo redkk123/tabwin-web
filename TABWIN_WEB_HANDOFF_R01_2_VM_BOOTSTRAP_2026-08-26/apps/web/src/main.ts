@@ -292,6 +292,10 @@ const tableRowAggregate = element<HTMLButtonElement>('#table-row-aggregate');
 const tableRowSuppress = element<HTMLButtonElement>('#table-row-suppress');
 const chart = element<HTMLElement>('#chart');
 const auditOutput = element<HTMLElement>('#audit-output');
+const tabulationLogCount = element<HTMLElement>('#tabulation-log-count');
+const tabulationLogList = element<HTMLElement>('#tabulation-log-list');
+const tabulationLogCopyAll = element<HTMLButtonElement>('#tabulation-log-copy-all');
+const tabulationLogClear = element<HTMLButtonElement>('#tabulation-log-clear');
 const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
 const mapMessage = element<HTMLElement>('#map-message');
 const mapLegend = element<HTMLElement>('#map-legend');
@@ -1631,6 +1635,7 @@ async function runAnalysis(): Promise<void> {
     tableSubtitle.value = '';
     tableFooter.value = '';
     renderResult();
+    appendTabulationLogEntry(plan, result);
     exportCsvButton.disabled = false;
     exportJsonButton.disabled = false;
     exportXlsxButton.disabled = false;
@@ -2193,6 +2198,109 @@ function renderStatistics(): void {
     const message = document.createElement('p');
     message.textContent = error instanceof Error ? error.message : String(error);
     statisticsResult.append(message);
+  }
+}
+
+/**
+ * One completed tabulation, recorded for the session's log.
+ *
+ * This is a modern log, not a reconstruction of the TabWin 4.15 `.LST`
+ * format: the reverse-engineering evidence for `.LST` only describes that it
+ * can be viewed, copied and used to recover the panel (docs/product's
+ * reverse spec, 4.1.13), with no documented byte layout to reproduce. Every
+ * field here already exists in the plan or the result; this only formats it
+ * as a readable, timestamped history instead of the audit tab's single JSON
+ * snapshot of the current state.
+ */
+interface TabulationLogEntry {
+  id: string;
+  timestamp: string;
+  datasetName: string;
+  rowLabel: string;
+  columnLabel: string | null;
+  measureLabel: string;
+  filterCount: number;
+  crossFieldRuleCount: number;
+  recordsSeen: number;
+  recordsAccepted: number;
+  resultRows: number;
+  resultColumns: number;
+  warningCount: number;
+}
+
+/** Session-only and bounded; a work log, not a persisted audit trail. */
+const MAX_TABULATION_LOG_ENTRIES = 200;
+const tabulationLog: TabulationLogEntry[] = [];
+
+function tabulationLogEntryText(entry: TabulationLogEntry): string {
+  const dimensions = entry.columnLabel ? `${entry.rowLabel} × ${entry.columnLabel}` : entry.rowLabel;
+  return [
+    `${new Date(entry.timestamp).toLocaleString('pt-BR')} · ${entry.datasetName}`,
+    `${dimensions} · ${entry.measureLabel}`,
+    `${integerFormat.format(entry.filterCount)} filtro(s) · ${integerFormat.format(entry.crossFieldRuleCount)} regra(s) cruzada(s)`,
+    `${integerFormat.format(entry.recordsSeen)} vistos → ${integerFormat.format(entry.recordsAccepted)} aceitos · `
+      + `${integerFormat.format(entry.resultRows)} linha(s) × ${integerFormat.format(entry.resultColumns)} coluna(s)`,
+    `${integerFormat.format(entry.warningCount)} aviso(s)`,
+  ].join('\n');
+}
+
+function appendTabulationLogEntry(plan: QueryPlan, result: TabulationResult): void {
+  const entry: TabulationLogEntry = {
+    id: `log-${Date.now().toString(36)}-${tabulationLog.length}`,
+    timestamp: new Date().toISOString(),
+    datasetName,
+    rowLabel: fieldLabel(plan.spec.rows.field),
+    columnLabel: plan.spec.columns ? fieldLabel(plan.spec.columns.field, 'column') : null,
+    measureLabel: plan.spec.measure.kind === 'sum' ? `Soma de ${plan.spec.measure.field}` : 'Frequência',
+    filterCount: plan.spec.filters.length,
+    crossFieldRuleCount: plan.spec.crossFieldRules?.length ?? 0,
+    recordsSeen: result.recordsSeen,
+    recordsAccepted: result.recordsAccepted,
+    resultRows: result.rows.length,
+    resultColumns: result.columns.length,
+    warningCount: result.warnings.length,
+  };
+  // Newest first for on-screen reading; unshift keeps that without a sort.
+  tabulationLog.unshift(entry);
+  tabulationLog.length = Math.min(tabulationLog.length, MAX_TABULATION_LOG_ENTRIES);
+  renderTabulationLog();
+}
+
+function renderTabulationLog(): void {
+  tabulationLogList.replaceChildren();
+  const hasEntries = tabulationLog.length > 0;
+  tabulationLogCopyAll.disabled = !hasEntries;
+  tabulationLogClear.disabled = !hasEntries;
+  tabulationLogCount.textContent = hasEntries
+    ? `${integerFormat.format(tabulationLog.length)} tabulação(ões) nesta sessão`
+    : 'nenhuma tabulação nesta sessão';
+
+  for (const entry of tabulationLog) {
+    const item = document.createElement('div');
+    item.className = 'tabulation-log-entry';
+    const dimensions = entry.columnLabel ? `${entry.rowLabel} × ${entry.columnLabel}` : entry.rowLabel;
+    const title = document.createElement('b');
+    title.textContent = `${dimensions} · ${entry.measureLabel}`;
+    const time = document.createElement('time');
+    time.dateTime = entry.timestamp;
+    time.textContent = new Date(entry.timestamp).toLocaleTimeString('pt-BR');
+    const detail = document.createElement('span');
+    detail.textContent = `${entry.datasetName} · ${integerFormat.format(entry.filterCount)} filtro(s) · `
+      + `${integerFormat.format(entry.crossFieldRuleCount)} regra(s) cruzada(s) · `
+      + `${integerFormat.format(entry.recordsSeen)} vistos → ${integerFormat.format(entry.recordsAccepted)} aceitos · `
+      + `${integerFormat.format(entry.resultRows)} linha(s) × ${integerFormat.format(entry.resultColumns)} coluna(s) · `
+      + `${integerFormat.format(entry.warningCount)} aviso(s)`;
+    const copy = document.createElement('button');
+    copy.type = 'button';
+    copy.className = 'secondary-button';
+    copy.textContent = 'Copiar';
+    copy.addEventListener('click', () => {
+      void navigator.clipboard.writeText(tabulationLogEntryText(entry))
+        .then(() => showToast('Entrada do log copiada'))
+        .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), true));
+    });
+    item.append(title, time, detail, copy);
+    tabulationLogList.append(item);
   }
 }
 
@@ -3675,6 +3783,19 @@ exportCsvButton.addEventListener('click', exportCsv);
 exportJsonButton.addEventListener('click', exportJson);
 exportXlsxButton.addEventListener('click', exportXlsx);
 exportXmlButton.addEventListener('click', exportXml);
+tabulationLogCopyAll.addEventListener('click', () => {
+  if (!tabulationLog.length) return;
+  // Chronological (oldest first) reads as a timeline once pasted, even
+  // though the on-screen list stays newest-first for at-a-glance reading.
+  const text = [...tabulationLog].reverse().map(tabulationLogEntryText).join('\n\n');
+  void navigator.clipboard.writeText(text)
+    .then(() => showToast(`${integerFormat.format(tabulationLog.length)} entrada(s) copiada(s)`))
+    .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), true));
+});
+tabulationLogClear.addEventListener('click', () => {
+  tabulationLog.length = 0;
+  renderTabulationLog();
+});
 tableOperationKind.addEventListener('change', updateTableOperationControls);
 tableOperationApply.addEventListener('click', () => {
   try {
