@@ -42,6 +42,9 @@ function getConversion(registry: ConversionRegistry, id: string): CnvDefinition 
   const definition = registry[id];
   if (!definition) throw new Error(`missing conversion: ${id}`);
   if ('kind' in definition) throw new Error(`resource ${id} is a DBF lookup, not a CNV conversion`);
+  if (definition.mode === 'new-format') {
+    throw new Error(`new-format N conversion ${id} is decoded for inspection but not executable until G012 is explained`);
+  }
   return definition;
 }
 

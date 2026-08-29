@@ -69,18 +69,22 @@ function parseHeader(body: string, lineNumber: number): ParsedHeader | null {
   return { categoryCount, codeLength, mode };
 }
 
-function parseLegacyRuleLine(
+function parseRuleLine(
   body: string,
   sourceLine: number,
   mode: CnvMode,
   sourceOrder: number,
 ): { category: CnvCategory; rule: CnvRuleLine } {
-  // Documented legacy fixed columns (1-based):
-  // subtotal 1-3, sequence 4-7, description 10-59, codes 61+.
-  const subtotalRaw = body.slice(0, 3).trim();
-  const sequenceRaw = body.slice(3, 7).trim();
-  const label = body.slice(9, 59).trimEnd().trimStart();
-  const codesRaw = body.slice(60).trim();
+  // Legacy columns (1-based): subtotal 1-3, sequence 4-7,
+  // description 10-59, codes 61+. The N layout widens the hierarchy prefix
+  // and label: prefix 1-5, sequence 6-9, description 12-111, codes 113+.
+  // All 41,897 body rows across the 89 official N files in TAB_SIH satisfy
+  // these offsets; G012 independently confirms the emitted labels and codes.
+  const isNew = mode === 'new-format';
+  const subtotalRaw = body.slice(0, isNew ? 5 : 3).trim();
+  const sequenceRaw = body.slice(isNew ? 5 : 3, isNew ? 9 : 7).trim();
+  const label = body.slice(isNew ? 11 : 9, isNew ? 111 : 59).trim();
+  const codesRaw = body.slice(isNew ? 112 : 60).trim();
 
   if (!/^\d+$/.test(sequenceRaw)) {
     throw new CnvParseError(
@@ -95,7 +99,11 @@ function parseLegacyRuleLine(
 
   let subtotalTarget: number | undefined;
   let excludeFromTotal = false;
-  if (subtotalRaw) {
+  // The widened prefix is visibly hierarchical metadata, but G012 proves it
+  // does not behave like legacy computed subtotals: its parent rows remain
+  // absent with zero suppression. Do not map an unproved N prefix onto the
+  // legacy subtotalTarget execution semantic.
+  if (subtotalRaw && !isNew) {
     if (subtotalRaw === '#') excludeFromTotal = true;
     else if (/^\d+$/.test(subtotalRaw)) subtotalTarget = Number(subtotalRaw);
     else throw new CnvParseError('invalid subtotal field', sourceLine);
@@ -180,14 +188,6 @@ export function parseCnv(text: string, options: ParseCnvOptions = {}): CnvDefini
 
   if (!header) throw new CnvParseError('missing CNV header');
 
-  if (header.mode === 'new-format') {
-    // We detect this correctly but intentionally do not guess the widened offsets.
-    throw new CnvParseError(
-      'new-format CNV (N marker) detected; widened fixed-column layout is not specified sufficiently in the supplied documentation yet',
-      headerLine,
-    );
-  }
-
   const categories = new Map<number, CnvCategory>();
   const rules: CnvRuleLine[] = [];
   let sourceOrder = 0;
@@ -201,14 +201,15 @@ export function parseCnv(text: string, options: ParseCnvOptions = {}): CnvDefini
     // Fixed-column CNV rows need enough width to reach the code field. A short
     // line may still be valid if it contains no codes, but that is not useful as
     // a conversion rule, so strict compatibility mode rejects it.
-    if (strict && body.length < 61) {
+    const minimumLength = header.mode === 'new-format' ? 113 : 61;
+    if (strict && body.length < minimumLength) {
       throw new CnvParseError(
-        `legacy fixed-column row is ${body.length} chars; expected at least 61`,
+        `${header.mode === 'new-format' ? 'new-format' : 'legacy fixed-column'} row is ${body.length} chars; expected at least ${minimumLength}`,
         i + 1,
       );
     }
 
-    const parsed = parseLegacyRuleLine(body.padEnd(61), i + 1, header.mode, sourceOrder++);
+    const parsed = parseRuleLine(body.padEnd(minimumLength), i + 1, header.mode, sourceOrder++);
     const existing = categories.get(parsed.category.sequence);
     if (!existing) {
       categories.set(parsed.category.sequence, parsed.category);
@@ -257,6 +258,11 @@ export function parseCnv(text: string, options: ParseCnvOptions = {}): CnvDefini
       }
       previous = upper;
     }
+  }
+  if (header.mode === 'new-format') {
+    warnings.push(
+      'new-format N fixed columns were decoded, but its hierarchy prefix and G012 duplicated category remain non-executable',
+    );
   }
 
   return {

@@ -46,6 +46,23 @@ test('subtotal and # metadata are parsed from columns 1-3', () => {
   assert.equal(cnv.categories[2]?.excludeFromTotal, true);
 });
 
-test('detects new-format marker instead of silently guessing its offsets', () => {
-  assert.throws(() => parseCnv('N3 2\n'), /new-format CNV/);
+test('decodes the widened new-format N columns without activating unproved hierarchy semantics', () => {
+  const nrow = (parent, sequence, label, codes) =>
+    `${parent.padStart(5)}${String(sequence).padStart(4)}  ${label.padEnd(100)} ${codes}`;
+  const cnv = parseCnv([
+    'N 3 4',
+    nrow('', 1, 'Grupo', '1000-1999,'),
+    nrow('1', 2, '102-3 Estadual', '1023'),
+    nrow('1', 3, '114-7 Fundação', '1147'),
+  ].join('\n'));
+  assert.equal(cnv.mode, 'new-format');
+  assert.equal(cnv.codeLength, 4);
+  assert.deepEqual(cnv.categories.map(({ sequence, label, subtotalTarget }) => ({ sequence, label, subtotalTarget })), [
+    { sequence: 1, label: 'Grupo', subtotalTarget: undefined },
+    { sequence: 2, label: '102-3 Estadual', subtotalTarget: undefined },
+    { sequence: 3, label: '114-7 Fundação', subtotalTarget: undefined },
+  ]);
+  assert.deepEqual(cnv.rules[0]?.ranges, [{ from: '1000', to: '1999' }]);
+  assert.deepEqual(cnv.rules[1]?.exactCodes, ['1023']);
+  assert.match(cnv.warnings.at(-1), /non-executable/);
 });

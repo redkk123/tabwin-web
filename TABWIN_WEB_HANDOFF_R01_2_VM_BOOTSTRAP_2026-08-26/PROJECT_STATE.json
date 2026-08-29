@@ -1,10 +1,10 @@
 {
-  "revision": "official-auxiliary-bundle-and-dos-eof-cnv-fix",
+  "revision": "second-golden-batch-audited-with-safe-new-format-inspection",
   "date": "2026-08-29",
-  "phase": "feature-inventory-closure-after-first-real-golden",
+  "phase": "golden-driven-compatibility-progression",
   "tests": {
-    "total": 220,
-    "passed": 220,
+    "total": 227,
+    "passed": 227,
     "failed": 0,
     "command": "npm run check"
   },
@@ -208,7 +208,21 @@
     "generalized-multi-case-golden-verifier",
     "dos-eof-marker-tolerated-in-official-cnv-files",
     "official-auxiliary-bundle-acquisition-without-ftp-access",
-    "all-865-official-sih-auxiliary-cnvs-parse"
+    "all-865-official-sih-auxiliary-cnvs-parse",
+    "subtotal-parent-rows-excluded-from-final-total",
+    "logical-multipolygon-area-and-whole-object-point-limit",
+    "second-golden-batch-biff-normalization-and-evidence-hashes",
+    "real-g006-unclassified-golden-equivalence",
+    "real-g008-capital-golden-equivalence",
+    "real-g010-region-rollup-golden-equivalence",
+    "real-g014-weighted-frequency-golden-equivalence",
+    "real-g015-def-dbf-lookup-label-golden-equivalence",
+    "real-g018-selection-golden-equivalence",
+    "real-g021-multi-period-combination-golden-equivalence",
+    "def-driven-dbf-lookup-dimension-labels-and-zero-categories",
+    "browser-verified-cnes-dbf-lookup-on-real-rdac2401",
+    "new-format-N-fixed-columns-decoded-for-read-only-inspection",
+    "new-format-N-execution-editing-and-serialization-safety-block"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -222,12 +236,13 @@
     "auxiliary_entries": 886,
     "verified_auxiliaries": [
       "RD2008.DEF",
-      "COMPLEX2.CNV"
+      "COMPLEX2.CNV",
+      "TCNESAC.DBF"
     ]
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
-    "new-N-format-CNV-row-layout",
+    "new-N-format-CNV-hierarchy-and-duplicated-G012-category-semantics",
     "DEF-X-directive-semantics",
     "TAB-replay",
     "advanced-chart-editing-axes-zoom-and-print",
@@ -249,8 +264,9 @@
     "multi-period-null-category-and-schema-drift-diagnostics",
     "sinan-def-cnv-and-tabnet-dimension-registry",
     "message-driven-cancellation-of-an-in-flight-synchronous-decode",
-    "golden-cases-beyond-g005",
-    "g006-nonclassified-needs-a-different-dbc-or-field"
+    "g009-protocol-requested-RD-file-through-an-AIH_MA-definition",
+    "g012-new-format-N-duplicated-category-semantics",
+    "g017-multiple-measures-in-one-tabulation"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -275,8 +291,8 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "capture-short-top-n-and-multiple-increment-tabwin-415-oracles",
-    "run-docs-testing-r06-1-short-oracle-cases",
+    "implement-G017-multiple-measures-from-captured-oracle",
+    "resolve-G012-N-hierarchy-only-from-captured-and-source-backed-evidence",
     "capture-focused-post-table-tabwin-415-oracles",
     "audit-include-table-and-paste-semantics-without-guessing",
     "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
@@ -296,9 +312,21 @@
       "G002",
       "G003",
       "G004",
-      "G005"
+      "G005",
+      "G006",
+      "G008",
+      "G010",
+      "G014",
+      "G015",
+      "G018",
+      "G021"
+    ],
+    "evidence_only_or_blocked": [
+      "G009",
+      "G012",
+      "G017"
     ],
     "tolerance": 0,
-    "notes": "G003 compares at VAL_TOT declared 2 decimals; TabWin and this executor land 1 ULP apart on a 4153-record float sum, with our value closer to exact. Counts stay exact."
+    "notes": "G003 compares at VAL_TOT declared 2 decimals; all seven executable second-batch cases pass at zero tolerance. G009 proves a capture-protocol mismatch, while G012 and G017 remain evidence-preserving non-passes."
   }
 }

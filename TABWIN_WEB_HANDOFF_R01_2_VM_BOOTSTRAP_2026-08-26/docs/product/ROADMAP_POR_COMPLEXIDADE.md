@@ -298,6 +298,16 @@ passou a cobrir cinco semânticas independentes: frequência 1D com CNV
 (G001), linha × coluna (G002), medida de soma (G003), seleção ancorada em
 CNV (G004) e supressão de zeros (G005).
 
+**Segunda bateria integrada e auditada em 2026-08-29.** G006, G008, G010,
+G014, G015, G018 e G021 passam contra o BIFF original, célula a célula, com
+tolerância zero. G010 revelou que linhas-pai de subtotal não entram novamente
+no total final; G015 levou à implementação de rótulos auxiliares vindos de DBF
+referenciado pelo DEF. G009 não é um caso executável: o protocolo mandava
+combinar `AIH_MA.DEF` com um arquivo `RD`, combinação que a própria definição
+não oferece. G012 preserva o resultado observado, mas o formato `N` só é
+decodificado para inspeção enquanto a categoria duplicada não for explicada.
+G017 preserva a tabela de três medidas e é o próximo degrau estrutural.
+
 O G003 achou **duas divergências reais** — foi o que justificou a bateria:
 
 1. Cabeçalho da coluna de soma: o TabWin usa o rótulo do incremento do DEF
@@ -311,14 +321,15 @@ O G003 achou **duas divergências reais** — foi o que justificou a bateria:
    exatas e um erro de um centavo continua reprovando.
 
 Fila reconciliada de G007 em diante em `docs/testing/GOLDEN_CORPUS_QUEUE.md`.
-G006 (não classificados) segue adiado: nenhum campo do arquivo AC/2024-01
-produz valor fora da cobertura da sua CNV. Evidência completa em
-`docs/handoffs/R10_0_G002_G005_GOLDEN_RESULTS.md`.
+Evidência da primeira bateria em
+`docs/handoffs/R10_0_G002_G005_GOLDEN_RESULTS.md`; auditoria e segunda bateria
+em `docs/handoffs/R10_2_SECOND_GOLDEN_BATCH_AUDIT_2026-08-29.md`.
 
 **Esforço:** semanas de captura, pouco código · **Risco:** é o que reduz risco
 
 O documento mestre pede bateria por subsistema: CNV, DEF, motor, quadro,
-persistência, geografia. Cinco casos cobrem o motor; o resto continua aberto.
+persistência, geografia. Doze casos executáveis já passam; G012 e G017 agora
+delimitam as duas próximas semânticas de motor que não podem ser inventadas.
 
 O trabalho é operar o TabWin 4.15 e capturar, não programar. Deve começar cedo
 mesmo sendo longo, porque é o que autoriza a palavra "compatível".

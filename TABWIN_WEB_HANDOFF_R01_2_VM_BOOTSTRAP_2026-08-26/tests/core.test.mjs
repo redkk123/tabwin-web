@@ -357,6 +357,19 @@ test('DEF DBF lookup materializes ordered labels and zero rows without guessing'
   assert.deepEqual(result.cells, [[0], [2]]);
 });
 
+test('new-format N conversions stay non-executable while their G012 anomaly is unresolved', () => {
+  const nrow = (sequence, label, codes) => `${''.padStart(5)}${String(sequence).padStart(4)}  ${label.padEnd(100)} ${codes}`;
+  const cnv = parseCnv(['N 1 4', nrow(1, 'Uma categoria', '1023')].join('\n'));
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: { field: 'NAT', conversionId: 'NATJUR.CNV' },
+    measure: { kind: 'count' }, filters: [],
+  });
+  assert.throws(
+    () => executeInMemory([{ NAT: '1023' }], plan, { 'NATJUR.CNV': cnv }),
+    /decoded for inspection but not executable until G012 is explained/,
+  );
+});
+
 test('golden comparator requires exact labels, shape and cells by default', () => {
   const plan = compileQueryPlan({
     compatibilityProfile: 'tabwin-4.15',

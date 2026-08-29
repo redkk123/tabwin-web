@@ -406,6 +406,7 @@ interface CnvEditorRow {
 let cnvEditorRows: CnvEditorRow[] = [];
 let cnvEditorMode: CnvDefinition['mode'] = 'short';
 let cnvEditorCodeLength = 2;
+let cnvEditorReadOnly = false;
 let mapNameByGeocode = new Map<string, string>();
 let currentPlan: QueryPlan | null = null;
 let baseResult: TabulationResult | null = null;
@@ -1164,6 +1165,9 @@ function populateConversions(): void {
   columnConversion.replaceChildren(new Option('Valores originais', ''));
   for (const name of [...cnvByName.keys()].sort((a, b) => a.localeCompare(b))) {
     const definition = cnvByName.get(name)!;
+    // N files can be inspected and previewed, but are deliberately excluded
+    // from executable selectors until G012's duplicated category is explained.
+    if (definition.mode === 'new-format') continue;
     const label = `${name} · ${definition.categories.length} categorias`;
     rowConversion.add(new Option(label, name));
     columnConversion.add(new Option(label, name));
@@ -1174,8 +1178,8 @@ function populateConversions(): void {
     rowConversion.add(new Option(label, name));
     columnConversion.add(new Option(label, name));
   }
-  if (cnvByName.has(previousRow)) rowConversion.value = previousRow;
-  if (cnvByName.has(previousColumn)) columnConversion.value = previousColumn;
+  if (cnvByName.get(previousRow)?.mode !== 'new-format') rowConversion.value = previousRow;
+  if (cnvByName.get(previousColumn)?.mode !== 'new-format') columnConversion.value = previousColumn;
   if (lookupByName.has(previousRow)) rowConversion.value = previousRow;
   if (lookupByName.has(previousColumn)) columnConversion.value = previousColumn;
   applyDefDefaults();
@@ -1196,7 +1200,9 @@ function applyDefDefaults(): void {
     const option = optionsForRole(definition, role).find((candidate) => {
       if (candidate.field.toUpperCase() !== field.toUpperCase()) return false;
       if (candidate.kind === 'conversion') {
-        return [...cnvByName.keys()].some((name) => baseName(name) === baseName(candidate.conversionFile));
+        return [...cnvByName.entries()].some(
+          ([name, cnv]) => cnv.mode !== 'new-format' && baseName(name) === baseName(candidate.conversionFile),
+        );
       }
       if (candidate.kind === 'dbf-lookup') {
         return [...lookupByName.keys()].some((name) => baseName(name) === baseName(candidate.lookupFile));
@@ -1206,7 +1212,9 @@ function applyDefDefaults(): void {
     if (!option) return;
     if (option.kind === 'conversion') {
       position.value = String(option.startPosition);
-      const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === baseName(option.conversionFile));
+      const loadedName = [...cnvByName.entries()].find(
+        ([name, cnv]) => cnv.mode !== 'new-format' && baseName(name) === baseName(option.conversionFile),
+      )?.[0];
       if (loadedName) conversion.value = loadedName;
     } else if (option.kind === 'dbf-lookup') {
       const loadedName = [...lookupByName.keys()].find((name) => baseName(name) === baseName(option.lookupFile));
@@ -1837,6 +1845,9 @@ function renderCnvEditorRow(row: CnvEditorRow, index: number): HTMLElement {
   });
   removeCell.append(removeButton);
 
+  for (const input of [sequenceInput, labelInput, subtotalInput, codesInput]) input.disabled = cnvEditorReadOnly;
+  removeButton.disabled = cnvEditorReadOnly;
+
   for (const input of [sequenceInput, labelInput, subtotalInput, codesInput]) {
     const td = document.createElement('td');
     td.append(input);
@@ -1847,12 +1858,24 @@ function renderCnvEditorRow(row: CnvEditorRow, index: number): HTMLElement {
 }
 
 function renderCnvEditorTable(): void {
-  cnvEditorCodesHeader.textContent = cnvEditorMode === 'numeric-ranges' ? 'Limite superior' : 'Códigos / faixas';
+  const codesLabel = cnvEditorMode === 'numeric-ranges' ? 'Limite superior' : 'Códigos / faixas';
+  cnvEditorCodesHeader.textContent = cnvEditorReadOnly ? `${codesLabel} (somente leitura)` : codesLabel;
   cnvEditorRowsBody.replaceChildren(...cnvEditorRows.map((row, index) => renderCnvEditorRow(row, index)));
   renderCnvEditorDiagnostics();
 }
 
+function setCnvEditorReadOnly(readOnly: boolean): void {
+  cnvEditorReadOnly = readOnly;
+  cnvEditorFilename.disabled = readOnly;
+  cnvEditorModeSelect.disabled = readOnly;
+  cnvEditorCodeLengthInput.disabled = readOnly;
+  cnvEditorAddCategory.disabled = readOnly;
+  cnvEditorApply.disabled = readOnly;
+  cnvEditorDownload.disabled = readOnly;
+}
+
 function resetCnvEditorToBlank(): void {
+  setCnvEditorReadOnly(false);
   cnvEditorRows = [{ sequence: 1, label: '', subtotal: '', codesText: '' }];
   cnvEditorMode = 'short';
   cnvEditorCodeLength = 2;
@@ -1865,14 +1888,15 @@ function resetCnvEditorToBlank(): void {
 function loadCnvIntoEditor(name: string): void {
   const definition = cnvByName.get(name);
   if (!definition) return;
+  setCnvEditorReadOnly(definition.mode === 'new-format');
   cnvEditorRows = rowsFromDefinition(definition);
-  cnvEditorMode = definition.mode === 'new-format' ? 'short' : definition.mode;
+  cnvEditorMode = definition.mode;
   cnvEditorCodeLength = definition.codeLength;
   cnvEditorFilename.value = name;
   cnvEditorModeSelect.value = cnvEditorMode;
   cnvEditorCodeLengthInput.value = String(cnvEditorCodeLength);
   if (definition.mode === 'new-format') {
-    showToast(`${name}: layout N não é editável aqui; carregado como "curto" — revise antes de aplicar`, true);
+    showToast(`${name}: formato N decodificado para inspeção; aplicar e baixar permanecem bloqueados`, true);
   }
   renderCnvEditorTable();
 }
@@ -1966,6 +1990,10 @@ function requireCnvEditorFilename(): string {
 }
 
 function applyCnvEditor(): void {
+  if (cnvEditorReadOnly) {
+    showToast('Formato N é somente leitura até a divergência do G012 ser explicada', true);
+    return;
+  }
   const diagnostics = renderCnvEditorDiagnostics();
   if (diagnostics.some((d) => d.severity === 'error')) {
     showToast('Corrija os erros listados antes de aplicar', true);
@@ -1979,6 +2007,10 @@ function applyCnvEditor(): void {
 }
 
 function downloadCnvEditorFile(): void {
+  if (cnvEditorReadOnly) {
+    showToast('Formato N é somente leitura e não pode ser regravado com segurança', true);
+    return;
+  }
   const diagnostics = renderCnvEditorDiagnostics();
   if (diagnostics.some((d) => d.severity === 'error')) {
     showToast('Corrija os erros listados antes de baixar', true);
@@ -4721,13 +4753,16 @@ cnvEditorSource.addEventListener('change', () => {
 });
 cnvEditorNew.addEventListener('click', () => { cnvEditorSource.value = ''; resetCnvEditorToBlank(); });
 cnvEditorModeSelect.addEventListener('change', () => {
+  if (cnvEditorReadOnly) return;
   cnvEditorMode = cnvEditorModeSelect.value as CnvDefinition['mode'];
   renderCnvEditorTable();
 });
 cnvEditorCodeLengthInput.addEventListener('input', () => {
+  if (cnvEditorReadOnly) return;
   cnvEditorCodeLength = Number(cnvEditorCodeLengthInput.value);
 });
 cnvEditorAddCategory.addEventListener('click', () => {
+  if (cnvEditorReadOnly) return;
   const nextSequence = cnvEditorRows.reduce((max, row) => Math.max(max, row.sequence), 0) + 1;
   cnvEditorRows.push({ sequence: nextSequence, label: '', subtotal: '', codesText: '' });
   renderCnvEditorTable();

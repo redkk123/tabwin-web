@@ -48,9 +48,9 @@ test('a category built by an editor with a category count mismatch still round-t
   assert.equal(reparsed.categories.length, 2);
 });
 
-test('new-format (N) definitions refuse to serialize, matching the parser refusing to read them', () => {
-  // Construct a minimal new-format-shaped definition by hand, since parseCnv
-  // itself refuses to produce one.
+test('new-format (N) definitions remain non-serializable after safe read-only parsing was added', () => {
+  // Writing the hierarchy prefix remains unproved even though the observed
+  // fixed columns can now be decoded for inspection.
   const definition = {
     categoryCount: 1, codeLength: 2, mode: 'new-format', precedence: 'last-match-wins',
     categories: [{ sequence: 1, label: 'X' }],
