@@ -146,7 +146,15 @@ function parseLegacyRuleLine(
 
 export function parseCnv(text: string, options: ParseCnvOptions = {}): CnvDefinition {
   const strict = options.strict ?? true;
-  const normalized = text.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+  // Real official CNVs are MS-DOS text files and many close with the DOS
+  // end-of-file marker (0x1A, Ctrl-Z) on its own line. It terminates the
+  // content; it is not a rule row. Without this, strict mode rejected 53 of
+  // the 865 CNVs in the official SIH auxiliary bundle - including core
+  // geography tables like UF.CNV, REGIAO.CNV and CAPITAL.CNV - with
+  // "legacy fixed-column row is 1 chars". Same optional-terminator policy
+  // the DBF reader already applies (see dbf-record-stream.ts).
+  const withoutDosEof = text.split('\u001A')[0]!;
+  const normalized = withoutDosEof.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
   const lines = normalized.split('\n');
   const comments: string[] = [];
   const warnings: string[] = [];

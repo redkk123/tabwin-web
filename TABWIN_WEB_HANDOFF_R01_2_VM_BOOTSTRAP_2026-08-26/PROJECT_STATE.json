@@ -1,10 +1,10 @@
 {
-  "revision": "g002-g005-golden-corpus",
+  "revision": "official-auxiliary-bundle-and-dos-eof-cnv-fix",
   "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 215,
-    "passed": 215,
+    "total": 220,
+    "passed": 220,
     "failed": 0,
     "command": "npm run check"
   },
@@ -205,7 +205,10 @@
     "real-g005-zero-suppression-golden-equivalence",
     "def-increment-label-as-sum-column-header",
     "golden-comparison-at-source-declared-decimal-precision",
-    "generalized-multi-case-golden-verifier"
+    "generalized-multi-case-golden-verifier",
+    "dos-eof-marker-tolerated-in-official-cnv-files",
+    "official-auxiliary-bundle-acquisition-without-ftp-access",
+    "all-865-official-sih-auxiliary-cnvs-parse"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
