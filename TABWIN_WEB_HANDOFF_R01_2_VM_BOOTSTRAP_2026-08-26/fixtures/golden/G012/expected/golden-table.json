@@ -1,0 +1,42 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G012",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 645F38AE4C5D04A7FFF0F10CC87C32D1261D1981EE4DF1A12553F6F91D575E97. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "102-3 Órgão Público do Poder Executivo Estadual ou do Distrito Federal"
+    },
+    {
+      "label": "104-0 Órgão Público do Poder Legislativo Federal"
+    },
+    {
+      "label": "114-7 Fundação Pública de Direito Público Estadual ou do Distrito Federal"
+    },
+    {
+      "label": "399-9 Associação Privada"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      3282
+    ],
+    [
+      524
+    ],
+    [
+      509
+    ],
+    [
+      524
+    ]
+  ]
+}

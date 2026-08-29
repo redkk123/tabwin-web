@@ -1,0 +1,72 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G008",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 A35BE362AF4CE698944A3644D29DA306C16F288B94DA0B1CDCAF11521E077D95. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "110020 Porto Velho"
+    },
+    {
+      "label": "120040 Rio Branco"
+    },
+    {
+      "label": "130260 Manaus"
+    },
+    {
+      "label": "160030 Macapá"
+    },
+    {
+      "label": "240810 Natal"
+    },
+    {
+      "label": "330455 Rio de Janeiro"
+    },
+    {
+      "label": "510340 Cuiabá"
+    },
+    {
+      "label": "520870 Goiânia"
+    },
+    {
+      "label": "530010 Brasília"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      35
+    ],
+    [
+      1789
+    ],
+    [
+      5
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ]
+  ]
+}

@@ -1,0 +1,7 @@
+Reference engine: TabWin 4.15
+Row: Capital de Residência
+Measure: Frequência
+Unclassified: disabled
+Suppress zero rows: enabled
+Selections: none
+Captured: 2026-08-29

@@ -1,0 +1,114 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G010",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 53402D0D296AF2C7757AEE781976F920F1C8A405A69DAC6F97CE42ED19C551C8. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "Região Norte"
+    },
+    {
+      "label": ".. Rondônia"
+    },
+    {
+      "label": ".. Acre"
+    },
+    {
+      "label": ".. Amazonas"
+    },
+    {
+      "label": ".. Amapá"
+    },
+    {
+      "label": "Região Nordeste"
+    },
+    {
+      "label": ".. Rio Grande do Norte"
+    },
+    {
+      "label": "Região Sudeste"
+    },
+    {
+      "label": ".. Minas Gerais"
+    },
+    {
+      "label": ".. Rio de Janeiro"
+    },
+    {
+      "label": ".. São Paulo"
+    },
+    {
+      "label": "Região Centro-Oeste"
+    },
+    {
+      "label": ".. Mato Grosso do Sul"
+    },
+    {
+      "label": ".. Mato Grosso"
+    },
+    {
+      "label": ".. Goiás"
+    },
+    {
+      "label": ".. Distrito Federal"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      4303
+    ],
+    [
+      42
+    ],
+    [
+      4113
+    ],
+    [
+      147
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      3
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      1
+    ],
+    [
+      8
+    ],
+    [
+      1
+    ],
+    [
+      4
+    ],
+    [
+      2
+    ],
+    [
+      1
+    ]
+  ]
+}

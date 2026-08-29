@@ -3,6 +3,7 @@ import { classifyCnv } from '../../formats/src/cnv-match.js';
 import type {
   CrossFieldRuleSpec,
   DataRecord,
+  DimensionLookupDefinition,
   DimensionSpec,
   FilterSpec,
   QueryPlan,
@@ -10,7 +11,7 @@ import type {
   TabulationResult,
 } from './model.js';
 
-export type ConversionRegistry = Readonly<Record<string, CnvDefinition>>;
+export type ConversionRegistry = Readonly<Record<string, CnvDefinition | DimensionLookupDefinition>>;
 
 interface ResolvedDimension {
   key?: string;
@@ -40,6 +41,16 @@ function singleColumnLabel(plan: QueryPlan): string {
 function getConversion(registry: ConversionRegistry, id: string): CnvDefinition {
   const definition = registry[id];
   if (!definition) throw new Error(`missing conversion: ${id}`);
+  if ('kind' in definition) throw new Error(`resource ${id} is a DBF lookup, not a CNV conversion`);
+  return definition;
+}
+
+function getLookup(registry: ConversionRegistry, id: string): DimensionLookupDefinition {
+  const definition = registry[id];
+  if (!definition) throw new Error(`missing DBF lookup: ${id}`);
+  if (!('kind' in definition) || definition.kind !== 'dbf-lookup') {
+    throw new Error(`resource ${id} is a CNV conversion, not a DBF lookup`);
+  }
   return definition;
 }
 
@@ -69,6 +80,7 @@ function resolveDimension(
   dimension: DimensionSpec,
   conversions: ConversionRegistry,
 ): ResolvedDimension {
+  const lookup = dimension.lookupId ? getLookup(conversions, dimension.lookupId) : undefined;
   const definition = dimension.conversionId
     ? getConversion(conversions, dimension.conversionId)
     : undefined;
@@ -78,6 +90,15 @@ function resolveDimension(
     dimension.startPosition,
     definition,
   );
+  if (lookup) {
+    const key = String(raw ?? '').trim();
+    const entry = lookup.entries.find((candidate) => candidate.key === key);
+    if (!entry) {
+      return dimension.unclassifiedPolicy === 'discriminate'
+        ? { key: UNCLASSIFIED_KEY, label: UNCLASSIFIED_LABEL } : {};
+    }
+    return { key: entry.key, label: entry.label };
+  }
   if (!definition) {
     if (raw === null || raw === undefined || raw === '') {
       return dimension.unclassifiedPolicy === 'discriminate'
@@ -131,6 +152,18 @@ function axisFromDimension(
   conversions: ConversionRegistry,
   observed: Map<string, string>,
 ): ResultAxisItem[] {
+  if (dimension.lookupId) {
+    const lookup = getLookup(conversions, dimension.lookupId);
+    const items: ResultAxisItem[] = lookup.entries.map((entry) => ({
+      key: entry.key,
+      label: entry.label,
+      source: 'conversion',
+    }));
+    if (dimension.unclassifiedPolicy === 'discriminate') {
+      items.push({ key: UNCLASSIFIED_KEY, label: UNCLASSIFIED_LABEL, source: 'conversion' });
+    }
+    return items;
+  }
   if (dimension.conversionId) {
     const definition = getConversion(conversions, dimension.conversionId);
     // A category referenced as a subtotal target is a presentation subtotal,

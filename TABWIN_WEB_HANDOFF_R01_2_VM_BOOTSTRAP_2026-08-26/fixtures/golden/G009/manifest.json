@@ -1,0 +1,24 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G009",
+  "capturedAt": "2026-08-29",
+  "semantic": "numeric-range F CNV classification",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/capture-blocker.png",
+      "bytes": 49829,
+      "sha256": "A31832F005598D1E2E9994D24A8C3290C55069BF1087AFB18B33B64B19A1BBAA"
+    }
+  ],
+  "comparison": {
+    "status": "capture-blocked",
+    "tolerance": null,
+    "pass": null,
+    "blocker": "AIH_MA.DEF admits only D:\\MA\\MA\\MA*.DBC and cannot open RDAC2401.dbc"
+  }
+}

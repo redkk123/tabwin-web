@@ -1,0 +1,7 @@
+Reference engine: TabWin 4.15
+Sources: RDAC2401.dbc + RDAC2402.dbc
+Row: Complexidade do Procedimento
+Measure: Frequência
+Suppress zero rows: enabled
+Selections: none
+Captured: 2026-08-29

@@ -1,0 +1,74 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G018",
+  "capturedAt": "2026-08-29",
+  "semantic": "intersection of two simultaneous selections",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "RD2008.DEF",
+      "bytes": 33581,
+      "sha256": "15376FB2E56917B4122FA475B15F1E270E9DAA4238F518D75E6BB6044372C652"
+    },
+    {
+      "name": "COMPLEX2.CNV",
+      "bytes": 265,
+      "sha256": "680EB03BD06964CF4DAE4B571BC757990688279ADB164B54D5253009D8A3975F"
+    },
+    {
+      "name": "CARATEND.CNV",
+      "bytes": 389,
+      "sha256": "E57C08CD045E6EAB1403013D96C7782C963D17BDDF4864840A964B99155D27F8"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 415,
+      "sha256": "40E460BC3A3DCD07D7FAF130A1746E059A8E5F497B7EB1803436512AE8E8B857"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 228,
+      "sha256": "DEB880E243C4FFFA1DD0CBD3935AC1171F0756DAE088982E2EAFE87C0352C51F"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 608,
+      "sha256": "A8314DD1AFEAE34400459AEC2404D418D80B59B6E2F06A6BA54032B2A890BBD8"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 701,
+      "sha256": "649875A9FC09FB5AE92AAD9859B3FABAF91FB07305ED70CCD5D1A878E6006441"
+    }
+  ],
+  "tabwinPresentation": {
+    "title": "Movimento de AIH - Arquivos Reduzidos",
+    "subtitle": "Freqüência segundo Complexidade do Procedimento",
+    "rowDimensionLabel": "Complexidade do Procedimento",
+    "tabwinTotals": [
+      124
+    ]
+  },
+  "comparison": {
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 4315,
+    "accepted": 124,
+    "rowLabelsMatch": true,
+    "columnLabelsMatch": true,
+    "shapeMatch": true,
+    "cellDiffCount": 0,
+    "pass": true
+  }
+}

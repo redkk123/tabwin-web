@@ -1,0 +1,6 @@
+Reference engine: TabWin 4.15
+Row: Diagnóstico CID10 (capítulo)
+Measure: Frequência (weighted by DEF G field SP_U_AIH)
+Suppress zero rows: enabled
+Selections: none
+Captured: 2026-08-29

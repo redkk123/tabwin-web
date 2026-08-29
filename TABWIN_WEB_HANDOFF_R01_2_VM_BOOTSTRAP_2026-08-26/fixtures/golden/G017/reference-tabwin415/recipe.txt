@@ -1,0 +1,7 @@
+Reference engine: TabWin 4.15
+Row: Hospital AC (CNES)
+Measures: Frequência + Valor Total + Óbitos
+Suppress zero rows: disabled
+Selections: none
+Note: reconstructed from the exported headers; no separate recipe file was supplied.
+Captured: 2026-08-29

@@ -11,10 +11,18 @@ export interface SourceFingerprint {
 export interface DimensionSpec {
   field: string;
   conversionId?: string;
+  /** Related DBF lookup materialized from a DEF option (for example CNES -> NOMEFANT). */
+  lookupId?: string;
   /** 1-based initial character position inside the source field, as in DEF Campo D. */
   startPosition?: number;
   /** Explicit handling when a raw value is empty or has no CNV match. */
   unclassifiedPolicy?: 'omit' | 'discriminate';
+}
+
+/** Immutable, renderer-independent lookup table loaded from a DEF-related DBF. */
+export interface DimensionLookupDefinition {
+  kind: 'dbf-lookup';
+  entries: Array<{ key: string; label: string }>;
 }
 
 interface FilterSpecBase {

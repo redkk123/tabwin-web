@@ -56,6 +56,9 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
     throw new QueryPlanError('column field cannot be empty');
   }
   for (const [label, dimension] of [['row', spec.rows], ['column', spec.columns]] as const) {
+    if (dimension?.conversionId && dimension.lookupId) {
+      throw new QueryPlanError(`${label} dimension cannot use a CNV conversion and a DBF lookup together`);
+    }
     if (dimension?.startPosition !== undefined && (!Number.isInteger(dimension.startPosition) || dimension.startPosition <= 0)) {
       throw new QueryPlanError(`${label} startPosition must be a positive integer`);
     }

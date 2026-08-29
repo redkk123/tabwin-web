@@ -1,11 +1,13 @@
 import {
   readDbfHeader,
+  readDbfRecords,
   type DbfField,
   type DbfHeader,
   type DbfRecord,
 } from '@precisa-saude/datasus-dbc';
 import {
   compileQueryPlan,
+  lookupDefinitionFromDefOption,
   parsePortableTable,
   parseRecipe,
   serializePortableTable,
@@ -13,6 +15,8 @@ import {
   sumMeasureFromDefIncrement,
   type AnalysisRecipeV1,
   type CrossFieldRuleSpec,
+  type ConversionRegistry,
+  type DimensionLookupDefinition,
   type FilterSpec,
   type QueryPlan,
   type PortableTableV1,
@@ -411,6 +415,8 @@ let currentRowLabel = '';
 let currentView: ViewName = 'table';
 let toastTimer = 0;
 const cnvByName = new Map<string, CnvDefinition>();
+/** DEF-related DBF tables (for example CNES -> NOMEFANT), never datasets. */
+const lookupByName = new Map<string, DimensionLookupDefinition>();
 const loadedSources: LoadedSource[] = [];
 const activeDatasetSources: LoadedSource[] = [];
 /** Source handles retained so a terminated Worker can be rebuilt after cancellation. */
@@ -531,8 +537,16 @@ function setControlsEnabled(enabled: boolean): void {
 
 function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
   if (!activeDef) return fieldName;
-  const match = activeDef.options.find((option) =>
+  const selectedResource = role === 'row' ? rowConversion.value : columnConversion.value;
+  const candidates = activeDef.options.filter((option) =>
     option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes(role));
+  const match = candidates.find((option) => selectedResource && (
+    option.kind === 'conversion'
+      ? baseName(option.conversionFile) === baseName(selectedResource)
+      : option.kind === 'dbf-lookup'
+        ? baseName(option.lookupFile) === baseName(selectedResource)
+        : false
+  )) ?? candidates[0];
   return match ? `${match.label} · ${fieldName}` : fieldName;
 }
 
@@ -1154,8 +1168,16 @@ function populateConversions(): void {
     rowConversion.add(new Option(label, name));
     columnConversion.add(new Option(label, name));
   }
+  for (const name of [...lookupByName.keys()].sort((a, b) => a.localeCompare(b))) {
+    const definition = lookupByName.get(name)!;
+    const label = `${name} · ${definition.entries.length} rótulos DBF`;
+    rowConversion.add(new Option(label, name));
+    columnConversion.add(new Option(label, name));
+  }
   if (cnvByName.has(previousRow)) rowConversion.value = previousRow;
   if (cnvByName.has(previousColumn)) columnConversion.value = previousColumn;
+  if (lookupByName.has(previousRow)) rowConversion.value = previousRow;
+  if (lookupByName.has(previousColumn)) columnConversion.value = previousColumn;
   applyDefDefaults();
   updateColumnControls();
   if (filterField.value) void populateFilterValues();
@@ -1171,14 +1193,25 @@ function applyDefDefaults(): void {
     position: HTMLInputElement,
   ): void => {
     if (!field) return;
-    const option = optionsForRole(definition, role).find(
-      (candidate) => candidate.field.toUpperCase() === field.toUpperCase(),
-    );
-    if (option?.kind !== 'conversion') return;
-    position.value = String(option.startPosition);
-    const wanted = baseName(option.conversionFile);
-    const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === wanted);
-    if (loadedName) conversion.value = loadedName;
+    const option = optionsForRole(definition, role).find((candidate) => {
+      if (candidate.field.toUpperCase() !== field.toUpperCase()) return false;
+      if (candidate.kind === 'conversion') {
+        return [...cnvByName.keys()].some((name) => baseName(name) === baseName(candidate.conversionFile));
+      }
+      if (candidate.kind === 'dbf-lookup') {
+        return [...lookupByName.keys()].some((name) => baseName(name) === baseName(candidate.lookupFile));
+      }
+      return false;
+    });
+    if (!option) return;
+    if (option.kind === 'conversion') {
+      position.value = String(option.startPosition);
+      const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === baseName(option.conversionFile));
+      if (loadedName) conversion.value = loadedName;
+    } else if (option.kind === 'dbf-lookup') {
+      const loadedName = [...lookupByName.keys()].find((name) => baseName(name) === baseName(option.lookupFile));
+      if (loadedName) conversion.value = loadedName;
+    }
   };
   apply('row', rowField.value, rowConversion, startPosition);
   apply('column', columnField.value, columnConversion, columnStartPosition);
@@ -1530,6 +1563,19 @@ async function loadFile(file: File): Promise<void> {
     sha256: await sha256(bytes),
   };
 
+  if (extension === 'DBF') {
+    const lookupOption = activeDef?.options.find((option) =>
+      option.kind === 'dbf-lookup' && baseName(option.lookupFile) === baseName(file.name));
+    if (lookupOption?.kind === 'dbf-lookup') {
+      const records: DbfRecord[] = [];
+      for await (const record of readDbfRecords(bytes)) records.push(record);
+      lookupByName.set(file.name, lookupDefinitionFromDefOption(lookupOption, records));
+      rememberSource(source);
+      populateConversions();
+      showToast(`${file.name}: ${integerFormat.format(records.length)} rótulos auxiliares carregados`);
+      return;
+    }
+  }
   if (extension === 'DBC' || extension === 'DBF') {
     if (combineCompatibleFiles.checked && dbfHeader && datasetRecordCount) {
       await appendCompatibleDbf(bytes, file, extension === 'DBC', source);
@@ -2160,7 +2206,11 @@ function buildPlan(): QueryPlan {
   const columnConversionName = columnConversion.value;
   const row = {
     field: rowField.value,
-    ...(conversionName ? { conversionId: conversionName, startPosition: Number(startPosition.value) } : {}),
+    ...(conversionName
+      ? lookupByName.has(conversionName)
+        ? { lookupId: conversionName }
+        : { conversionId: conversionName, startPosition: Number(startPosition.value) }
+      : {}),
     ...(discriminateUnclassified.checked ? { unclassifiedPolicy: 'discriminate' as const } : {}),
   };
   // G003: the real engine headers a sum with the DEF increment's own label
@@ -2179,7 +2229,9 @@ function buildPlan(): QueryPlan {
     ...(columnField.value ? { columns: {
       field: columnField.value,
       ...(columnConversionName
-        ? { conversionId: columnConversionName, startPosition: Number(columnStartPosition.value) }
+        ? lookupByName.has(columnConversionName)
+          ? { lookupId: columnConversionName }
+          : { conversionId: columnConversionName, startPosition: Number(columnStartPosition.value) }
         : {}),
       ...(discriminateColumnUnclassified.checked ? { unclassifiedPolicy: 'discriminate' as const } : {}),
     } } : {}),
@@ -2194,12 +2246,15 @@ function buildPlan(): QueryPlan {
   return compileQueryPlan(spec);
 }
 
-function conversionsForPlan(plan: QueryPlan): Record<string, CnvDefinition> {
-  const conversions: Record<string, CnvDefinition> = {};
+function conversionsForPlan(plan: QueryPlan): ConversionRegistry {
+  const conversions: Record<string, CnvDefinition | DimensionLookupDefinition> = {};
   for (const id of [plan.spec.rows.conversionId, plan.spec.columns?.conversionId,
     ...plan.spec.filters.map((filter) => filter.conversionId),
     ...(plan.spec.crossFieldRules ?? []).flatMap((rule) => rule.conditions.map((condition) => condition.conversionId))]) {
     if (id) conversions[id] = cnvByName.get(id)!;
+  }
+  for (const id of [plan.spec.rows.lookupId, plan.spec.columns?.lookupId]) {
+    if (id) conversions[id] = lookupByName.get(id)!;
   }
   return conversions;
 }
@@ -4062,6 +4117,7 @@ async function openPortableTable(file: File): Promise<void> {
   mapNameByGeocode.clear();
   activeMapSource = '';
   cnvByName.clear();
+  lookupByName.clear();
   loadedSources.splice(0, loadedSources.length);
   activeDatasetSources.splice(0, activeDatasetSources.length);
   activeDatasetFiles.splice(0, activeDatasetFiles.length);

@@ -12,6 +12,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 import { parseTabWinBiffExport } from '../dist/packages/formats/src/index.js';
@@ -114,4 +115,58 @@ test('every committed golden records a passing zero-tolerance comparison and its
       assert.match(entry.sha256, /^[0-9A-F]{64}$/, `${id}: ${entry.path} needs a SHA-256`);
     }
   }
+});
+
+const SECOND_BATCH_WITH_TABLES = ['G006', 'G008', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
+const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G010', 'G014', 'G015', 'G018', 'G021'];
+
+test('every second-batch normalized table agrees cell-for-cell with its original BIFF export', async () => {
+  for (const id of SECOND_BATCH_WITH_TABLES) await assertGoldenAgreesWithExport(id);
+});
+
+test('the seven executable second-batch cases record zero-tolerance passes and decisive totals', async () => {
+  for (const id of SECOND_BATCH_VERIFIED) {
+    const { manifest } = await readCase(id);
+    assert.equal(manifest.comparison.status, 'verified-zero-tolerance', `${id}: verification status`);
+    assert.equal(manifest.comparison.tolerance, 0, `${id}: counts stay exact`);
+    assert.equal(manifest.comparison.cellDiffCount, 0, `${id}: no cell differs`);
+    assert.equal(manifest.comparison.pass, true, `${id}: executor comparison passes`);
+  }
+  const g010 = await readCase('G010');
+  assert.equal(g010.manifest.tabwinPresentation.tabwinTotals[0], 4315, 'hierarchy total excludes displayed subtotals');
+  const g014 = await readCase('G014');
+  assert.equal(g014.manifest.comparison.seen, 49338, 'all procedure rows are read');
+  assert.equal(g014.manifest.tabwinPresentation.tabwinTotals[0], 4315, 'DEF G weights them to AIH frequency');
+  const g021 = await readCase('G021');
+  assert.equal(g021.manifest.comparison.seen, 8631, 'both months are combined');
+});
+
+test('G012 and G017 preserve new oracle evidence without pretending unsupported semantics pass', async () => {
+  for (const id of ['G012', 'G017']) {
+    const { manifest } = await readCase(id);
+    assert.equal(manifest.comparison.status, 'captured-not-yet-executable');
+    assert.equal(manifest.comparison.pass, null);
+    assert.ok(manifest.comparison.blocker);
+  }
+  const g017 = await readCase('G017');
+  assert.deepEqual(g017.golden.columns.map((column) => column.label), ['Freqüência', 'Valor Total', 'Óbitos']);
+  assert.equal(g017.golden.cells.length, 27);
+});
+
+test('second-batch manifests hash the evidence bytes they name, and G009 records the protocol blocker', async () => {
+  for (const id of SECOND_BATCH_WITH_TABLES) {
+    const base = new URL(`../fixtures/golden/${id}/`, import.meta.url);
+    const { manifest } = await readCase(id);
+    for (const entry of manifest.committedEvidence) {
+      const bytes = await readFile(new URL(entry.path, base));
+      assert.equal(bytes.byteLength, entry.bytes, `${id}: ${entry.path} byte count`);
+      assert.equal(createHash('sha256').update(bytes).digest('hex').toUpperCase(), entry.sha256, `${id}: ${entry.path} hash`);
+    }
+  }
+  const g009Base = new URL('../fixtures/golden/G009/', import.meta.url);
+  const g009 = JSON.parse(await readFile(new URL('manifest.json', g009Base), 'utf8'));
+  const screenshot = await readFile(new URL(g009.committedEvidence[0].path, g009Base));
+  assert.equal(g009.comparison.status, 'capture-blocked');
+  assert.match(g009.comparison.blocker, /MA\\MA\\MA\*\.DBC/);
+  assert.equal(createHash('sha256').update(screenshot).digest('hex').toUpperCase(), g009.committedEvidence[0].sha256);
 });

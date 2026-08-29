@@ -1,0 +1,69 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G010",
+  "capturedAt": "2026-08-29",
+  "semantic": "hierarchical CNV subtotals without double-counting the final total",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "RD2008.DEF",
+      "bytes": 33581,
+      "sha256": "15376FB2E56917B4122FA475B15F1E270E9DAA4238F518D75E6BB6044372C652"
+    },
+    {
+      "name": "BR_REGIAOUF.CNV",
+      "bytes": 2186,
+      "sha256": "D1C9C9B3FB9E715F60BE00CEEC7C0DBF1F98208A57C68CC483EE4CE5E9036EDE"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 928,
+      "sha256": "53402D0D296AF2C7757AEE781976F920F1C8A405A69DAC6F97CE42ED19C551C8"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 148,
+      "sha256": "AA37E4724A640219DD500744481502E75384AB9F3A4CAAB70ED8D081A78AD308"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 686,
+      "sha256": "625C09030768F5691E8443FDCA30F5F5FD9888EBD7DA760A415F78C8FEFB2465"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 1498,
+      "sha256": "2D5FE200629AE25FAD42CE08FB91BC618B14992BDAE00EE74C2FFDC8ACA506DC"
+    }
+  ],
+  "tabwinPresentation": {
+    "title": "Movimento de AIH - Arquivos Reduzidos",
+    "subtitle": "Freqüência segundo Região/UF de Residência",
+    "rowDimensionLabel": "Região/UF de Residência",
+    "tabwinTotals": [
+      4315
+    ]
+  },
+  "comparison": {
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 4315,
+    "accepted": 4315,
+    "rowLabelsMatch": true,
+    "columnLabelsMatch": true,
+    "shapeMatch": true,
+    "cellDiffCount": 0,
+    "pass": true
+  }
+}

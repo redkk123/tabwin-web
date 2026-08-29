@@ -1,0 +1,240 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G017",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 E4BAA91ACADF5F07A634B8D729A0ED378DEDCA531AF6864CAF75B74FD785CE2B. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "2000024 UNIDADE MISTA DE SAUDE DO MUNICIPIO DE RODRIGUES ALVES"
+    },
+    {
+      "label": "2000083 HOSPITAL DR ABEL PINHEIRO MACIEL FILHO"
+    },
+    {
+      "label": "2000121 HOSPITAL DR SANSAO GOMES"
+    },
+    {
+      "label": "2000172 SESACRE HOSPITAL DE DERMATOLOGIA SANITARIA"
+    },
+    {
+      "label": "2000180 SANTA CASA DE MISERICORDIA DE CRUZEIRO DO SUL"
+    },
+    {
+      "label": "2000296 HOSPITAL DA MULHER E DA CRIANCA DO JURUA"
+    },
+    {
+      "label": "2000385 HOSPITAL INFANTIL IOLANDA COSTA E SILVA"
+    },
+    {
+      "label": "2000393 HOSPITAL EPAMINONDAS JACOME"
+    },
+    {
+      "label": "2000636 HOSPITAL GERAL DE FEIJO"
+    },
+    {
+      "label": "2000725 HOSPITAL DR ARY RODRIGUES"
+    },
+    {
+      "label": "2000733 MATERNIDADE E CLINICAS DE MULHERES BARBARA HELIODORA"
+    },
+    {
+      "label": "2000822 UNIDADE MISTA ANA NERY"
+    },
+    {
+      "label": "2000857 HOSPITAL DE SAUDE MENTAL DO ACRE"
+    },
+    {
+      "label": "2000865 HOSPITAL JOAO CANCIO FERNANDES"
+    },
+    {
+      "label": "2000970 SESACRE UNIDADE MISTA DE MANOEL URBANO"
+    },
+    {
+      "label": "2000997 HOSPITAL DR MANOEL MARINHO MONTE"
+    },
+    {
+      "label": "2001020 UNIDADE MISTA DE SAUDE ANTONIO BALBINO RODRIGUES"
+    },
+    {
+      "label": "2001500 HOSPITAL RAIMUNDO CHAAR"
+    },
+    {
+      "label": "2001578 HOSPITAL GERAL DE CLINICAS DE RIO BRANCO"
+    },
+    {
+      "label": "2001586 FUNDHACRE"
+    },
+    {
+      "label": "2001594 UNIDADE MISTA DE MARECHAL THAUMATURGO"
+    },
+    {
+      "label": "2002078 HOSPITAL SANTA JULIANA"
+    },
+    {
+      "label": "5336171 HOSPITAL REGIONAL DO JURUA IRMA NAIR TERESINHA REICHERT"
+    },
+    {
+      "label": "5353947 UNIDADE MISTA DE JORDAO"
+    },
+    {
+      "label": "5661714 UNIDADE MISTA DE PORTO WALTER"
+    },
+    {
+      "label": "5701929 UNIDADE MISTA MARIA DE JESUS ANDER MAZICA"
+    },
+    {
+      "label": "5858208 UNIDADE MISTA DE SANTA ROSA"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    },
+    {
+      "label": "Valor Total"
+    },
+    {
+      "label": "Óbitos"
+    }
+  ],
+  "cells": [
+    [
+      45,
+      9537.730000000003,
+      0
+    ],
+    [
+      51,
+      15409.26,
+      0
+    ],
+    [
+      202,
+      82809.15999999997,
+      1
+    ],
+    [
+      19,
+      5003.35,
+      0
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      223,
+      117441.89000000017,
+      0
+    ],
+    [
+      95,
+      97935.23,
+      4
+    ],
+    [
+      42,
+      12527.020000000002,
+      3
+    ],
+    [
+      80,
+      26129.440000000002,
+      0
+    ],
+    [
+      35,
+      12854.47,
+      1
+    ],
+    [
+      399,
+      290265.3200000001,
+      1
+    ],
+    [
+      7,
+      2094.89,
+      0
+    ],
+    [
+      57,
+      43985.360000000015,
+      0
+    ],
+    [
+      124,
+      49537.46000000005,
+      3
+    ],
+    [
+      29,
+      10468.709999999997,
+      0
+    ],
+    [
+      42,
+      10134.460000000001,
+      0
+    ],
+    [
+      46,
+      15905.849999999997,
+      0
+    ],
+    [
+      217,
+      103923.70999999995,
+      6
+    ],
+    [
+      829,
+      939237.55,
+      37
+    ],
+    [
+      509,
+      968713.1800000002,
+      27
+    ],
+    [
+      23,
+      5214.7699999999995,
+      1
+    ],
+    [
+      524,
+      1156723.1400000048,
+      10
+    ],
+    [
+      648,
+      311375.7799999999,
+      32
+    ],
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      24,
+      6333.919999999999,
+      0
+    ],
+    [
+      22,
+      7773.07,
+      0
+    ],
+    [
+      23,
+      6738.04,
+      0
+    ]
+  ]
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G006",
+  "capturedAt": "2026-08-29",
+  "semantic": "unclassified CNV values as an explicit row",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "RD2008.DEF",
+      "bytes": 33581,
+      "sha256": "15376FB2E56917B4122FA475B15F1E270E9DAA4238F518D75E6BB6044372C652"
+    },
+    {
+      "name": "BR_PNDR.CNV",
+      "bytes": 79173,
+      "sha256": "8390C187AFD4DB9314250D7DE8385F1876C5D33B372D1BFC4154B80D55E5DCA5"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 441,
+      "sha256": "082896AFC6CB04E4FA70FA7CA1A35A22324BDF68789C5B838874107217F4F4D5"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 172,
+      "sha256": "6E60DBF2725E5701D4EAAF3087212A764498062770048F08227101614937D3C7"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 634,
+      "sha256": "50F7575CF2225CFB8676533FAB8FA4FC950B019F16190E1E022E0771805878C7"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 733,
+      "sha256": "C68765E0A7147FC344CFF9328313290F7210696BD5E270CD5DDE6244C36A8311"
+    }
+  ],
+  "tabwinPresentation": {
+    "title": "Movimento de AIH - Arquivos Reduzidos",
+    "subtitle": "Freqüência segundo Mesorregião PNDR de Resid.",
+    "rowDimensionLabel": "Mesorregião PNDR de Resid.",
+    "tabwinTotals": [
+      4315
+    ]
+  },
+  "comparison": {
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 4315,
+    "accepted": 4315,
+    "rowLabelsMatch": true,
+    "columnLabelsMatch": true,
+    "shapeMatch": true,
+    "cellDiffCount": 0,
+    "pass": true
+  }
+}

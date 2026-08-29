@@ -299,6 +299,7 @@ import {
   dimensionFromDefOption,
   filterFromDefOption,
   frequencyMeasureFromDef,
+  lookupDefinitionFromDefOption,
   sumMeasureFromDefIncrement,
 } from '../dist/packages/core/src/index.js';
 import { parseDef } from '../dist/packages/formats/src/index.js';
@@ -333,6 +334,27 @@ test('DEF bridge compiles conversion option, filter, frequency and increment mea
   assert.deepEqual(sumMeasureFromDefIncrement(def.increments[0]), {
     kind: 'sum', field: 'VALOR_TOT', label: 'Valor Total',
   });
+});
+
+test('DEF DBF lookup materializes ordered labels and zero rows without guessing', () => {
+  const def = parseDef('; lookup\nA*.DBF\nLHospital AC (CNES),CNES,NOMEFANT,DBF\\TCNESAC.DBF');
+  const option = def.options[0];
+  assert.deepEqual(dimensionFromDefOption(option), {
+    field: 'CNES', lookupId: 'DBF\\TCNESAC.DBF',
+  });
+  const lookup = lookupDefinitionFromDefOption(option, [
+    { CNES: '2001', NOMEFANT: 'Hospital Um' },
+    { CNES: '2002', NOMEFANT: 'Hospital Dois' },
+  ]);
+  const plan = compileQueryPlan({
+    compatibilityProfile: 'tabwin-4.15', rows: dimensionFromDefOption(option),
+    measure: { kind: 'count' }, filters: [], suppressZeroRows: false,
+  });
+  const result = executeInMemory([{ CNES: '2002' }, { CNES: '2002' }], plan, {
+    'DBF\\TCNESAC.DBF': lookup,
+  });
+  assert.deepEqual(result.rows.map((row) => row.label), ['2001 Hospital Um', '2002 Hospital Dois']);
+  assert.deepEqual(result.cells, [[0], [2]]);
 });
 
 test('golden comparator requires exact labels, shape and cells by default', () => {

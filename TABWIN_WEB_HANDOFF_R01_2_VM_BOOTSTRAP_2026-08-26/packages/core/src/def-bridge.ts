@@ -1,10 +1,11 @@
 import type {
   DefConversionOption,
+  DefDbfLookupOption,
   DefDefinition,
   DefIncrement,
   DefOption,
 } from '../../formats/src/def-model.js';
-import type { DimensionSpec, FilterSpec, MeasureSpec } from './model.js';
+import type { DataRecord, DimensionLookupDefinition, DimensionSpec, FilterSpec, MeasureSpec } from './model.js';
 
 export class UnsupportedDefFeatureError extends Error {
   constructor(message: string) {
@@ -32,12 +33,41 @@ function requireConversion(option: DefOption): DefConversionOption {
 }
 
 export function dimensionFromDefOption(option: DefOption): DimensionSpec {
+  if (option.kind === 'dbf-lookup') {
+    return { field: option.field, lookupId: option.lookupFile };
+  }
   const conversion = requireConversion(option);
   return {
     field: conversion.field,
     conversionId: conversionIdForDefOption(conversion),
     startPosition: conversion.startPosition,
   };
+}
+
+/** Builds the exact ordered code -> display-label axis a DEF DBF lookup declares. */
+export function lookupDefinitionFromDefOption(
+  option: DefDbfLookupOption,
+  records: readonly DataRecord[],
+): DimensionLookupDefinition {
+  const entries: Array<{ key: string; label: string }> = [];
+  const labelsByKey = new Map<string, string>();
+  for (const record of records) {
+    const key = String(record[option.field] ?? '').trim();
+    const name = String(record[option.lookupLabelField] ?? '').trim();
+    if (!key) continue;
+    const label = name ? `${key} ${name}` : key;
+    const previous = labelsByKey.get(key);
+    if (previous !== undefined) {
+      if (previous !== label) throw new Error(`${option.lookupFile}: conflicting labels for lookup key ${key}`);
+      continue;
+    }
+    labelsByKey.set(key, label);
+    entries.push({ key, label });
+  }
+  if (!entries.length) {
+    throw new Error(`${option.lookupFile}: no usable ${option.field} -> ${option.lookupLabelField} lookup rows`);
+  }
+  return { kind: 'dbf-lookup', entries };
 }
 
 export function filterFromDefOption(

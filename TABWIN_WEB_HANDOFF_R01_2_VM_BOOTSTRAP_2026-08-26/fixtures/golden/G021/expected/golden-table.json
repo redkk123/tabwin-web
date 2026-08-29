@@ -1,0 +1,30 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G021",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 8310DC9BF7B6A460B36882F6E2F785804AF69D23F6F94BFC20572EF3E55E1729. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "Média complexidade"
+    },
+    {
+      "label": "Alta complexidade"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      8297
+    ],
+    [
+      334
+    ]
+  ]
+}

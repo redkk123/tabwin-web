@@ -1,0 +1,66 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G017",
+  "capturedAt": "2026-08-29",
+  "semantic": "multiple simultaneous increments",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "RD2008.DEF",
+      "bytes": 33581,
+      "sha256": "15376FB2E56917B4122FA475B15F1E270E9DAA4238F518D75E6BB6044372C652"
+    },
+    {
+      "name": "TCNESAC.DBF",
+      "bytes": 4364,
+      "sha256": "F6B94CDE41B1184DFA1A32A34FCF027C98B26CEA7BC496634EA455061ABEB78F"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 3224,
+      "sha256": "E4BAA91ACADF5F07A634B8D729A0ED378DEDCA531AF6864CAF75B74FD785CE2B"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 252,
+      "sha256": "7481811AFD577A3465466C03F7B8EF52253635421B7B50D2B0DB09C7BB50E984"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 747,
+      "sha256": "97DA8C04F98F5DA101EB04282306239ED8B7AC0B4AEFDFA7CD8D560010484D9E"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 3899,
+      "sha256": "6CBF8C1FC349048A9C76C32088D5936E511BC97916FC1C0BFA567A73E88DA3C8"
+    }
+  ],
+  "tabwinPresentation": {
+    "title": "Movimento de AIH - Arquivos Reduzidos",
+    "subtitle": "Freqüência Valor Total Óbitos segundo Hospital AC (CNES)",
+    "rowDimensionLabel": "Hospital AC (CNES)",
+    "tabwinTotals": [
+      4315,
+      4308072.760000005,
+      126
+    ]
+  },
+  "comparison": {
+    "status": "captured-not-yet-executable",
+    "tolerance": null,
+    "pass": null,
+    "blocker": "multiple simultaneous measures"
+  }
+}

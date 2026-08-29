@@ -1,0 +1,7 @@
+Reference engine: TabWin 4.15
+Row: Complexidade do Procedimento
+Measure: Frequência
+Selection 1: Caráter atendimento = 01 Eletivo
+Selection 2: Complexidade = Alta complexidade
+Suppress zero rows: disabled
+Captured: 2026-08-29

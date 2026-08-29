@@ -1,0 +1,138 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G014",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 6ACA205B5C67958147E81BF6FCACF9AE72F3A07EFDFA64E424F941D95CDB2958. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "I.   Algumas doenças infecciosas e parasitárias"
+    },
+    {
+      "label": "II.  Neoplasias (tumores)"
+    },
+    {
+      "label": "III. Doenças sangue órgãos hemat e transt imunitár"
+    },
+    {
+      "label": "IV.  Doenças endócrinas nutricionais e metabólicas"
+    },
+    {
+      "label": "V.   Transtornos mentais e comportamentais"
+    },
+    {
+      "label": "VI.  Doenças do sistema nervoso"
+    },
+    {
+      "label": "VII. Doenças do olho e anexos"
+    },
+    {
+      "label": "VIII.Doenças do ouvido e da apófise mastóide"
+    },
+    {
+      "label": "IX.  Doenças do aparelho circulatório"
+    },
+    {
+      "label": "X.   Doenças do aparelho respiratório"
+    },
+    {
+      "label": "XI.  Doenças do aparelho digestivo"
+    },
+    {
+      "label": "XII. Doenças da pele e do tecido subcutâneo"
+    },
+    {
+      "label": "XIII.Doenças sist osteomuscular e tec conjuntivo"
+    },
+    {
+      "label": "XIV. Doenças do aparelho geniturinário"
+    },
+    {
+      "label": "XV.  Gravidez parto e puerpério"
+    },
+    {
+      "label": "XVI. Algumas afec originadas no período perinatal"
+    },
+    {
+      "label": "XVII.Malf cong deformid e anomalias cromossômicas"
+    },
+    {
+      "label": "XVIII.Sint sinais e achad anorm ex clín e laborat"
+    },
+    {
+      "label": "XIX. Lesões enven e alg out conseq causas externas"
+    },
+    {
+      "label": "XXI. Contatos com serviços de saúde"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      274
+    ],
+    [
+      180
+    ],
+    [
+      65
+    ],
+    [
+      85
+    ],
+    [
+      127
+    ],
+    [
+      79
+    ],
+    [
+      9
+    ],
+    [
+      7
+    ],
+    [
+      307
+    ],
+    [
+      291
+    ],
+    [
+      559
+    ],
+    [
+      117
+    ],
+    [
+      69
+    ],
+    [
+      323
+    ],
+    [
+      1019
+    ],
+    [
+      75
+    ],
+    [
+      42
+    ],
+    [
+      138
+    ],
+    [
+      463
+    ],
+    [
+      86
+    ]
+  ]
+}

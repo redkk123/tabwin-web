@@ -1,0 +1,69 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G014",
+  "capturedAt": "2026-08-29",
+  "semantic": "DEF G grouped-frequency weight",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "SPAC2401.dbc",
+      "bytes": 914039,
+      "sha256": "DA880DC9A57E6201CE785190747416973CE67786D7B421B6EFEC09C07FE49FB9"
+    },
+    {
+      "name": "SP2008.DEF",
+      "bytes": 19376,
+      "sha256": "7744873B2324ED37CC281AD87AB51EA950B3C624733683ED36C4A5F8360F74F8"
+    },
+    {
+      "name": "CID10CAP.CNV",
+      "bytes": 1680,
+      "sha256": "A8D276B6EFE96E84A805A789C384CBA7E6549E10DE56C80AB31080E26785261E"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 1670,
+      "sha256": "6ACA205B5C67958147E81BF6FCACF9AE72F3A07EFDFA64E424F941D95CDB2958"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 188,
+      "sha256": "FE3F0E4FB1823A2A5B9DAB0B20857173D1BD041BBC833AA25856CE2DF6F2BB72"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 628,
+      "sha256": "8A5E4BB00C84843557D0EF6FE535492C418560C79102E8E7822EC1DAC0A15BC2"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 2343,
+      "sha256": "DFD705A07730DC4A61417A58537CC55666326A71C4DF0DD57293ACABEB236AB2"
+    }
+  ],
+  "tabwinPresentation": {
+    "title": " Movimento de AIH - Procedimentos Serviços Profissionais",
+    "subtitle": "Freqüência segundo Diagnóstico CID10 (capítulo)",
+    "rowDimensionLabel": "Diagnóstico CID10 (capítulo)",
+    "tabwinTotals": [
+      4315
+    ]
+  },
+  "comparison": {
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 49338,
+    "accepted": 49338,
+    "rowLabelsMatch": true,
+    "columnLabelsMatch": true,
+    "shapeMatch": true,
+    "cellDiffCount": 0,
+    "pass": true
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "schema": "tabwin-web.golden-manifest",
+  "version": 1,
+  "id": "G008",
+  "capturedAt": "2026-08-29",
+  "semantic": "literal CNV first-match classification",
+  "referenceEngine": {
+    "name": "TabWin 4.15",
+    "executable": "TabWin415.exe"
+  },
+  "externalInputs": [
+    {
+      "name": "RDAC2401.dbc",
+      "bytes": 313213,
+      "sha256": "41B7AD58932CD56D6C60455CBF67E7995F5FD2E64375D0CC440631A191638429"
+    },
+    {
+      "name": "RD2008.DEF",
+      "bytes": 33581,
+      "sha256": "15376FB2E56917B4122FA475B15F1E270E9DAA4238F518D75E6BB6044372C652"
+    },
+    {
+      "name": "BR_CAPITAL.CNV",
+      "bytes": 1927,
+      "sha256": "C7C0A847FB7D4E35308D7CFD971681C4B570FBBB9C3D3161E2E30B7AE0095FF4"
+    }
+  ],
+  "committedEvidence": [
+    {
+      "path": "reference-tabwin415/result.xls",
+      "bytes": 625,
+      "sha256": "A35BE362AF4CE698944A3644D29DA306C16F288B94DA0B1CDCAF11521E077D95"
+    },
+    {
+      "path": "reference-tabwin415/recipe.txt",
+      "bytes": 168,
+      "sha256": "63E3394DBCB79F311C20DD94B64A99648CF4E3D54B492FB74BDF957C8F6D27EC"
+    },
+    {
+      "path": "reference-tabwin415/capture-notes.md",
+      "bytes": 620,
+      "sha256": "67760AAC37E619903C27A5956EF95BB5817F91285285080CA3FC90D5C31064BB"
+    },
+    {
+      "path": "expected/golden-table.json",
+      "bytes": 1036,
+      "sha256": "663C1FE75096A207FA7F73DF29BC3244B8D91C879145D6EAADBBDBE5671CCF08"
+    }
+  ],
+  "tabwinPresentation": {
+    "title": "Movimento de AIH - Arquivos Reduzidos",
+    "subtitle": "Freqüência segundo Capital de Residência",
+    "rowDimensionLabel": "Capital de Residência",
+    "tabwinTotals": [
+      1835
+    ]
+  },
+  "comparison": {
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 4315,
+    "accepted": 1835,
+    "rowLabelsMatch": true,
+    "columnLabelsMatch": true,
+    "shapeMatch": true,
+    "cellDiffCount": 0,
+    "pass": true
+  }
+}

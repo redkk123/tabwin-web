@@ -1,0 +1,42 @@
+{
+  "schema": "tabwin-web.golden-table",
+  "version": 1,
+  "id": "G006",
+  "source": {
+    "referenceEngine": "TabWin 4.15",
+    "notes": "Normalized from the unedited BIFF export; SHA-256 082896AFC6CB04E4FA70FA7CA1A35A22324BDF68789C5B838874107217F4F4D5. TabWin totals are evidence in manifest.json, not comparable cells."
+  },
+  "rows": [
+    {
+      "label": "002 Alto Solimões"
+    },
+    {
+      "label": "008 Vales do Jequitinhonha e do Mucuri"
+    },
+    {
+      "label": "010 Vale do Rio Acre"
+    },
+    {
+      "label": "Não classificados"
+    }
+  ],
+  "columns": [
+    {
+      "label": "Freqüência"
+    }
+  ],
+  "cells": [
+    [
+      13
+    ],
+    [
+      1
+    ],
+    [
+      2598
+    ],
+    [
+      1703
+    ]
+  ]
+}

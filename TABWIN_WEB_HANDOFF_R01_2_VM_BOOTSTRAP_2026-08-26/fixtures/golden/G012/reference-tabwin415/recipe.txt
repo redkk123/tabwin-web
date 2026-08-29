@@ -1,0 +1,6 @@
+Reference engine: TabWin 4.15
+Row: Natureza Jurídica
+Measure: Frequência
+Suppress zero rows: enabled
+Selections: none
+Captured: 2026-08-29
