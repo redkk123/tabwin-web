@@ -184,7 +184,14 @@ mostrar o que mudou, que é o que sustenta "atualizar esta análise".
 Aqui o custo deixa de ser código e passa a ser **evidência**. Nada nesta faixa
 deve ser feito sem captura pareada no TabWin 4.15.
 
-### 4.1 Bateria de goldens G002–G006
+### 4.1 Bateria de goldens G002–G023+
+
+**Em captura desde 2026-08-29.** Protocolo de G002–G006 publicado em
+`docs/testing/G002_G006_CAPTURE_PROTOCOL.md`, pastas de destino criadas.
+Fila reconciliada de G007 em diante — três planos conflitantes do projeto
+(estratégia antiga, plano remanescente, recordação do Codex) unificados em
+`docs/testing/GOLDEN_CORPUS_QUEUE.md`, com correção de uma afirmação do
+Codex sem lastro na reverse-spec.
 
 **Esforço:** semanas de captura, pouco código · **Risco:** é o que reduz risco
 
