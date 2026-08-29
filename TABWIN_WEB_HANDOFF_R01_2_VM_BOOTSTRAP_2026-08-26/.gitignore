@@ -12,3 +12,4 @@ coverage/
 # Never commit supplied TabWin binaries or private/raw fixture data by default.
 legacy-binaries/
 private-fixtures/
+dist-web-old/

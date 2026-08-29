@@ -76,6 +76,7 @@ import {
   type MapClassification,
   type MapPalette,
 } from '../../../packages/visualization/src/map-scale.ts';
+import { computeTableWindow } from '../../../packages/visualization/src/table-window.ts';
 import {
   descriptiveStatistics,
   histogram,
@@ -1666,6 +1667,7 @@ function renderResult(): void {
   tableEditing.hidden = false;
   includeTableButton.disabled = false;
   updateTablePresentationControls();
+  tableWrap.scrollTop = 0;
   renderTable(currentResult);
   updateTableOperationControls();
   renderChart(currentResult);
@@ -1900,6 +1902,117 @@ function displayRowLabel(row: TabulationResult['rows'][number]): string {
   return `${name} (${key})`;
 }
 
+/** Rows and their source result behind the virtualized table body. */
+interface VirtualTableState {
+  result: TabulationResult;
+  indexes: number[];
+}
+let virtualTable: VirtualTableState | null = null;
+/** Refined once real rows exist; close to the CSS baseline (10px padding + border) until then. */
+let measuredTableRowHeight = 34;
+let tableScrollBound = false;
+const TABLE_ROW_OVERSCAN = 8;
+
+function tableColumnCount(result: TabulationResult): number {
+  return result.columns.length + (tableKeyVisible.checked ? 1 : 0);
+}
+
+/** A borderless spacer row: its only job is to hold the scrollbar to the table's true full height. */
+function tableSpacerRow(colSpan: number, height: number): HTMLTableRowElement {
+  const tr = document.createElement('tr');
+  tr.className = 'table-window-spacer';
+  tr.setAttribute('aria-hidden', 'true');
+  const td = document.createElement('td');
+  td.colSpan = colSpan;
+  td.style.height = `${height}px`;
+  td.style.padding = '0';
+  td.style.border = '0';
+  tr.append(td);
+  return tr;
+}
+
+function buildTableRow(result: TabulationResult, rowIndex: number): HTMLTableRowElement {
+  const row = result.rows[rowIndex]!;
+  const tr = document.createElement('tr');
+  if (tableKeyVisible.checked) {
+    const label = document.createElement('th');
+    label.scope = 'row';
+    label.textContent = displayRowLabel(row);
+    tr.append(label);
+  }
+  for (const value of result.cells[rowIndex] ?? []) {
+    const td = document.createElement('td');
+    td.textContent = tableNumber(value);
+    tr.append(td);
+  }
+  return tr;
+}
+
+/**
+ * Rebuilds only `<tbody>`, from the row window the current scroll position
+ * calls for. Cheap enough to run on every `scroll` event: it never rebuilds
+ * `<thead>`/`<tfoot>`, and it touches only the rows currently on screen.
+ *
+ * `full: true` renders every row with no spacers, for printing — the print
+ * stylesheet already turns off `.table-wrap`'s `max-height`/`overflow`, so the
+ * physical page must actually contain every row, not just the current window.
+ */
+function renderTableBody(options: { full: boolean }): void {
+  if (!virtualTable) return;
+  const { result, indexes } = virtualTable;
+  const body = resultTable.tBodies[0] ?? resultTable.createTBody();
+  const colSpan = tableColumnCount(result);
+
+  if (!indexes.length) {
+    const tr = document.createElement('tr');
+    const td = document.createElement('td');
+    td.colSpan = colSpan;
+    td.textContent = 'Nenhuma categoria corresponde à busca.';
+    tr.append(td);
+    // A single swap: clearing first would leave the scrollable body briefly
+    // empty, and this pane's layout treats that as content shrinking to zero,
+    // clamping the user's scroll position to the top before the real content
+    // is back. `replaceChildren(...)` removes and inserts as one operation.
+    body.replaceChildren(tr);
+    return;
+  }
+
+  const range = options.full
+    ? { startIndex: 0, endIndex: indexes.length, topSpacerHeight: 0, bottomSpacerHeight: 0 }
+    : computeTableWindow({
+      rowCount: indexes.length,
+      rowHeight: measuredTableRowHeight,
+      scrollTop: tableWrap.scrollTop,
+      viewportHeight: tableWrap.clientHeight || 470,
+      overscan: TABLE_ROW_OVERSCAN,
+    });
+
+  const nodes: HTMLTableRowElement[] = [];
+  if (range.topSpacerHeight > 0) nodes.push(tableSpacerRow(colSpan, range.topSpacerHeight));
+  for (const rowIndex of indexes.slice(range.startIndex, range.endIndex)) {
+    nodes.push(buildTableRow(result, rowIndex));
+  }
+  if (range.bottomSpacerHeight > 0) nodes.push(tableSpacerRow(colSpan, range.bottomSpacerHeight));
+  // Same reasoning as above: one atomic swap, never an intermediate empty body.
+  body.replaceChildren(...nodes);
+
+  // A short lag between the true row height and the estimate self-corrects on
+  // the very next scroll or render, once a real row exists to measure.
+  const sample = body.querySelector<HTMLTableRowElement>('tr:not(.table-window-spacer)');
+  const sampledHeight = sample?.getBoundingClientRect().height ?? 0;
+  if (sampledHeight > 0) measuredTableRowHeight = sampledHeight;
+}
+
+function bindTableScrollOnce(): void {
+  if (tableScrollBound) return;
+  tableScrollBound = true;
+  tableWrap.addEventListener('scroll', () => renderTableBody({ full: false }));
+  // The full DOM only needs to exist while the browser paginates for print;
+  // afterprint always restores the windowed view, print job or not.
+  window.addEventListener('beforeprint', () => renderTableBody({ full: true }));
+  window.addEventListener('afterprint', () => renderTableBody({ full: false }));
+}
+
 function renderTable(result: TabulationResult): void {
   const caption = resultTable.caption ?? resultTable.createCaption();
   caption.replaceChildren();
@@ -1912,10 +2025,8 @@ function renderTable(result: TabulationResult): void {
     caption.append(subtitle);
   }
   const head = resultTable.tHead ?? resultTable.createTHead();
-  const body = resultTable.tBodies[0] ?? resultTable.createTBody();
   const foot = resultTable.tFoot ?? resultTable.createTFoot();
   head.replaceChildren();
-  body.replaceChildren();
   foot.replaceChildren();
 
   const headerRow = document.createElement('tr');
@@ -1933,39 +2044,14 @@ function renderTable(result: TabulationResult): void {
   }
   head.append(headerRow);
 
-  const indexes = currentTableRowIndexes();
-  const limit = 500;
-  for (const rowIndex of indexes.slice(0, limit)) {
-    const row = result.rows[rowIndex]!;
-    const tr = document.createElement('tr');
-    if (tableKeyVisible.checked) {
-      const label = document.createElement('th');
-      label.scope = 'row';
-      label.textContent = displayRowLabel(row);
-      tr.append(label);
-    }
-    for (const value of result.cells[rowIndex] ?? []) {
-      const td = document.createElement('td');
-      td.textContent = tableNumber(value);
-      tr.append(td);
-    }
-    body.append(tr);
-  }
-  if (!indexes.length) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = result.columns.length + (tableKeyVisible.checked ? 1 : 0);
-    td.textContent = 'Nenhuma categoria corresponde à busca.';
-    tr.append(td);
-    body.append(tr);
-  } else if (indexes.length > limit) {
-    const tr = document.createElement('tr');
-    const td = document.createElement('td');
-    td.colSpan = result.columns.length + (tableKeyVisible.checked ? 1 : 0);
-    td.textContent = `Exibindo 500 de ${integerFormat.format(indexes.length)} linhas localizadas. O CSV contém o resultado completo.`;
-    tr.append(td);
-    body.append(tr);
-  }
+  virtualTable = { result, indexes: currentTableRowIndexes() };
+  bindTableScrollOnce();
+  // No unconditional scroll reset here: renderTable also runs on cosmetic
+  // edits (title/subtitle/footer typed on every keystroke), and resetting
+  // scroll on each of those would fight a user reading a long, scrolled list.
+  // renderResult() resets it once, for the one moment a fresh analysis starts.
+  renderTableBody({ full: false });
+
   const totalRow = document.createElement('tr');
   if (tableKeyVisible.checked) {
     const totalLabel = document.createElement('th');
@@ -1985,7 +2071,7 @@ function renderTable(result: TabulationResult): void {
     const footerRow = document.createElement('tr');
     footerRow.className = 'table-custom-footer';
     const footerCell = document.createElement('td');
-    footerCell.colSpan = result.columns.length + (tableKeyVisible.checked ? 1 : 0);
+    footerCell.colSpan = tableColumnCount(result);
     footerCell.textContent = tableFooter.value.trim();
     footerRow.append(footerCell);
     foot.append(footerRow);

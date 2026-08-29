@@ -1,10 +1,10 @@
 {
-  "revision": "R09-2-rare-combination-profile-ui",
+  "revision": "faixa-2-3-virtualized-table",
   "date": "2026-08-28",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 149,
-    "passed": 149,
+    "total": 157,
+    "passed": 157,
     "failed": 0,
     "command": "npm run check"
   },
@@ -168,6 +168,11 @@
     ,"visible-per-rule-quality-outcomes-and-action-toggle"
     ,"worker-backed-rare-combination-profile-ui"
     ,"observed-combination-to-flag-rule-bridge"
+    ,"pure-table-window-helper-for-scroll-based-virtualization"
+    ,"virtualized-result-table-with-no-500-row-cap"
+    ,"atomic-tbody-swap-avoiding-a-scroll-resetting-empty-frame"
+    ,"full-table-render-on-beforeprint-restored-on-afterprint"
+    ,"browser-verified-1927-row-scroll-and-print-on-real-dengue-tabulation"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -231,10 +236,9 @@
     "audit-include-table-and-paste-semantics-without-guessing",
     "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
     "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
+    "add-a-modern-explicitly-non-.lst-tabulation-log-faixa-2-4",
     "add-an-l3-result-cache-so-reanalysis-does-not-repeat-a-full-pass",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
-    "connect-the-chunked-path-to-the-interface-and-attempt-dengbr25",
-    "virtualize-large-result-tables-without-truncating-the-visible-workspace",
     "resolve-research-plan-queries-into-observed-source-manifests",
     "capture-oracle-evidence-before-shipping-any-clinical-cleaning-preset",
     "close-cataloged-tabwin-415-feature-families",

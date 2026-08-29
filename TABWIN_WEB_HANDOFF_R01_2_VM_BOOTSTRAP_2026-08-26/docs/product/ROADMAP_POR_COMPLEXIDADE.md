@@ -99,6 +99,14 @@ caminho explícito de "combinação rara" para "criar regra a partir dela".
 
 ### 2.3 Tabela virtualizada
 
+**Concluído em 2026-08-29.** Janela de linhas com overscan sobre
+`currentTableRowIndexes()`, helper puro testável (`computeTableWindow`),
+totais e cabeçalho sticky preservados, impressão completa via
+`beforeprint`/`afterprint`. Verificado no navegador com o `DENGBR25.dbc` real:
+17 linhas reais no DOM para 1.927 municípios, rolagem completa do início ao
+fim, impressão renderizando as 1.927 sem corte. Evidência em
+`docs/handoffs/R09_3_VIRTUALIZED_TABLE_REPORT.md`.
+
 **Esforço:** um dia · **Risco:** nenhum
 
 Hoje a tabela corta em 500 linhas com aviso. No Dengue isso significa ver 500
