@@ -133,6 +133,16 @@ function axisFromDimension(
 ): ResultAxisItem[] {
   if (dimension.conversionId) {
     const definition = getConversion(conversions, dimension.conversionId);
+    // A category referenced as a subtotal target is a presentation subtotal,
+    // not another independent contribution to TabWin's final Total row.
+    // G010 proves this against BR_REGIAOUF.CNV: every record is shown once in
+    // its UF detail and once in its Region subtotal, while TabWin's Total stays
+    // 4,315 rather than double-counting both levels as 8,630.
+    const subtotalTargetSequences = new Set(
+      definition.categories
+        .map((category) => category.subtotalTarget)
+        .filter((sequence): sequence is number => sequence !== undefined),
+    );
     const items: ResultAxisItem[] = definition.categories.map((category) => ({
       key: String(category.sequence),
       label: category.label || String(category.sequence),
@@ -140,7 +150,9 @@ function axisFromDimension(
       ...(category.subtotalTarget !== undefined
         ? { subtotalTargetKey: String(category.subtotalTarget) }
         : {}),
-      ...(category.excludeFromTotal ? { excludeFromTotal: true } : {}),
+      ...(category.excludeFromTotal || subtotalTargetSequences.has(category.sequence)
+        ? { excludeFromTotal: true }
+        : {}),
     }));
     if (dimension.unclassifiedPolicy === 'discriminate') {
       items.push({ key: UNCLASSIFIED_KEY, label: UNCLASSIFIED_LABEL, source: 'conversion' });

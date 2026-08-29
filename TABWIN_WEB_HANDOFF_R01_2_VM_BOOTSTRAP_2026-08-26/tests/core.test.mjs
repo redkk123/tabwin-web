@@ -73,6 +73,9 @@ test('row subtotal semantics add detail rows into subtotal rows', () => {
   const plan = compileQueryPlan({ compatibilityProfile: 'tabwin-4.15', rows: { field: 'NAT', conversionId: 'nat' }, measure: { kind: 'count' }, filters: [] });
   const result = executeInMemory([{ NAT: '10' }, { NAT: '10' }, { NAT: '20' }], plan, { nat: provider });
   assert.deepEqual(result.cells, [[3], [2], [1]]);
+  assert.equal(result.rows[0]?.excludeFromTotal, true, 'a subtotal row is displayed but excluded from the final total');
+  assert.equal(result.rows[1]?.excludeFromTotal, undefined);
+  assert.equal(result.rows[2]?.excludeFromTotal, undefined);
 });
 
 test('supports row x column sum tabulation', () => {

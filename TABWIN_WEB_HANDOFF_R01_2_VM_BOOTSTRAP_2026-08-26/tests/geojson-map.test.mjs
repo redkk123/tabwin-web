@@ -39,7 +39,7 @@ test('converts a Polygon FeatureCollection into a TabwinMapDefinition the render
   assert.deepEqual(map.warnings, []);
 });
 
-test('a MultiPolygon becomes one object per member, all sharing the feature geocode and name', () => {
+test('a MultiPolygon stays one logical area with all polygon members as parts', () => {
   const source = collection(
     feature(
       { type: 'MultiPolygon', coordinates: [RO_SQUARE, [[[10, 10], [11, 10], [11, 11], [10, 10]]]] },
@@ -47,8 +47,10 @@ test('a MultiPolygon becomes one object per member, all sharing the feature geoc
     ),
   );
   const map = convertGeoJsonToTabwinMap(source, { geocodeProperty: 'CD_MUN', nameProperty: 'NM_MUN' });
-  assert.equal(map.objects.length, 2);
-  assert.ok(map.objects.every((object) => object.geocode === '11' && object.name === 'Rondônia'));
+  assert.equal(map.objects.length, 1);
+  assert.equal(map.objects[0]?.geocode, '11');
+  assert.equal(map.objects[0]?.name, 'Rondônia');
+  assert.equal(map.objects[0]?.parts.length, 2);
 });
 
 test('falls back to the geocode as the label when the name property is empty', () => {
@@ -129,5 +131,18 @@ test('the object-count safety limit is enforced', () => {
   assert.throws(
     () => convertGeoJsonToTabwinMap(many, { geocodeProperty: 'CD_MUN', nameProperty: 'NM_MUN', maxObjects: 1 }),
     (error) => error instanceof GeoJsonMapError && /safety limit 1/.test(error.message),
+  );
+});
+
+test('the point safety limit applies to the whole logical polygon, not separately to each ring', () => {
+  const withTwoRings = collection(feature({
+    type: 'Polygon',
+    coordinates: [RO_SQUARE[0], [[-63.8, -8.8], [-63.6, -8.8], [-63.8, -8.6]]],
+  }, { CD_MUN: '11', NM_MUN: 'Rondônia' }));
+  assert.throws(
+    () => convertGeoJsonToTabwinMap(withTwoRings, {
+      geocodeProperty: 'CD_MUN', nameProperty: 'NM_MUN', maxPointsPerObject: 6,
+    }),
+    (error) => error instanceof GeoJsonMapError && /exceeds safety limit of 6 points/.test(error.message),
   );
 });

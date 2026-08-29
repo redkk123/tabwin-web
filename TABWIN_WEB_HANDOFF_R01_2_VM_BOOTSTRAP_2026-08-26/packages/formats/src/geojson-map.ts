@@ -120,6 +120,9 @@ function polygonObject(
   }
   const parts = rings.map((r, index) => ring(r, maxPointsPerObject, `${context} ring ${index + 1}`));
   const points = parts.flat();
+  if (points.length > maxPointsPerObject) {
+    throw new GeoJsonMapError(`${context}: polygon exceeds safety limit of ${maxPointsPerObject} points`);
+  }
   if (points.length < 3) {
     throw new GeoJsonMapError(`${context}: polygon ring has fewer than three points`);
   }
@@ -144,15 +147,30 @@ function objectsFromGeometry(
   }
   if (type === 'MultiPolygon') {
     if (!Array.isArray(coordinates)) throw new GeoJsonMapError(`${context}: malformed MultiPolygon coordinates`);
-    // One TabwinMapObject per polygon member, sharing the same geocode and
-    // name — mirrors how a genuinely multi-part legacy .MAP object is only
-    // ever one object with several `parts`, never several objects.
-    return coordinates.map((polygon, index) => {
+    // A GeoJSON feature is one logical area even when it has disconnected
+    // islands. Keep one object with several parts, as the shared .MAP model
+    // already supports. Returning one object per member made the UI report
+    // duplicate "areas associated" and made hit-testing choose among several
+    // copies of the same geocode.
+    const members = coordinates.map((polygon, index) => {
       if (!Array.isArray(polygon)) {
         throw new GeoJsonMapError(`${context}: malformed MultiPolygon member ${index + 1}`);
       }
       return polygonObject(polygon, geocode, name, maxPointsPerObject, `${context} polygon ${index + 1}`, warnings);
     });
+    const points = members.flatMap((member) => member.points);
+    if (points.length > maxPointsPerObject) {
+      throw new GeoJsonMapError(`${context}: MultiPolygon exceeds safety limit of ${maxPointsPerObject} points`);
+    }
+    if (!members.length) throw new GeoJsonMapError(`${context}: MultiPolygon has no polygon members`);
+    return [{
+      type: 'polygon',
+      geocode,
+      name,
+      labelPoint: members[0]!.labelPoint,
+      points,
+      parts: members.flatMap((member) => member.parts),
+    }];
   }
   if (type === 'Point') {
     if (!Array.isArray(coordinates)) throw new GeoJsonMapError(`${context}: malformed Point coordinates`);
