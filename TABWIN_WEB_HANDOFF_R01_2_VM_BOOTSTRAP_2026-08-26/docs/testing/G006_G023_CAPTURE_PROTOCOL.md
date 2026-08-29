@@ -35,7 +35,7 @@ de arquivo real — não por falta de esforço.
 | **G020** | tipos de total | 🚫 **fora de escopo por decisão** — ver §5 |
 | G021 | múltiplos meses combinados | **CAPTURAR** — destravado por `RDAC2402.dbc` |
 | **G022** | encoding / acentuação | ✅ **já provado, não capturar** — ver §2 |
-| G023 | `.TAB` salvar/reabrir | **MANDAR ARQUIVO** — ver §6 |
+| G023 | `.TAB` salvar/reabrir | **CAPTURAR** — um clique a mais, ver §6 |
 
 **10 para capturar.** Não precisa ser tudo de uma vez — cada um é
 independente. Se puder fazer só alguns, siga a ordem da §7.
@@ -99,13 +99,24 @@ fila se aparecer evidência de que o 4.15 tinha essas mesmas políticas.
 
 ---
 
-## 6. G023 — só preciso dos arquivos que você já tem
+## 6. G023 — um clique a mais em qualquer caso
 
-Os cabeçalhos dos exports da primeira bateria mostram `gol\g002.tab`, então
-você já salvou `.TAB`. **Me manda esses arquivos** — não precisa capturar
-nada novo. O formato do container é desconhecido e a arqueologia começa por
-leitura; ter o `.TAB` de casos cujo resultado eu já conheço número por número
-é o melhor material possível para decifrá-lo.
+**Correção:** eu tinha deduzido que você já tinha `.TAB` salvos, porque o
+cabeçalho dos exports da primeira bateria mostra
+`TabWin:C:\...\gol\g002.tab`. Isso era só o TabWin ecoando um nome de
+trabalho, não prova de arquivo gravado. Dedução minha, errada.
+
+Então: em **qualquer um** dos casos abaixo, depois de gerar a tabela, use
+**Salvar** e escolha o formato `.TAB`, além do `result.xls` normal. Um só já
+serve para começar.
+
+Por que vale: o formato do container é desconhecido e a arqueologia começa
+por leitura. Ter o `.TAB` de um caso cujo resultado eu já conheço número por
+número é o melhor material possível para decifrá-lo — eu sei o que tem
+dentro antes de abrir.
+
+Se der trabalho ou o diálogo não oferecer `.TAB`, deixa pra lá e me avisa —
+é o item de menor prioridade da lista.
 
 ---
 
@@ -417,7 +428,7 @@ Para cada caso, em
 | `recipe.txt` — linha, coluna, incremento, seleções, estado de cada caixa | sim |
 | `capture-notes.md` — o que surpreendeu, número que não bateu, diálogo que apareceu | sim |
 | `screenshot.png` | **G012 sim**, resto opcional |
-| `result.tab` | opcional, alimenta o G023 |
+| `result.tab` | opcional — **um só, em qualquer caso**, já resolve o G023 (§6) |
 
 Pode zipar tudo junto, como da última vez.
 
