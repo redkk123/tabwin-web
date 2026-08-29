@@ -135,6 +135,15 @@ que não é equivalência.
 
 ### 3.1 Cache de resultado L3
 
+**Concluído em 2026-08-29.** Cache no Worker por chave estável de plano mais
+conversões (via `stableJson`, ordem de filtro/regra importa), limitado a 20
+entradas com descarte do menos recentemente usado, esvaziado inteiro em todo
+`open`/`append`. Verificado em navegador real: reexecutar o mesmo plano sobre
+`RDAC2401.dbc` levou **1 ms** de ponta a ponta contra os 13 s de uma passada
+completa no Dengue; reabrir o mesmo arquivo invalidou corretamente um plano
+idêntico já em cache. Evidência em
+`docs/handoffs/R09_5_L3_RESULT_CACHE_REPORT.md`.
+
 **Esforço:** dias · **Risco:** baixo · **Valor:** alto
 
 Hoje cada reanálise repete uma passada inteira: trocar um filtro no Dengue

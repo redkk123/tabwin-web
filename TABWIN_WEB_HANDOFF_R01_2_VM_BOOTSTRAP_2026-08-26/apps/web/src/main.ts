@@ -1618,7 +1618,7 @@ async function runAnalysis(): Promise<void> {
   try {
     const plan = buildPlan();
     const conversions = conversionsForPlan(plan);
-    const { result } = await askDataset<{ result: TabulationResult }>(
+    const { result, cached } = await askDataset<{ result: TabulationResult; cached: boolean }>(
       { type: 'tabulate', plan, conversions },
       { label: 'Tabulação', progress: datasetProgress('Tabulando') },
     );
@@ -1635,7 +1635,8 @@ async function runAnalysis(): Promise<void> {
     tableSubtitle.value = '';
     tableFooter.value = '';
     renderResult();
-    appendTabulationLogEntry(plan, result);
+    appendTabulationLogEntry(plan, result, cached);
+    if (cached) showToast('Resultado em cache — sem nova leitura do arquivo');
     exportCsvButton.disabled = false;
     exportJsonButton.disabled = false;
     exportXlsxButton.disabled = false;
@@ -2226,6 +2227,8 @@ interface TabulationLogEntry {
   resultRows: number;
   resultColumns: number;
   warningCount: number;
+  /** Served from the L3 result cache instead of re-streaming the dataset. */
+  cached: boolean;
 }
 
 /** Session-only and bounded; a work log, not a persisted audit trail. */
@@ -2240,11 +2243,11 @@ function tabulationLogEntryText(entry: TabulationLogEntry): string {
     `${integerFormat.format(entry.filterCount)} filtro(s) · ${integerFormat.format(entry.crossFieldRuleCount)} regra(s) cruzada(s)`,
     `${integerFormat.format(entry.recordsSeen)} vistos → ${integerFormat.format(entry.recordsAccepted)} aceitos · `
       + `${integerFormat.format(entry.resultRows)} linha(s) × ${integerFormat.format(entry.resultColumns)} coluna(s)`,
-    `${integerFormat.format(entry.warningCount)} aviso(s)`,
+    `${integerFormat.format(entry.warningCount)} aviso(s)${entry.cached ? ' · em cache' : ''}`,
   ].join('\n');
 }
 
-function appendTabulationLogEntry(plan: QueryPlan, result: TabulationResult): void {
+function appendTabulationLogEntry(plan: QueryPlan, result: TabulationResult, cached: boolean): void {
   const entry: TabulationLogEntry = {
     id: `log-${Date.now().toString(36)}-${tabulationLog.length}`,
     timestamp: new Date().toISOString(),
@@ -2259,6 +2262,7 @@ function appendTabulationLogEntry(plan: QueryPlan, result: TabulationResult): vo
     resultRows: result.rows.length,
     resultColumns: result.columns.length,
     warningCount: result.warnings.length,
+    cached,
   };
   // Newest first for on-screen reading; unshift keeps that without a sort.
   tabulationLog.unshift(entry);
@@ -2280,7 +2284,8 @@ function renderTabulationLog(): void {
     item.className = 'tabulation-log-entry';
     const dimensions = entry.columnLabel ? `${entry.rowLabel} × ${entry.columnLabel}` : entry.rowLabel;
     const title = document.createElement('b');
-    title.textContent = `${dimensions} · ${entry.measureLabel}`;
+    title.textContent = `${dimensions} · ${entry.measureLabel}${entry.cached ? ' ⚡' : ''}`;
+    if (entry.cached) title.title = 'Servido do cache de resultados, sem nova leitura do arquivo';
     const time = document.createElement('time');
     time.dateTime = entry.timestamp;
     time.textContent = new Date(entry.timestamp).toLocaleTimeString('pt-BR');

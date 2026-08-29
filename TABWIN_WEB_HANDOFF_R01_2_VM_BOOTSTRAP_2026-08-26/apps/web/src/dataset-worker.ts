@@ -27,6 +27,7 @@ import {
 } from '../../../packages/acquisition/src/dbf-record-stream.ts';
 import { createTabulationAccumulator, type ConversionRegistry } from '../../../packages/core/src/execute.ts';
 import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
+import { createTabulationResultCache } from '../../../packages/core/src/tabulation-cache.ts';
 import type { QueryPlan, TabulationResult } from '../../../packages/core/src/model.ts';
 import {
   createDistinctValueCollector,
@@ -113,6 +114,13 @@ const PROGRESS_INTERVAL_RECORDS = 20_000;
 
 let sources: DatasetSource[] = [];
 let header: DbfHeader | null = null;
+/**
+ * L3 cache: memoizes a finished tabulation by its exact plan and conversions.
+ * Cleared on every 'open'/'append' — a cached result answers for the plan
+ * *and* the data it ran over, so once the data changes, nothing in it is
+ * still valid, not just the entries that look related.
+ */
+const resultCache = createTabulationResultCache();
 
 function post(message: unknown, transfer: Transferable[] = []): void {
   workerScope.postMessage(message, transfer);
@@ -215,8 +223,13 @@ function schemaSignature(value: DbfHeader): string {
 function handle(request: DatasetRequest): void {
   switch (request.type) {
     case 'open': {
+      // Computed against the *new* sources before anything module-level
+      // changes, so a schema/format error here leaves the previous dataset —
+      // and its still-valid cache — untouched.
+      const nextHeader = headerForSources(request);
       sources = request.sources;
-      header = headerForSources(request);
+      header = nextHeader;
+      resultCache.clear();
       post({ type: 'opened', requestId: request.requestId, header, recordCount: header.recordCount });
       return;
     }
@@ -235,14 +248,22 @@ function handle(request: DatasetRequest): void {
       }
       sources = [...sources, source];
       header = { ...header, recordCount: header.recordCount + incoming.recordCount };
+      resultCache.clear();
       post({ type: 'opened', requestId: request.requestId, header, recordCount: header.recordCount });
       return;
     }
     case 'tabulate': {
-      const accumulator = createTabulationAccumulator(request.plan, request.conversions ?? {});
+      const conversions = request.conversions ?? {};
+      const cached = resultCache.get({ plan: request.plan, conversions });
+      if (cached) {
+        post({ type: 'tabulation', requestId: request.requestId, result: cached, cached: true });
+        return;
+      }
+      const accumulator = createTabulationAccumulator(request.plan, conversions);
       streamAll(request.requestId, fieldsUsedByPlan(request.plan), (batch) => accumulator.push(batch.records));
       const result: TabulationResult = accumulator.finish();
-      post({ type: 'tabulation', requestId: request.requestId, result });
+      resultCache.set({ plan: request.plan, conversions }, result);
+      post({ type: 'tabulation', requestId: request.requestId, result, cached: false });
       return;
     }
     case 'profile-numeric': {

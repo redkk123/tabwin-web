@@ -1,10 +1,10 @@
 {
-  "revision": "faixa-2-4-modern-tabulation-log",
+  "revision": "faixa-3-1-l3-result-cache",
   "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 157,
-    "passed": 157,
+    "total": 164,
+    "passed": 164,
     "failed": 0,
     "command": "npm run check"
   },
@@ -176,6 +176,11 @@
     ,"modern-session-tabulation-log-explicitly-not-lst-equivalent"
     ,"per-entry-and-copy-all-tabulation-log-clipboard-export"
     ,"tabulation-log-persists-across-dataset-changes-until-cleared"
+    ,"l3-tabulation-result-cache-keyed-by-plan-and-conversions"
+    ,"result-cache-cleared-on-every-dataset-open-or-append"
+    ,"lru-eviction-past-a-bounded-cache-capacity"
+    ,"visible-cache-hit-indicator-in-toast-and-tabulation-log"
+    ,"browser-verified-cache-hit-miss-and-reopen-invalidation-on-real-files"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -239,7 +244,6 @@
     "audit-include-table-and-paste-semantics-without-guessing",
     "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
     "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
-    "add-an-l3-result-cache-so-reanalysis-does-not-repeat-a-full-pass",
     "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
     "resolve-research-plan-queries-into-observed-source-manifests",
     "capture-oracle-evidence-before-shipping-any-clinical-cleaning-preset",
