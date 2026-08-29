@@ -226,11 +226,9 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .chart-editor-grid label[data-disabled] { opacity: .48; }
 .chart-editor .compatibility-note { margin: 9px 2px 0; }
 .result-chart-svg { display: block; width: 100%; height: auto; min-height: 360px; border-radius: 12px; background: #fff; }
-.result-chart-svg .chart-label { fill: #3c5861; font: 12px system-ui, sans-serif; }
-.result-chart-svg .chart-value { fill: #102c39; font: 700 12px system-ui, sans-serif; }
-.result-chart-svg .chart-tick { fill: #71858a; font: 10px system-ui, sans-serif; }
-.result-chart-svg .chart-axis { stroke: #cfdcd8; stroke-width: 1; }
-.result-chart-svg .chart-empty { fill: #6d8284; font: 14px system-ui, sans-serif; }
+/* The SVG carries its own <style>. Restyling those classes from here made the
+   screen ignore the chosen font while the SVG/PNG export honoured it, so the
+   two disagreed; only the container is styled now. */
 .bar-row { display: grid; grid-template-columns: minmax(100px, 220px) minmax(100px, 1fr) 72px; gap: 12px; align-items: center; font-size: 11px; }
 .bar-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #3c5861; }
 .bar-track { height: 20px; border-radius: 5px; background: #eff4f2; overflow: hidden; }
@@ -431,4 +429,15 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   #table-view { display: block !important; padding: 0; }
   .table-wrap { max-height: none; overflow: visible; border: 0; }
   thead,tfoot { position: static; }
+}
+
+/* "Imprimir" in the chart panel marks the body for the duration of the print
+   dialog. Printing from the browser menu is unmarked and still gives the whole
+   table, including the rows virtualization is holding off-screen. */
+@media print {
+  body[data-print-target="chart"] #table-view { display: none !important; }
+  body[data-print-target="chart"] #chart-view { display: block !important; padding: 0; }
+  body[data-print-target="chart"] .chart-toolbar,
+  body[data-print-target="chart"] .chart-editor { display: none !important; }
+  body[data-print-target="chart"] .result-chart-svg { width: 100%; height: auto; page-break-inside: avoid; }
 }

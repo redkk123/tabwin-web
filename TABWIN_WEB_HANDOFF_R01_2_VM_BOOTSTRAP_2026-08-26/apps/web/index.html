@@ -375,6 +375,10 @@
                 <option value="arrows">Setas</option>
               </select></label>
               <div class="panel-actions">
+                <button class="secondary-button" id="chart-zoom-out" type="button" title="Afastar (tecla -)">−</button>
+                <button class="secondary-button" id="chart-zoom-in" type="button" title="Aproximar (tecla +)">+</button>
+                <button class="secondary-button" id="chart-zoom-reset" type="button" title="Enquadramento original (tecla 0)">Reenquadrar</button>
+                <button class="secondary-button" id="chart-print-button" type="button" disabled>Imprimir</button>
                 <button class="secondary-button" id="chart-svg-button" type="button" disabled>SVG</button>
                 <button class="secondary-button" id="chart-png-button" type="button" disabled>PNG</button>
               </div>
@@ -387,17 +391,36 @@
                   <option value="system">Sistema</option><option value="serif">Serifada</option><option value="monospace">Monoespaçada</option>
                 </select></label>
                 <label>Casas decimais<select id="chart-decimals">
-                  <option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+                  <option value="" selected>Automático</option>
+                  <option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
                 </select></label>
                 <label>Cor principal<input id="chart-primary-color" type="color" value="#178b71" /></label>
                 <label>Cor de destaque<input id="chart-accent-color" type="color" value="#f16f5f" /></label>
                 <label>Fundo<input id="chart-background-color" type="color" value="#ffffff" /></label>
-                <label class="chart-toggle"><input id="chart-show-values" type="checkbox" checked /> Rótulos de valor</label>
-                <label class="chart-toggle"><input id="chart-show-legend" type="checkbox" /> Legenda</label>
+                <label>Rótulos de valor<select id="chart-show-values">
+                  <option value="" selected>Automático</option><option value="on">Sempre</option><option value="off">Nunca</option>
+                </select></label>
+                <label>Legenda<select id="chart-show-legend">
+                  <option value="" selected>Automático</option><option value="on">Sempre</option><option value="off">Nunca</option>
+                </select></label>
+                <label>Séries<select id="chart-series-mode">
+                  <option value="" selected>Automático</option><option value="columns">Uma por coluna</option><option value="total">Total das linhas</option>
+                </select></label>
                 <label id="chart-x-binding-label">Eixo X<select id="chart-x-binding"><option value="">Automático</option></select></label>
                 <label id="chart-y-binding-label">Eixo Y<select id="chart-y-binding"><option value="">Automático</option></select></label>
+                <label id="chart-size-binding-label">Tamanho da bolha<select id="chart-size-binding"><option value="">Total da linha</option></select></label>
+                <label>Rótulo do eixo X<input id="chart-axis-x-label" type="text" maxlength="60" placeholder="Opcional" /></label>
+                <label>Rótulo do eixo Y<input id="chart-axis-y-label" type="text" maxlength="40" placeholder="Opcional" /></label>
+                <label id="chart-axis-x-min-label">Mínimo do eixo X<input id="chart-axis-x-min" type="number" step="any" placeholder="Automático" /></label>
+                <label id="chart-axis-x-max-label">Máximo do eixo X<input id="chart-axis-x-max" type="number" step="any" placeholder="Automático" /></label>
+                <label>Mínimo do eixo Y<input id="chart-axis-y-min" type="number" step="any" placeholder="Automático" /></label>
+                <label>Máximo do eixo Y<input id="chart-axis-y-max" type="number" step="any" placeholder="Automático" /></label>
+                <label>Marcações<select id="chart-axis-ticks">
+                  <option>2</option><option>3</option><option>4</option><option selected>5</option><option>6</option><option>8</option><option>10</option>
+                </select></label>
+                <label class="chart-toggle"><input id="chart-show-grid" type="checkbox" checked /> Grade</label>
               </div>
-              <p class="compatibility-note">Controles de apresentação modernos. X/Y explícitos só se aplicam a Pontos e Bolhas; sem ambos, preserva-se a apresentação por ordem das linhas.</p>
+              <p class="compatibility-note">Controles de apresentação modernos: nada aqui altera a tabulação, o total ou o que é exportado como tabela. X/Y e tamanho da bolha só se aplicam a Pontos e Bolhas; sem X e Y juntos, preserva-se a apresentação por ordem das linhas. Limites manuais exigem máximo maior que o mínimo; um par inválido é ignorado e o eixo volta à faixa dos dados. O zoom é só de visualização e não entra na exportação nem na receita.</p>
             </section>
             <div class="chart" id="chart"></div>
           </div>

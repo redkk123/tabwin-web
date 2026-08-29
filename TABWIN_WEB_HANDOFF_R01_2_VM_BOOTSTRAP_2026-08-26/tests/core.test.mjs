@@ -254,6 +254,31 @@ test('analysis recipe parsing rejects structurally invalid plans and fingerprint
   assert.throws(() => parseRecipe(JSON.stringify({
     schema: 'tabwin-web.recipe', version: 1,
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { chartSeriesMode: 'stacked' },
+  })), /invalid chart series mode/);
+  // A bound the renderer would refuse to honour must not survive a round trip.
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { chartAxisYMin: 500, chartAxisYMax: 100 },
+  })), /y axis maximum must exceed its minimum/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { chartAxisTickCount: 40 },
+  })), /invalid chart tick count/);
+  // A valid pair, a lone bound and no bounds at all all parse: only the
+  // contradictory combination is rejected.
+  for (const view of [{ chartAxisYMin: 0, chartAxisYMax: 4315 }, { chartAxisYMin: 0 }, {}]) {
+    parseRecipe(JSON.stringify({
+      schema: 'tabwin-web.recipe', version: 1,
+      spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+      conversions: [], sourceHints: [], view,
+    }));
+  }
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
     conversions: [], sourceHints: [], view: { mapClassification: 'natural-breaks', mapClassCount: 20 },
   })), /invalid map classification/);
   assert.throws(() => parseRecipe(JSON.stringify({

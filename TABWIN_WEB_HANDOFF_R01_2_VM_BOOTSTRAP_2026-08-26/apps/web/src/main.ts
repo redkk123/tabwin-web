@@ -87,7 +87,7 @@ import {
   type CachedArchiveRole,
   type CachedArchiveSummary,
 } from './archive-cache.ts';
-import { renderChartSvg, type ChartFontFamily } from './chart-renderer.ts';
+import { renderChartSvg, type ChartFontFamily, type ChartSeriesMode } from './chart-renderer.ts';
 import type { ChartType } from '../../../packages/visualization/src/chart-model.ts';
 import {
   createMapScale,
@@ -263,12 +263,29 @@ const chartDecimals = element<HTMLSelectElement>('#chart-decimals');
 const chartPrimaryColor = element<HTMLInputElement>('#chart-primary-color');
 const chartAccentColor = element<HTMLInputElement>('#chart-accent-color');
 const chartBackgroundColor = element<HTMLInputElement>('#chart-background-color');
-const chartShowValues = element<HTMLInputElement>('#chart-show-values');
-const chartShowLegend = element<HTMLInputElement>('#chart-show-legend');
+const chartShowValues = element<HTMLSelectElement>('#chart-show-values');
+const chartShowLegend = element<HTMLSelectElement>('#chart-show-legend');
 const chartXBindingLabel = element<HTMLElement>('#chart-x-binding-label');
 const chartYBindingLabel = element<HTMLElement>('#chart-y-binding-label');
 const chartXBinding = element<HTMLSelectElement>('#chart-x-binding');
 const chartYBinding = element<HTMLSelectElement>('#chart-y-binding');
+const chartSizeBindingLabel = element<HTMLElement>('#chart-size-binding-label');
+const chartSizeBinding = element<HTMLSelectElement>('#chart-size-binding');
+const chartSeriesMode = element<HTMLSelectElement>('#chart-series-mode');
+const chartAxisXLabel = element<HTMLInputElement>('#chart-axis-x-label');
+const chartAxisYLabel = element<HTMLInputElement>('#chart-axis-y-label');
+const chartAxisXMin = element<HTMLInputElement>('#chart-axis-x-min');
+const chartAxisXMax = element<HTMLInputElement>('#chart-axis-x-max');
+const chartAxisXMinLabel = element<HTMLElement>('#chart-axis-x-min-label');
+const chartAxisXMaxLabel = element<HTMLElement>('#chart-axis-x-max-label');
+const chartAxisYMin = element<HTMLInputElement>('#chart-axis-y-min');
+const chartAxisYMax = element<HTMLInputElement>('#chart-axis-y-max');
+const chartAxisTicks = element<HTMLSelectElement>('#chart-axis-ticks');
+const chartShowGrid = element<HTMLInputElement>('#chart-show-grid');
+const chartZoomIn = element<HTMLButtonElement>('#chart-zoom-in');
+const chartZoomOut = element<HTMLButtonElement>('#chart-zoom-out');
+const chartZoomReset = element<HTMLButtonElement>('#chart-zoom-reset');
+const chartPrintButton = element<HTMLButtonElement>('#chart-print-button');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
 const mapClassCount = element<HTMLSelectElement>('#map-class-count');
@@ -2451,6 +2468,7 @@ async function runAnalysis(): Promise<void> {
     exportXmlButton.disabled = false;
     chartPngButton.disabled = false;
     chartSvgButton.disabled = false;
+    chartPrintButton.disabled = false;
     saveRecipeButton.disabled = false;
     saveTableButton.disabled = false;
     selectedDbfButton.disabled = false;
@@ -2894,29 +2912,158 @@ function renderTable(result: TabulationResult): void {
 }
 
 function populateChartBindings(result: TabulationResult): void {
-  const previousX = chartXBinding.value;
-  const previousY = chartYBinding.value;
+  const previous = [chartXBinding.value, chartYBinding.value, chartSizeBinding.value];
   chartXBinding.replaceChildren(new Option('Automático', ''));
   chartYBinding.replaceChildren(new Option('Automático', ''));
+  chartSizeBinding.replaceChildren(new Option('Total da linha', ''));
   for (const column of result.columns) {
     chartXBinding.append(new Option(column.label, column.key));
     chartYBinding.append(new Option(column.label, column.key));
+    chartSizeBinding.append(new Option(column.label, column.key));
   }
-  if ([...chartXBinding.options].some((option) => option.value === previousX)) chartXBinding.value = previousX;
-  if ([...chartYBinding.options].some((option) => option.value === previousY)) chartYBinding.value = previousY;
+  for (const [select, wanted] of [
+    [chartXBinding, previous[0]] as const,
+    [chartYBinding, previous[1]] as const,
+    [chartSizeBinding, previous[2]] as const,
+  ]) {
+    if ([...select.options].some((option) => option.value === wanted)) select.value = wanted ?? '';
+  }
   updateChartBindingControls();
 }
 
 function updateChartBindingControls(): void {
-  const enabled = chartType.value === 'points' || chartType.value === 'bubbles';
-  chartXBinding.disabled = !enabled;
-  chartYBinding.disabled = !enabled;
-  chartXBindingLabel.toggleAttribute('data-disabled', !enabled);
-  chartYBindingLabel.toggleAttribute('data-disabled', !enabled);
+  const scatter = chartType.value === 'points' || chartType.value === 'bubbles';
+  const bubbles = chartType.value === 'bubbles';
+  // The X axis is categorical everywhere except a bound scatter, so manual X
+  // bounds would have nothing to clip against in the other families.
+  const boundScatter = scatter && Boolean(chartXBinding.value) && Boolean(chartYBinding.value);
+  for (const [control, label, enabled] of [
+    [chartXBinding, chartXBindingLabel, scatter] as const,
+    [chartYBinding, chartYBindingLabel, scatter] as const,
+    [chartSizeBinding, chartSizeBindingLabel, bubbles] as const,
+    [chartAxisXMin, chartAxisXMinLabel, boundScatter] as const,
+    [chartAxisXMax, chartAxisXMaxLabel, boundScatter] as const,
+  ]) {
+    control.disabled = !enabled;
+    label.toggleAttribute('data-disabled', !enabled);
+  }
 }
+
+/** Automático stays undefined so the renderer can apply its per-family default. */
+function triStateValue(select: HTMLSelectElement): boolean | undefined {
+  if (select.value === 'on') return true;
+  if (select.value === 'off') return false;
+  return undefined;
+}
+
+function optionalNumber(input: HTMLInputElement): number | undefined {
+  if (input.disabled || !input.value.trim()) return undefined;
+  const parsed = Number(input.value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * Zoom is a viewport over the finished SVG, never a re-render. It is deliberately
+ * not part of the recipe or of any export: what someone saves or prints is the
+ * whole chart, not wherever the last reader happened to be looking.
+ */
+const CHART_VIEWBOX = { width: 1000, height: 500 };
+let chartZoom = { scale: 1, cx: .5, cy: .5 };
+
+function applyChartZoom(): void {
+  chartZoomReset.disabled = chartZoom.scale === 1;
+  const svg = chart.querySelector('svg');
+  if (!svg) return;
+  const width = CHART_VIEWBOX.width / chartZoom.scale;
+  const height = CHART_VIEWBOX.height / chartZoom.scale;
+  const x = Math.min(CHART_VIEWBOX.width - width, Math.max(0, chartZoom.cx * CHART_VIEWBOX.width - width / 2));
+  const y = Math.min(CHART_VIEWBOX.height - height, Math.max(0, chartZoom.cy * CHART_VIEWBOX.height - height / 2));
+  svg.setAttribute('viewBox', [x, y, width, height].join(' '));
+}
+
+function zoomChart(factor: number, focus?: { cx: number; cy: number }): void {
+  const scale = Math.min(8, Math.max(1, chartZoom.scale * factor));
+  chartZoom = scale === 1
+    ? { scale: 1, cx: .5, cy: .5 }
+    : { scale, cx: focus?.cx ?? chartZoom.cx, cy: focus?.cy ?? chartZoom.cy };
+  applyChartZoom();
+}
+
+function resetChartZoom(): void {
+  chartZoom = { scale: 1, cx: .5, cy: .5 };
+  applyChartZoom();
+}
+
+/**
+ * Manual bounds are all-or-nothing per axis. Half a pair, or a maximum at or
+ * below its minimum, is reported and dropped rather than half-applied: an axis
+ * drawn on an inverted range is a lie about the data.
+ */
+function axisBounds(
+  minInput: HTMLInputElement,
+  maxInput: HTMLInputElement,
+  axis: string,
+): { min?: number | undefined; max?: number | undefined; complaint?: string } {
+  const min = optionalNumber(minInput);
+  const max = optionalNumber(maxInput);
+  if (min === undefined && max === undefined) return {};
+  if (min === undefined || max === undefined) {
+    return { complaint: [
+      'O eixo', axis, 'precisa de mínimo e máximo juntos; usando a faixa dos dados.',
+    ].join(' ') };
+  }
+  if (!(max > min)) {
+    return { complaint: [
+      'O máximo do eixo', axis, 'precisa ser maior que o mínimo; usando a faixa dos dados.',
+    ].join(' ') };
+  }
+  return { min, max };
+}
+
+/** Only a complete, valid pair is written to the recipe; parseRecipe rejects the rest. */
+function savedAxisBounds(
+  minInput: HTMLInputElement,
+  maxInput: HTMLInputElement,
+  keys: { min: string; max: string },
+): Record<string, number> {
+  const min = optionalNumber(minInput);
+  const max = optionalNumber(maxInput);
+  if (min === undefined || max === undefined || !(max > min)) return {};
+  return { [keys.min]: min, [keys.max]: max };
+}
+
+/**
+ * Prints the chart alone. The stylesheet forces the table view when printing,
+ * which is right for the default case and wrong here, so the body carries a
+ * marker for the duration of the dialog and gives it back afterwards.
+ */
+function printChart(): void {
+  if (!chart.querySelector('svg')) return;
+  document.body.setAttribute('data-print-target', 'chart');
+  const restore = () => {
+    document.body.removeAttribute('data-print-target');
+    window.removeEventListener('afterprint', restore);
+  };
+  window.addEventListener('afterprint', restore);
+  try {
+    window.print();
+  } finally {
+    // Browsers that never fire afterprint (or block printing outright) must not
+    // leave the page stuck in chart-only print mode.
+    window.setTimeout(restore, 1000);
+  }
+}
+
+let lastAxisComplaint = '';
 
 function renderChart(result: TabulationResult): void {
   const type = chartType.value as ChartType;
+  const xBounds = axisBounds(chartAxisXMin, chartAxisXMax, 'X');
+  const yBounds = axisBounds(chartAxisYMin, chartAxisYMax, 'Y');
+  const complaint = xBounds.complaint ?? yBounds.complaint ?? '';
+  // Only complain once per distinct problem: this runs on every keystroke.
+  if (complaint && complaint !== lastAxisComplaint) showToast(complaint, true);
+  lastAxisComplaint = complaint;
   chart.replaceChildren();
   chart.append(renderChartSvg(
     result,
@@ -2929,14 +3076,25 @@ function renderChart(result: TabulationResult): void {
       primaryColor: chartPrimaryColor.value,
       accentColor: chartAccentColor.value,
       backgroundColor: chartBackgroundColor.value,
-      showLegend: chartShowLegend.checked,
-      showValueLabels: chartShowValues.checked,
-      decimalPlaces: Number(chartDecimals.value),
+      showLegend: triStateValue(chartShowLegend),
+      showValueLabels: triStateValue(chartShowValues),
+      decimalPlaces: chartDecimals.value ? Number(chartDecimals.value) : undefined,
+      seriesMode: (chartSeriesMode.value || undefined) as ChartSeriesMode | undefined,
+      axisXLabel: chartAxisXLabel.value,
+      axisYLabel: chartAxisYLabel.value,
+      axisXMin: xBounds.min,
+      axisXMax: xBounds.max,
+      axisYMin: yBounds.min,
+      axisYMax: yBounds.max,
+      axisTickCount: Number(chartAxisTicks.value),
+      showGrid: chartShowGrid.checked,
       ...((type === 'points' || type === 'bubbles') && chartXBinding.value && chartYBinding.value
         ? { xColumnKey: chartXBinding.value, yColumnKey: chartYBinding.value }
         : {}),
+      ...(type === 'bubbles' && chartSizeBinding.value ? { sizeColumnKey: chartSizeBinding.value } : {}),
     },
   ));
+  applyChartZoom();
 }
 
 function populateStatisticsColumns(result: TabulationResult): void {
@@ -4201,6 +4359,8 @@ function saveRecipe(): void {
     if (!source) throw new Error(`Não foi possível localizar a impressão digital de ${id}`);
     return { id, name: source.name, sha256: source.sha256, size: source.size };
   });
+  const savedLegend = triStateValue(chartShowLegend);
+  const savedValueLabels = triStateValue(chartShowValues);
   const recipe: AnalysisRecipeV1 = {
     schema: 'tabwin-web.recipe',
     version: 1,
@@ -4225,11 +4385,22 @@ function saveRecipe(): void {
       chartPrimaryColor: chartPrimaryColor.value,
       chartAccentColor: chartAccentColor.value,
       chartBackgroundColor: chartBackgroundColor.value,
-      chartShowLegend: chartShowLegend.checked,
-      chartShowValueLabels: chartShowValues.checked,
-      chartDecimalPlaces: Number(chartDecimals.value),
+      // Anything left on Automático is written as absent, not as the value it
+      // happens to resolve to today: the recipe records the choice, and the
+      // per-family default stays free to improve.
+      ...(savedLegend === undefined ? {} : { chartShowLegend: savedLegend }),
+      ...(savedValueLabels === undefined ? {} : { chartShowValueLabels: savedValueLabels }),
+      ...(chartDecimals.value ? { chartDecimalPlaces: Number(chartDecimals.value) } : {}),
+      ...(chartSeriesMode.value ? { chartSeriesMode: chartSeriesMode.value as ChartSeriesMode } : {}),
+      ...(chartAxisXLabel.value.trim() ? { chartAxisXLabel: chartAxisXLabel.value.trim() } : {}),
+      ...(chartAxisYLabel.value.trim() ? { chartAxisYLabel: chartAxisYLabel.value.trim() } : {}),
+      ...(savedAxisBounds(chartAxisXMin, chartAxisXMax, { min: 'chartAxisXMin', max: 'chartAxisXMax' })),
+      ...(savedAxisBounds(chartAxisYMin, chartAxisYMax, { min: 'chartAxisYMin', max: 'chartAxisYMax' })),
+      chartAxisTickCount: Number(chartAxisTicks.value),
+      chartShowGrid: chartShowGrid.checked,
       ...(chartXBinding.value ? { chartXColumnKey: chartXBinding.value } : {}),
       ...(chartYBinding.value ? { chartYColumnKey: chartYBinding.value } : {}),
+      ...(chartSizeBinding.value ? { chartSizeColumnKey: chartSizeBinding.value } : {}),
       mapClassification: mapClassification.value as MapClassification,
       mapClassCount: Number(mapClassCount.value),
       mapPalette: mapPalette.value as MapPalette,
@@ -4378,6 +4549,7 @@ async function openPortableTable(file: File): Promise<void> {
   exportXmlButton.disabled = false;
   chartPngButton.disabled = false;
   chartSvgButton.disabled = false;
+  chartPrintButton.disabled = false;
   if (table.plan.spec.rows.field.toUpperCase().includes('MUNIC')) await ensureMap();
   showToast(`${file.name}: tabela aberta sem precisar do DBC original`);
 }
@@ -4425,9 +4597,18 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.view?.chartPrimaryColor) chartPrimaryColor.value = recipe.view.chartPrimaryColor;
   if (recipe.view?.chartAccentColor) chartAccentColor.value = recipe.view.chartAccentColor;
   if (recipe.view?.chartBackgroundColor) chartBackgroundColor.value = recipe.view.chartBackgroundColor;
-  if (recipe.view?.chartShowLegend !== undefined) chartShowLegend.checked = recipe.view.chartShowLegend;
-  if (recipe.view?.chartShowValueLabels !== undefined) chartShowValues.checked = recipe.view.chartShowValueLabels;
-  if (recipe.view?.chartDecimalPlaces !== undefined) chartDecimals.value = String(recipe.view.chartDecimalPlaces);
+  chartShowLegend.value = recipe.view?.chartShowLegend === undefined ? '' : (recipe.view.chartShowLegend ? 'on' : 'off');
+  chartShowValues.value = recipe.view?.chartShowValueLabels === undefined ? '' : (recipe.view.chartShowValueLabels ? 'on' : 'off');
+  chartDecimals.value = recipe.view?.chartDecimalPlaces === undefined ? '' : String(recipe.view.chartDecimalPlaces);
+  chartSeriesMode.value = recipe.view?.chartSeriesMode ?? '';
+  chartAxisXLabel.value = recipe.view?.chartAxisXLabel ?? '';
+  chartAxisYLabel.value = recipe.view?.chartAxisYLabel ?? '';
+  chartAxisXMin.value = recipe.view?.chartAxisXMin === undefined ? '' : String(recipe.view.chartAxisXMin);
+  chartAxisXMax.value = recipe.view?.chartAxisXMax === undefined ? '' : String(recipe.view.chartAxisXMax);
+  chartAxisYMin.value = recipe.view?.chartAxisYMin === undefined ? '' : String(recipe.view.chartAxisYMin);
+  chartAxisYMax.value = recipe.view?.chartAxisYMax === undefined ? '' : String(recipe.view.chartAxisYMax);
+  if (recipe.view?.chartAxisTickCount !== undefined) chartAxisTicks.value = String(recipe.view.chartAxisTickCount);
+  if (recipe.view?.chartShowGrid !== undefined) chartShowGrid.checked = recipe.view.chartShowGrid;
   if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
@@ -4502,6 +4683,11 @@ async function openRecipe(file: File): Promise<void> {
       && [...chartYBinding.options].some((option) => option.value === recipe.view?.chartYColumnKey)) {
       chartYBinding.value = recipe.view.chartYColumnKey;
     }
+    if (recipe.view?.chartSizeColumnKey
+      && [...chartSizeBinding.options].some((option) => option.value === recipe.view?.chartSizeColumnKey)) {
+      chartSizeBinding.value = recipe.view.chartSizeColumnKey;
+    }
+    updateChartBindingControls();
     renderChart(currentResult);
     renderStatistics();
   }
@@ -4893,17 +5079,52 @@ chartType.addEventListener('change', () => {
   updateChartBindingControls();
   if (currentResult) renderChart(currentResult);
 });
-for (const control of [chartTitle, chartSubtitle, chartPrimaryColor, chartAccentColor, chartBackgroundColor]) {
+for (const control of [
+  chartTitle, chartSubtitle, chartPrimaryColor, chartAccentColor, chartBackgroundColor,
+  chartAxisXLabel, chartAxisYLabel, chartAxisXMin, chartAxisXMax, chartAxisYMin, chartAxisYMax,
+]) {
   control.addEventListener('input', () => {
     if (currentResult) renderChart(currentResult);
   });
 }
-for (const control of [chartFontFamily, chartDecimals, chartShowValues, chartShowLegend, chartXBinding, chartYBinding]) {
+for (const control of [
+  chartFontFamily, chartDecimals, chartShowValues, chartShowLegend, chartSeriesMode,
+  chartAxisTicks, chartShowGrid,
+]) {
   control.addEventListener('change', () => {
     if (currentResult) renderChart(currentResult);
   });
 }
+// A binding change can enable or disable the manual X bounds, so the controls
+// have to be re-evaluated before the chart is drawn from them.
+for (const control of [chartXBinding, chartYBinding, chartSizeBinding]) {
+  control.addEventListener('change', () => {
+    updateChartBindingControls();
+    if (currentResult) renderChart(currentResult);
+  });
+}
+chartZoomIn.addEventListener('click', () => zoomChart(1.4));
+chartZoomOut.addEventListener('click', () => zoomChart(1 / 1.4));
+chartZoomReset.addEventListener('click', resetChartZoom);
+chart.addEventListener('wheel', (event) => {
+  if (!chart.querySelector('svg')) return;
+  event.preventDefault();
+  const box = chart.getBoundingClientRect();
+  const focus = {
+    cx: box.width ? (event.clientX - box.left) / box.width : .5,
+    cy: box.height ? (event.clientY - box.top) / box.height : .5,
+  };
+  zoomChart(event.deltaY < 0 ? 1.18 : 1 / 1.18, focus);
+}, { passive: false });
+chart.setAttribute('tabindex', '0');
+chart.addEventListener('keydown', (event) => {
+  if (event.key === '+' || event.key === '=') { event.preventDefault(); zoomChart(1.4); }
+  else if (event.key === '-' || event.key === '_') { event.preventDefault(); zoomChart(1 / 1.4); }
+  else if (event.key === '0') { event.preventDefault(); resetChartZoom(); }
+});
+chartPrintButton.addEventListener('click', printChart);
 updateChartBindingControls();
+applyChartZoom();
 for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins]) {
   control.addEventListener('change', renderStatistics);
 }

@@ -353,12 +353,17 @@ mesmo sendo longo, porque é o que autoriza a palavra "compatível".
 
 **Esforço:** semanas · **Risco:** médio
 
-**Estado em 2026-08-29: EM ANDAMENTO.** O corte inicial do ChatGPT adicionou
-título/subtítulo, família de fonte, cores, fundo, casas decimais, legenda,
-rótulos e bindings X/Y explícitos para pontos/bolhas, com persistência em
-`.twrecipe`. Eixos/limites, zoom/reset, impressão por família, legenda
-multissérie completa e snapshots visuais continuam pendentes. Handoff em
-`docs/handoffs/R10_4_CHART_EDITOR_CHATGPT_START.md`.
+**Estado em 2026-08-29: CONCLUÍDA.** O corte inicial do ChatGPT trouxe
+título/subtítulo, fonte, cores, fundo, casas decimais, legenda, rótulos e
+bindings X/Y para pontos/bolhas, com persistência em `.twrecipe`. O
+fechamento acrescentou eixos com limites manuais validados, marcações, grade
+e rótulos de eixo; séries por coluna com legenda real; binding de tamanho das
+bolhas; zoom por viewBox com roda, teclado e reenquadrar; e impressão só do
+gráfico. Três regressões do corte inicial foram corrigidas no caminho: as
+casas decimais forçadas em contagens inteiras, a legenda da pizza desligada
+por omissão e o `styles.css` sobrescrevendo a fonte do SVG só na tela.
+Handoffs em `docs/handoffs/R10_4_CHART_EDITOR_CHATGPT_START.md` e
+`docs/handoffs/R10_8_CHART_EDITOR_CLOSED.md`.
 
 Títulos, fontes, legenda, cores, rótulos, ligação x/y para dispersão e bolhas,
 eixos, limites, zoom, impressão por família.

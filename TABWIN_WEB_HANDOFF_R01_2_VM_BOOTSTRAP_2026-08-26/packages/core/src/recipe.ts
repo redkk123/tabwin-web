@@ -41,6 +41,16 @@ export interface AnalysisRecipeV1 {
     chartDecimalPlaces?: number;
     chartXColumnKey?: string;
     chartYColumnKey?: string;
+    chartSizeColumnKey?: string;
+    chartSeriesMode?: 'total' | 'columns';
+    chartAxisXLabel?: string;
+    chartAxisYLabel?: string;
+    chartAxisXMin?: number;
+    chartAxisXMax?: number;
+    chartAxisYMin?: number;
+    chartAxisYMax?: number;
+    chartAxisTickCount?: number;
+    chartShowGrid?: boolean;
     mapClassification?: 'continuous' | 'equal-interval' | 'quantile';
     mapClassCount?: number;
     mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
@@ -174,10 +184,50 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   for (const [name, value] of [
     ['x binding', parsed.view?.chartXColumnKey],
     ['y binding', parsed.view?.chartYColumnKey],
+    ['size binding', parsed.view?.chartSizeColumnKey],
   ] as const) {
     if (value !== undefined && (typeof value !== 'string' || !value)) {
       throw new Error(`invalid chart ${name} in TabWin Web recipe`);
     }
+  }
+  if (parsed.view?.chartSeriesMode !== undefined && !new Set(['total', 'columns']).has(parsed.view.chartSeriesMode)) {
+    throw new Error('invalid chart series mode in TabWin Web recipe');
+  }
+  for (const [name, value, maximum] of [
+    ['x axis label', parsed.view?.chartAxisXLabel, 60],
+    ['y axis label', parsed.view?.chartAxisYLabel, 40],
+  ] as const) {
+    if (value !== undefined && (typeof value !== 'string' || value.length > maximum)) {
+      throw new Error(`invalid chart ${name} in TabWin Web recipe`);
+    }
+  }
+  for (const [name, value] of [
+    ['x axis minimum', parsed.view?.chartAxisXMin],
+    ['x axis maximum', parsed.view?.chartAxisXMax],
+    ['y axis minimum', parsed.view?.chartAxisYMin],
+    ['y axis maximum', parsed.view?.chartAxisYMax],
+  ] as const) {
+    if (value !== undefined && !Number.isFinite(value)) {
+      throw new Error(`invalid chart ${name} in TabWin Web recipe`);
+    }
+  }
+  // An inverted or collapsed pair is rejected here rather than silently
+  // dropped at render time: a saved recipe is a claim about what the reader
+  // will see, and a bound the renderer refuses to honour is not that.
+  for (const [axis, min, max] of [
+    ['x', parsed.view?.chartAxisXMin, parsed.view?.chartAxisXMax],
+    ['y', parsed.view?.chartAxisYMin, parsed.view?.chartAxisYMax],
+  ] as const) {
+    if (min !== undefined && max !== undefined && !(max > min)) {
+      throw new Error(`chart ${axis} axis maximum must exceed its minimum in TabWin Web recipe`);
+    }
+  }
+  if (parsed.view?.chartAxisTickCount !== undefined
+    && (!Number.isInteger(parsed.view.chartAxisTickCount) || parsed.view.chartAxisTickCount < 2 || parsed.view.chartAxisTickCount > 20)) {
+    throw new Error('invalid chart tick count in TabWin Web recipe');
+  }
+  if (parsed.view?.chartShowGrid !== undefined && typeof parsed.view.chartShowGrid !== 'boolean') {
+    throw new Error('invalid chart grid visibility in TabWin Web recipe');
   }
   const allowedMapClassifications = new Set(['continuous', 'equal-interval', 'quantile']);
   if (parsed.view?.mapClassification && !allowedMapClassifications.has(parsed.view.mapClassification)) {
