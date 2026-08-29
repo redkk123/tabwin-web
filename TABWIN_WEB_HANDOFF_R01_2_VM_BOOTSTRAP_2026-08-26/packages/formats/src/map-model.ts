@@ -26,7 +26,11 @@ export interface TabwinMapObject {
 }
 
 export interface TabwinMapDefinition {
-  /** 100 represents legacy version 1.00. */
+  /**
+   * 100 represents legacy version 1.00, as parsed from a real `.MAP` file.
+   * 0 marks a map converted from a non-legacy source (GeoJSON import) —
+   * there is no legacy version to preserve. See `geojson-map.ts`.
+   */
   version: number;
   bounds: TabwinMapBounds;
   objects: TabwinMapObject[];

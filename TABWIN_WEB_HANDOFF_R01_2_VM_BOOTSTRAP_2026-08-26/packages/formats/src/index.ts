@@ -5,5 +5,6 @@ export * from './def-model.js';
 export * from './def-parser.js';
 export * from './map-model.js';
 export * from './map-parser.js';
+export * from './geojson-map.js';
 export * from './tabwin-biff.js';
 export * from './delimited.js';

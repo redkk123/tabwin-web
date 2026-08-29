@@ -21,6 +21,9 @@ import {
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
+  convertGeoJsonToTabwinMap,
+  GeoJsonMapError,
+  listGeoJsonFeatureProperties,
   optionsForRole,
   parseCnv,
   parseDelimited,
@@ -242,6 +245,15 @@ const mapPalette = element<HTMLSelectElement>('#map-palette');
 const mapZoomOut = element<HTMLButtonElement>('#map-zoom-out');
 const mapZoomReset = element<HTMLButtonElement>('#map-zoom-reset');
 const mapZoomIn = element<HTMLButtonElement>('#map-zoom-in');
+const mapGeojsonButton = element<HTMLButtonElement>('#map-geojson-button');
+const geojsonInput = element<HTMLInputElement>('#geojson-input');
+const geojsonImportDialog = element<HTMLDialogElement>('#geojson-import-dialog');
+const geojsonImportForm = element<HTMLFormElement>('#geojson-import-form');
+const geojsonGeocodeProperty = element<HTMLSelectElement>('#geojson-geocode-property');
+const geojsonNameProperty = element<HTMLSelectElement>('#geojson-name-property');
+const geojsonImportSummary = element<HTMLElement>('#geojson-import-summary');
+const geojsonImportClose = element<HTMLButtonElement>('#geojson-import-close');
+const geojsonImportCancel = element<HTMLButtonElement>('#geojson-import-cancel');
 const resultKicker = element<HTMLElement>('#result-kicker');
 const resultTitle = element<HTMLElement>('#result-title');
 const datasetStats = element<HTMLElement>('#dataset-stats');
@@ -344,6 +356,8 @@ let datasetFingerprint: LoadedSource | null = null;
 let activeDef: DefDefinition | null = null;
 let activeMap: TabwinMapDefinition | null = null;
 let activeMapSource = '';
+/** Parsed but not-yet-converted GeoJSON, held between file pick and property confirmation. */
+let pendingGeoJson: { source: unknown; fileName: string } | null = null;
 let mapNameByGeocode = new Map<string, string>();
 let currentPlan: QueryPlan | null = null;
 let baseResult: TabulationResult | null = null;
@@ -1504,6 +1518,55 @@ async function loadFile(file: File): Promise<void> {
   showToast(`${file.name}: ${integerFormat.format(activeMap.objects.length)} áreas carregadas`);
   if (currentResult) renderTable(currentResult);
   if (currentView === 'map') renderMap();
+}
+
+/**
+ * GeoJSON import is a separate flow from `loadFile`, not another branch in
+ * it: unlike every other format there, it needs a person to confirm which
+ * property is the geocode before anything can be converted (see
+ * `geojson-map.ts` for why that is never guessed).
+ */
+async function loadGeoJsonFile(file: File): Promise<void> {
+  if (file.size > MAX_LOCAL_INPUT_BYTES) {
+    throw new Error(`${file.name}: excede o limite local de ${formatBytes(MAX_LOCAL_INPUT_BYTES)}`);
+  }
+  const text = await file.text();
+  let source: unknown;
+  try {
+    source = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${file.name}: JSON inválido (${error instanceof Error ? error.message : String(error)})`);
+  }
+  const properties = listGeoJsonFeatureProperties(source);
+  if (!properties.length) {
+    throw new Error(`${file.name}: nenhuma feature com "properties" encontrada`);
+  }
+  pendingGeoJson = { source, fileName: file.name };
+  geojsonGeocodeProperty.replaceChildren(...properties.map((name) => new Option(name, name)));
+  geojsonNameProperty.replaceChildren(...properties.map((name) => new Option(name, name)));
+  geojsonImportSummary.textContent = `${file.name}: ${properties.length} propriedade(s) encontradas na primeira feature.`;
+  geojsonImportDialog.showModal();
+}
+
+function confirmGeoJsonImport(): void {
+  if (!pendingGeoJson) return;
+  try {
+    const map = convertGeoJsonToTabwinMap(pendingGeoJson.source, {
+      geocodeProperty: geojsonGeocodeProperty.value,
+      nameProperty: geojsonNameProperty.value,
+    });
+    activeMap = map;
+    indexActiveMapNames();
+    activeMapSource = `${pendingGeoJson.fileName} (GeoJSON)`;
+    geojsonImportDialog.close();
+    const warningNote = map.warnings.length ? ` · ${integerFormat.format(map.warnings.length)} aviso(s)` : '';
+    showToast(`${pendingGeoJson.fileName}: ${integerFormat.format(map.objects.length)} áreas convertidas${warningNote}`);
+    pendingGeoJson = null;
+    if (currentResult) renderTable(currentResult);
+    if (currentView === 'map') renderMap();
+  } catch (error) {
+    showToast(error instanceof GeoJsonMapError ? error.message : (error instanceof Error ? error.message : String(error)), true);
+  }
 }
 
 async function downloadSourceDbf(): Promise<void> {
@@ -4044,6 +4107,24 @@ element<HTMLButtonElement>('#about-button').addEventListener('click', () => abou
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());
 aboutDialog.addEventListener('click', (event) => {
   if (event.target === aboutDialog) aboutDialog.close();
+});
+mapGeojsonButton.addEventListener('click', () => geojsonInput.click());
+geojsonInput.addEventListener('change', () => {
+  const file = geojsonInput.files?.[0];
+  geojsonInput.value = '';
+  if (!file) return;
+  void loadGeoJsonFile(file).catch((error: unknown) => {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  });
+});
+geojsonImportForm.addEventListener('submit', (event) => {
+  event.preventDefault();
+  confirmGeoJsonImport();
+});
+geojsonImportClose.addEventListener('click', () => { pendingGeoJson = null; geojsonImportDialog.close(); });
+geojsonImportCancel.addEventListener('click', () => { pendingGeoJson = null; geojsonImportDialog.close(); });
+geojsonImportDialog.addEventListener('click', (event) => {
+  if (event.target === geojsonImportDialog) { pendingGeoJson = null; geojsonImportDialog.close(); }
 });
 element<HTMLButtonElement>('#catalog-button').addEventListener('click', () => {
   catalogDialog.showModal();

@@ -385,8 +385,10 @@
                 <button class="secondary-button" id="map-zoom-out" type="button" title="Afastar">−</button>
                 <button class="secondary-button" id="map-zoom-reset" type="button">Ajustar</button>
                 <button class="secondary-button" id="map-zoom-in" type="button" title="Aproximar">+</button>
+                <button class="secondary-button" id="map-geojson-button" type="button">Importar GeoJSON</button>
                 <button class="secondary-button" id="map-png-button" type="button" disabled>PNG</button>
               </div>
+              <input id="geojson-input" type="file" accept=".geojson,.json" hidden />
             </div>
             <div class="map-stage">
               <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
@@ -449,6 +451,22 @@
       <h2>TabWin Web</h2>
       <p>Uma reimplementação moderna, local e auditável dos fluxos analíticos do TabWin. Projeto independente; os resultados de compatibilidade são validados contra o TabWin 4.15.</p>
       <p class="dialog-note">Esta versão inicial já lê DBC/DBF reais, tabula campos, aplica CNV legada e abre mapas MAP no navegador.</p>
+    </dialog>
+
+    <dialog id="geojson-import-dialog">
+      <button class="dialog-close" id="geojson-import-close" type="button" aria-label="Fechar">×</button>
+      <span class="eyebrow">Mapa geográfico</span>
+      <h2>Importar GeoJSON</h2>
+      <p>Escolha, nas propriedades reais deste arquivo, qual identifica a área (o código que aparece nas linhas da tabela) e qual é o nome a mostrar. Nada é adivinhado.</p>
+      <form id="geojson-import-form" class="dialog-form">
+        <label><span>Propriedade do código (geocódigo)</span><select id="geojson-geocode-property"></select></label>
+        <label><span>Propriedade do nome</span><select id="geojson-name-property"></select></label>
+        <p class="dialog-note" id="geojson-import-summary"></p>
+        <div class="dialog-form-actions">
+          <button class="secondary-button" id="geojson-import-cancel" type="button">Cancelar</button>
+          <button class="primary-button" id="geojson-import-confirm" type="submit">Importar</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="catalog-dialog" class="catalog-dialog">

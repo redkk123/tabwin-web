@@ -1,10 +1,10 @@
 {
-  "revision": "faixa-3-4-tabulation-diff",
+  "revision": "faixa-3-3-geojson-import",
   "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 172,
-    "passed": 172,
+    "total": 184,
+    "passed": 184,
     "failed": 0,
     "command": "npm run check"
   },
@@ -185,6 +185,11 @@
     ,"tabulation-log-entry-full-result-snapshot-for-comparison"
     ,"compare-log-entry-with-current-tabulation-ui"
     ,"browser-verified-tabulation-diff-on-real-rdac2401-two-dimensional-change"
+    ,"geojson-featurecollection-to-tabwin-map-conversion"
+    ,"explicit-geocode-and-name-property-picker-no-guessing"
+    ,"multipolygon-point-and-linestring-geometry-support"
+    ,"interior-ring-conversion-with-explicit-hole-limitation-warning"
+    ,"browser-verified-geojson-import-choropleth-render-on-real-rdac2401"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",

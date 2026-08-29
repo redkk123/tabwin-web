@@ -300,6 +300,10 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
 .catalog-request-actions .primary-button { margin: 0; }
 .catalog-request-actions .secondary-button { min-height: 48px; }
 .catalog-status { min-height: 20px; margin-top: 17px; color: #5c7479; font-size: 11px; }
+.dialog-form { display: grid; gap: 13px; margin-top: 20px; }
+.dialog-form label > span:first-child { display: block; margin: 0 0 6px 2px; color: #425c65; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; font-weight: 850; }
+.dialog-form-actions { display: grid; grid-template-columns: 1fr auto; gap: 9px; align-items: center; }
+.dialog-form-actions .primary-button { margin: 0; }
 .catalog-status.error { color: #a03c33; }
 .catalog-results { display: grid; gap: 8px; margin-top: 5px; }
 .catalog-result { display: flex; align-items: center; gap: 13px; padding: 12px 13px; border: 1px solid #dce6e2; border-radius: 11px; background: #f8fbfa; }

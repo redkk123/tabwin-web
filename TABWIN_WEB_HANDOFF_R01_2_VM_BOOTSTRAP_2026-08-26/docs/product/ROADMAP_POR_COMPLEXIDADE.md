@@ -165,9 +165,38 @@ Nunca serializar especulativamente `X` nem o novo formato `N`.
 
 ### 3.3 Import geográfico GeoJSON
 
-**Esforço:** dias · **Risco:** baixo
+**Concluído em 2026-08-29.** `convertGeoJsonToTabwinMap` em
+`packages/formats/src/geojson-map.ts` converte um `FeatureCollection`
+(Polygon, MultiPolygon, LineString, Point) para o mesmo
+`TabwinMapDefinition` que o parser `.MAP` legado já produz — zero mudança
+no renderizador, no zoom/pan, na exportação PNG ou na classificação
+coroplética, porque todos já operam sobre esse modelo compartilhado.
 
-Abre a porta para mapas além dos `.MAP` empacotados. SHP e os formatos
+Deliberadamente **não adivinha** qual propriedade do GeoJSON é o geocódigo
+ou o nome — arquivos DATASUS/IBGE usam nomes de propriedade diferentes
+(`CD_MUN`, `GEOCODIGO`, `codarea`...), e adivinhar errado rotula todas as
+áreas silenciosamente. A interface lê as propriedades reais da primeira
+feature e pede para a pessoa escolher, em um diálogo novo
+(`#geojson-import-dialog`) — o mesmo princípio já aplicado em toda escolha
+de auxiliar no projeto. Feature sem valor na propriedade escolhida é
+descartada com aviso explícito, nunca some sem rastro. Anel interior de
+polígono (buraco) converte, mas emite aviso de que o modelo compartilhado
+não tem conceito de buraco e vai preencher em vez de recortar — mesma
+limitação que o próprio `.MAP` legado já tem para objetos multi-parte.
+12 testes dedicados em `tests/geojson-map.test.mjs`.
+
+Verificado em navegador real: GeoJSON de duas áreas (Porto Velho e
+Acrelândia, códigos IBGE reais) importado e depois usado como mapa
+coroplético sobre uma tabulação de `RDAC2401.dbc` de verdade —
+"2 áreas associadas" no legendário, dado batendo, sem erro no console. O
+JSON de auditoria confirma a proveniência: `source: "test-areas.geojson
+(GeoJSON)"`, `version: 0` (marcador explícito de que não veio de um
+`.MAP` legado). Evidência em
+`docs/handoffs/R09_7_GEOJSON_IMPORT_REPORT.md`.
+
+**Esforço:** dias · **Risco:** baixo · **Valor:** médio
+
+Abriu a porta para mapas além dos `.MAP` empacotados. SHP e os formatos
 históricos ficam para depois, por demanda.
 
 ### 3.4 Diff entre execuções
