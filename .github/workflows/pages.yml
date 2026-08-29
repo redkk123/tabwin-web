@@ -1,8 +1,8 @@
 name: Verify and deploy TabWin Web
 
 on:
-  # Temporarily manual: the account currently rejects ordinary runners for a
-  # billing lock. GitHub Pages is published from the isolated gh-pages branch.
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -33,6 +33,10 @@ jobs:
         run: npm ci
       - name: Verify kernel and web application
         run: npm run check
+      - name: Build production web app
+        run: npm run web:build
+        env:
+          VITE_DATASUS_PROXY_BASE: https://tabwin-web-datasus-proxy.tabwin-web.workers.dev
       - name: Configure Pages
         uses: actions/configure-pages@v6
       - name: Upload Pages artifact
