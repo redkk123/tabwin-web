@@ -1230,9 +1230,6 @@ function populateConversions(): void {
   columnConversion.replaceChildren(new Option('Valores originais', ''));
   for (const name of [...cnvByName.keys()].sort((a, b) => a.localeCompare(b))) {
     const definition = cnvByName.get(name)!;
-    // N files can be inspected and previewed, but are deliberately excluded
-    // from executable selectors until G012's duplicated category is explained.
-    if (definition.mode === 'new-format') continue;
     const label = `${name} · ${definition.categories.length} categorias`;
     rowConversion.add(new Option(label, name));
     columnConversion.add(new Option(label, name));
@@ -1243,8 +1240,8 @@ function populateConversions(): void {
     rowConversion.add(new Option(label, name));
     columnConversion.add(new Option(label, name));
   }
-  if (cnvByName.get(previousRow)?.mode !== 'new-format') rowConversion.value = previousRow;
-  if (cnvByName.get(previousColumn)?.mode !== 'new-format') columnConversion.value = previousColumn;
+  if (cnvByName.has(previousRow)) rowConversion.value = previousRow;
+  if (cnvByName.has(previousColumn)) columnConversion.value = previousColumn;
   if (lookupByName.has(previousRow)) rowConversion.value = previousRow;
   if (lookupByName.has(previousColumn)) columnConversion.value = previousColumn;
   applyDefDefaults();
@@ -1265,9 +1262,7 @@ function applyDefDefaults(): void {
     const option = optionsForRole(definition, role).find((candidate) => {
       if (candidate.field.toUpperCase() !== field.toUpperCase()) return false;
       if (candidate.kind === 'conversion') {
-        return [...cnvByName.entries()].some(
-          ([name, cnv]) => cnv.mode !== 'new-format' && baseName(name) === baseName(candidate.conversionFile),
-        );
+        return [...cnvByName.keys()].some((name) => baseName(name) === baseName(candidate.conversionFile));
       }
       if (candidate.kind === 'dbf-lookup') {
         return [...lookupByName.keys()].some((name) => baseName(name) === baseName(candidate.lookupFile));
@@ -1277,9 +1272,7 @@ function applyDefDefaults(): void {
     if (!option) return;
     if (option.kind === 'conversion') {
       position.value = String(option.startPosition);
-      const loadedName = [...cnvByName.entries()].find(
-        ([name, cnv]) => cnv.mode !== 'new-format' && baseName(name) === baseName(option.conversionFile),
-      )?.[0];
+      const loadedName = [...cnvByName.keys()].find((name) => baseName(name) === baseName(option.conversionFile));
       if (loadedName) conversion.value = loadedName;
     } else if (option.kind === 'dbf-lookup') {
       const loadedName = [...lookupByName.keys()].find((name) => baseName(name) === baseName(option.lookupFile));
@@ -2012,7 +2005,7 @@ function loadCnvIntoEditor(name: string): void {
   cnvEditorModeSelect.value = cnvEditorMode;
   cnvEditorCodeLengthInput.value = String(cnvEditorCodeLength);
   if (definition.mode === 'new-format') {
-    showToast(`${name}: formato N decodificado para inspeção; aplicar e baixar permanecem bloqueados`, true);
+    showToast(`${name}: formato N é executável, mas o editor não regrava esse layout — use como somente leitura`, true);
   }
   renderCnvEditorTable();
 }
@@ -2107,7 +2100,7 @@ function requireCnvEditorFilename(): string {
 
 function applyCnvEditor(): void {
   if (cnvEditorReadOnly) {
-    showToast('Formato N é somente leitura até a divergência do G012 ser explicada', true);
+    showToast('Formato N pode ser usado na tabulação, mas o editor não regrava esse layout', true);
     return;
   }
   const diagnostics = renderCnvEditorDiagnostics();
@@ -2124,7 +2117,7 @@ function applyCnvEditor(): void {
 
 function downloadCnvEditorFile(): void {
   if (cnvEditorReadOnly) {
-    showToast('Formato N é somente leitura e não pode ser regravado com segurança', true);
+    showToast('Formato N não pode ser regravado: só a leitura do layout está provada, não a escrita', true);
     return;
   }
   const diagnostics = renderCnvEditorDiagnostics();

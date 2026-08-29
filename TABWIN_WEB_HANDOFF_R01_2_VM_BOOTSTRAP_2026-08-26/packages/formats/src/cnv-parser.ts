@@ -76,12 +76,26 @@ function parseRuleLine(
   sourceOrder: number,
 ): { category: CnvCategory; rule: CnvRuleLine } {
   // Legacy columns (1-based): subtotal 1-3, sequence 4-7,
-  // description 10-59, codes 61+. The N layout widens the hierarchy prefix
-  // and label: prefix 1-5, sequence 6-9, description 12-111, codes 113+.
-  // All 41,897 body rows across the 89 official N files in TAB_SIH satisfy
-  // these offsets; G012 independently confirms the emitted labels and codes.
+  // description 10-59, codes 61+. The N layout widens sequence, description
+  // and codes: sequence 6-9, description 12-111, codes 113+. All 41,897 body
+  // rows across the 89 official N files in TAB_SIH satisfy these offsets.
+  //
+  // The subtotal indicator stays **4 columns wide** in N (1-4), proven by a
+  // controlled experiment against the real engine rather than inferred. The
+  // real NATJUR.CNV writes its indicators right-aligned in what looks like a
+  // 5-wide field ("   56"), so TabWin reads only "   5" and resolves the
+  // parent to sequence 5, not 56 — which is exactly why the real G012 export
+  // shows a derived "104-0" row (sequence 5) carrying 399-9's 524 records,
+  // even though no record in RDAC2401.dbc has code 1040 at all.
+  //
+  // The experiment: three byte-identical copies of NATJUR.CNV differing only
+  // in that one indicator, each predicting a different visible row under the
+  // 3-, 4- and 5-column readings. Writing "  105" moved the derived 524 to
+  // "110-4 Autarquia Federal" (sequence 10 = "  10"), which only the 4-column
+  // reading predicts; the 104-0 row disappeared and the total stayed 4,315.
+  // Evidence in docs/handoffs/R10_6_G012_SUBTOTAL_WIDTH_RESOLVED.md.
   const isNew = mode === 'new-format';
-  const subtotalRaw = body.slice(0, isNew ? 5 : 3).trim();
+  const subtotalRaw = body.slice(0, isNew ? 4 : 3).trim();
   const sequenceRaw = body.slice(isNew ? 5 : 3, isNew ? 9 : 7).trim();
   const label = body.slice(isNew ? 11 : 9, isNew ? 111 : 59).trim();
   const codesRaw = body.slice(isNew ? 112 : 60).trim();
@@ -99,14 +113,15 @@ function parseRuleLine(
 
   let subtotalTarget: number | undefined;
   let excludeFromTotal = false;
-  // The widened prefix is visibly hierarchical metadata, but G012 proves it
-  // does not behave like legacy computed subtotals: its parent rows remain
-  // absent with zero suppression. Do not map an unproved N prefix onto the
-  // legacy subtotalTarget execution semantic.
-  if (subtotalRaw && !isNew) {
+  if (subtotalRaw) {
     if (subtotalRaw === '#') excludeFromTotal = true;
-    else if (/^\d+$/.test(subtotalRaw)) subtotalTarget = Number(subtotalRaw);
-    else throw new CnvParseError('invalid subtotal field', sourceLine);
+    // "0" is what a truncated N indicator degrades to (e.g. "   01" read as
+    // "   0"). Sequence 0 never exists, so treat it as "no parent" rather
+    // than as a dangling pointer warning on every such row.
+    else if (/^\d+$/.test(subtotalRaw)) {
+      const target = Number(subtotalRaw);
+      if (target > 0) subtotalTarget = target;
+    } else throw new CnvParseError('invalid subtotal field', sourceLine);
   }
 
   const category: CnvCategory = {
@@ -261,7 +276,7 @@ export function parseCnv(text: string, options: ParseCnvOptions = {}): CnvDefini
   }
   if (header.mode === 'new-format') {
     warnings.push(
-      'new-format N fixed columns were decoded, but its hierarchy prefix and G012 duplicated category remain non-executable',
+      'new-format N layout: fixed columns and the 4-wide subtotal indicator are proven by G012; writing this layout back out is still refused',
     );
   }
 

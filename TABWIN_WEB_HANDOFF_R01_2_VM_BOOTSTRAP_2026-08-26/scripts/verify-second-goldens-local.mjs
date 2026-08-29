@@ -109,7 +109,7 @@ const [rdDef, spDef, january, february, procedures, hospitalRows] = await Promis
   records('RDAC2402.dbc'), records('SPAC2401.dbc'), dbfRecords(path.join('DBF', 'TCNESAC.DBF')),
 ]);
 const conversions = new Map();
-for (const name of ['BR_PNDR.CNV', 'BR_CAPITAL.CNV', 'BR_REGIAOUF.CNV', 'CID10CAP.CNV', 'COMPLEX2.CNV', 'CARATEND.CNV']) {
+for (const name of ['BR_PNDR.CNV', 'BR_CAPITAL.CNV', 'BR_REGIAOUF.CNV', 'CID10CAP.CNV', 'COMPLEX2.CNV', 'CARATEND.CNV', 'NATJUR.CNV']) {
   conversions.set(name.toUpperCase(), await conversion(name));
 }
 
@@ -160,6 +160,12 @@ const cases = [
         filterFromDefOption(option(rdDef, 'selection', 'Complexidade do Procedimento'), [3]),
       ],
     },
+  },
+  {
+    // G012: new-format N. Its "104-0" row holds no records of its own; it is
+    // the subtotal parent 399-9 rolls into, via the 4-column indicator.
+    id: 'G012', records: january, checkTotal: true,
+    spec: { rows: dimension(rdDef, 'Natureza Jurídica'), measure: { kind: 'count' }, filters: [], suppressZeroRows: true },
   },
   {
     id: 'G021', records: [...january, ...february],

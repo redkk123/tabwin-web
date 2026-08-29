@@ -52,9 +52,11 @@ function getConversion(registry: ConversionRegistry, id: string): CnvDefinition 
   const definition = registry[id];
   if (!definition) throw new Error(`missing conversion: ${id}`);
   if ('kind' in definition) throw new Error(`resource ${id} is a DBF lookup, not a CNV conversion`);
-  if (definition.mode === 'new-format') {
-    throw new Error(`new-format N conversion ${id} is decoded for inspection but not executable until G012 is explained`);
-  }
+  // The N layout was unblocked once G012's derived row was explained by a
+  // controlled experiment: its subtotal indicator is 4 columns wide, and the
+  // row it produces is ordinary subtotal propagation, not an anomaly. Writing
+  // an N file back out is still refused (see cnv-serializer.ts) — reading and
+  // executing are proven, round-tripping the layout is not.
   return definition;
 }
 

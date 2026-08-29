@@ -56,9 +56,12 @@
     ]
   },
   "comparison": {
-    "status": "captured-not-yet-executable",
-    "tolerance": null,
-    "pass": null,
-    "blocker": "new-format N CNV execution"
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "seen": 4315,
+    "accepted": 4315,
+    "cellDiffCount": 0,
+    "pass": true,
+    "notes": "New-format N subtotal indicator proven 4 columns wide by controlled experiment against the real engine (see R10_6). The \"104-0\" row carries 399-9's 524 records as an ordinary subtotal rollup and is excluded from the total, exactly as G010 established. Reproduced cell-for-cell."
   }
 }

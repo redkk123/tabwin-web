@@ -1,10 +1,10 @@
 {
-  "revision": "chatgpt-audit-round1-g017-hardening-worker-fix-g012-tool",
+  "revision": "g012-resolved-new-format-subtotal-indicator",
   "date": "2026-08-29",
   "phase": "golden-driven-compatibility-progression",
   "tests": {
-    "total": 241,
-    "passed": 241,
+    "total": 242,
+    "passed": 242,
     "failed": 0,
     "command": "npm run check"
   },
@@ -231,7 +231,10 @@
     "measure-equals-measures0-invariant-enforced",
     "worker-recovery-preserves-appended-binary-sources-after-csv-combine",
     "worker-crash-vs-application-error-distinguished-with-auto-restore",
-    "read-only-new-format-cnv-inspector-tool"
+    "read-only-new-format-cnv-inspector-tool",
+    "new-format-cnv-subtotal-indicator-is-four-columns-proven-by-experiment",
+    "new-format-cnv-executable-not-writable",
+    "real-g012-new-format-golden-equivalence"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -251,7 +254,6 @@
   },
   "explicitly_partial_or_unsupported": [
     "automatic-auxiliary-rules-outside-verified-sih-rd",
-    "new-N-format-CNV-hierarchy-and-duplicated-G012-category-semantics",
     "DEF-X-directive-semantics",
     "TAB-replay",
     "advanced-chart-editing-axes-zoom-and-print",
@@ -274,8 +276,8 @@
     "sinan-def-cnv-and-tabnet-dimension-registry",
     "message-driven-cancellation-of-an-in-flight-synchronous-decode",
     "g009-protocol-requested-RD-file-through-an-AIH_MA-definition",
-    "g012-new-format-N-duplicated-category-semantics",
-    "g017-multiple-measures-in-one-tabulation"
+    "g017-multiple-measures-in-one-tabulation",
+    "new-format-N-cnv-serialization-write-path"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -329,13 +331,13 @@
       "G015",
       "G018",
       "G021",
-      "G017"
-    ],
-    "evidence_only_or_blocked": [
-      "G009",
+      "G017",
       "G012"
     ],
+    "evidence_only_or_blocked": [
+      "G009"
+    ],
     "tolerance": 0,
-    "notes": "G003 compares at VAL_TOT declared 2 decimals. G017 (multiple simultaneous measures) implemented and verified against the real capture at the same 2-decimal precision. Eight second-batch cases pass at zero tolerance. G009 proves a capture-protocol mismatch; G012 remains evidence-preserving, non-executable pending an explanation for its duplicated category."
+    "notes": "G003 e G017 comparam na precisao declarada de VAL_TOT (2 casas). Todos os 14 goldens capturados passam com tolerancia zero. G009 continua sendo erro de protocolo de captura, nao do motor: AIH_MA.DEF nao combina com RD*.DBC."
   }
 }

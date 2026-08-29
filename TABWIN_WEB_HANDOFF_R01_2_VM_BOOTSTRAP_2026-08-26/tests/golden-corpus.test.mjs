@@ -118,13 +118,13 @@ test('every committed golden records a passing zero-tolerance comparison and its
 });
 
 const SECOND_BATCH_WITH_TABLES = ['G006', 'G008', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
-const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G010', 'G014', 'G015', 'G017', 'G018', 'G021'];
+const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
 
 test('every second-batch normalized table agrees cell-for-cell with its original BIFF export', async () => {
   for (const id of SECOND_BATCH_WITH_TABLES) await assertGoldenAgreesWithExport(id);
 });
 
-test('the eight executable second-batch cases record zero-tolerance passes and decisive totals', async () => {
+test('every second-batch case now executes and records a zero-tolerance pass', async () => {
   for (const id of SECOND_BATCH_VERIFIED) {
     const { manifest } = await readCase(id);
     assert.equal(manifest.comparison.status, 'verified-zero-tolerance', `${id}: verification status`);
@@ -145,11 +145,19 @@ test('the eight executable second-batch cases record zero-tolerance passes and d
   assert.equal(g021.manifest.comparison.seen, 8631, 'both months are combined');
 });
 
-test('G012 preserves new oracle evidence without pretending unsupported semantics pass', async () => {
-  const { manifest } = await readCase('G012');
-  assert.equal(manifest.comparison.status, 'captured-not-yet-executable');
-  assert.equal(manifest.comparison.pass, null);
-  assert.ok(manifest.comparison.blocker);
+test('G012 reproduces the derived subtotal row the real engine emits from a truncated N indicator', async () => {
+  const { golden, manifest } = await readCase('G012');
+  // 104-0 carries no records of its own: RDAC2401.dbc has zero rows with code
+  // 1040. It shows 524 because 399-9's records roll into it through the
+  // new-format subtotal indicator, which TabWin reads 4 columns wide.
+  assert.deepEqual(golden.rows.map((row) => row.label.slice(0, 5)), ['102-3', '104-0', '114-7', '399-9']);
+  assert.deepEqual(golden.cells, [[3282], [524], [509], [524]]);
+  assert.equal(golden.cells[1][0], golden.cells[3][0], '104-0 mirrors 399-9 because it is that row subtotal parent');
+  // The displayed cells sum to 4839, but TabWin's own total stays 4315:
+  // a subtotal row is presentation, not extra records.
+  assert.equal(golden.cells.reduce((sum, row) => sum + row[0], 0), 4839);
+  assert.equal(manifest.tabwinPresentation.tabwinTotals[0], 4315);
+  assert.equal(manifest.comparison.pass, true);
 });
 
 test('second-batch manifests hash the evidence bytes they name, and G009 records the protocol blocker', async () => {

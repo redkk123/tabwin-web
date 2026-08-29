@@ -357,17 +357,44 @@ test('DEF DBF lookup materializes ordered labels and zero rows without guessing'
   assert.deepEqual(result.cells, [[0], [2]]);
 });
 
-test('new-format N conversions stay non-executable while their G012 anomaly is unresolved', () => {
-  const nrow = (sequence, label, codes) => `${''.padStart(5)}${String(sequence).padStart(4)}  ${label.padEnd(100)} ${codes}`;
-  const cnv = parseCnv(['N 1 4', nrow(1, 'Uma categoria', '1023')].join('\n'));
+test('new-format N conversions execute, and their 4-column subtotal indicator rolls children into the parent', () => {
+  // The indicator occupies columns 1-4 in N, proven against the real engine
+  // (see R10_6). A file writing "   56" right-aligned therefore resolves to
+  // sequence 5, not 56 — the exact mechanism behind G012's derived row.
+  const nrow = (indicator, sequence, label, codes) =>
+    `${indicator.padStart(5)}${String(sequence).padStart(4)}  ${label.padEnd(100)} ${codes}`;
+  const cnv = parseCnv([
+    'N 3 4',
+    nrow('', 1, 'Pai', '9999'),
+    nrow('', 2, 'Outro', '8888'),
+    // Written right-aligned in 5 as the real files do: "   10" is read as
+    // "   1" under the 4-column rule, so this points at sequence 1, not 10.
+    nrow('10', 3, 'Filho', '1023'),
+  ].join('\n'));
+  assert.equal(cnv.mode, 'new-format');
+  assert.equal(cnv.categories.find((c) => c.sequence === 3)?.subtotalTarget, 1);
+
   const plan = compileQueryPlan({
     compatibilityProfile: 'tabwin-4.15', rows: { field: 'NAT', conversionId: 'NATJUR.CNV' },
-    measure: { kind: 'count' }, filters: [],
+    measure: { kind: 'count' }, filters: [], suppressZeroRows: true,
   });
-  assert.throws(
-    () => executeInMemory([{ NAT: '1023' }], plan, { 'NATJUR.CNV': cnv }),
-    /decoded for inspection but not executable until G012 is explained/,
-  );
+  const result = executeInMemory([{ NAT: '1023' }, { NAT: '1023' }], plan, { 'NATJUR.CNV': cnv });
+  // Both the child and its subtotal parent show 2; only the child's 2 counts
+  // toward the total, exactly as G010 established for the legacy layout.
+  assert.deepEqual(result.rows.map((row) => row.label), ['Pai', 'Filho']);
+  assert.deepEqual(result.cells, [[2], [2]]);
+  assert.equal(result.rows[0]?.excludeFromTotal, true);
+  assert.equal(result.rows[1]?.excludeFromTotal, undefined);
+});
+
+test('an N indicator that degrades to zero means "no parent", not a dangling pointer', () => {
+  // A file writing "   01" is read as "   0" under the 4-column rule. Sequence
+  // 0 never exists, so the row simply has no subtotal parent.
+  const nrow = (indicator, sequence, label, codes) =>
+    `${indicator.padStart(5)}${String(sequence).padStart(4)}  ${label.padEnd(100)} ${codes}`;
+  const cnv = parseCnv(['N 2 4', nrow('', 1, 'Grupo', '1000-1999'), nrow('   01', 2, 'Filho', '1023')].join('\n'));
+  assert.equal(cnv.categories.find((c) => c.sequence === 2)?.subtotalTarget, undefined);
+  assert.deepEqual(cnv.warnings.filter((w) => /subtotal target/.test(w)), []);
 });
 
 test('golden comparator requires exact labels, shape and cells by default', () => {
