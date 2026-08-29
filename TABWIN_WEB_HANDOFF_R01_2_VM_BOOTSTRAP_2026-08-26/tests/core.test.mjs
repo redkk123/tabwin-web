@@ -239,6 +239,21 @@ test('analysis recipe parsing rejects structurally invalid plans and fingerprint
   assert.throws(() => parseRecipe(JSON.stringify({
     schema: 'tabwin-web.recipe', version: 1,
     spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { chartFontFamily: 'comic-sans', chartPrimaryColor: 'green' },
+  })), /invalid chart font/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { chartPrimaryColor: 'green' },
+  })), /invalid chart primary color/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [], view: { chartDecimalPlaces: 9 },
+  })), /invalid chart decimal places/);
+  assert.throws(() => parseRecipe(JSON.stringify({
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
     conversions: [], sourceHints: [], view: { mapClassification: 'natural-breaks', mapClassCount: 20 },
   })), /invalid map classification/);
   assert.throws(() => parseRecipe(JSON.stringify({

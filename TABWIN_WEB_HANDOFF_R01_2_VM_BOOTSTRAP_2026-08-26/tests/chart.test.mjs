@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { arrowDataFromResult, chartDataFromResult } from '../dist/packages/visualization/src/chart-model.js';
+import { arrowDataFromResult, chartDataFromResult, scatterDataFromResult } from '../dist/packages/visualization/src/chart-model.js';
 
 const result = {
   rows: [{ key: 'a', label: 'Alpha' }, { key: 'b', label: 'Beta' }, { key: 'c', label: 'Gamma' }],
@@ -23,3 +23,12 @@ test('arrow model compares first and last columns and ranks by change', () => {
   assert.deepEqual(arrowDataFromResult({ ...result, columns: result.columns.slice(0, 1) }, 3), []);
 });
 
+
+
+test('scatter model binds x/y to explicit result columns without changing row totals', () => {
+  const scatter = scatterDataFromResult(result, '2024', '2025', 10);
+  assert.deepEqual(scatter.map((item) => [item.label, item.x, item.y, item.value]), [
+    ['Alpha', 2, 5, 7], ['Beta', 10, 1, 11], ['Gamma', 3, 3, 6],
+  ]);
+  assert.deepEqual(scatterDataFromResult(result, 'missing', '2025', 10), []);
+});

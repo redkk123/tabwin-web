@@ -30,6 +30,17 @@ export interface AnalysisRecipeV1 {
   resultOperations?: TableOperation[];
   view?: {
     chartType?: 'horizontal-bar' | 'vertical-bar' | 'line' | 'area' | 'pie' | 'points' | 'bubbles' | 'arrows';
+    chartTitle?: string;
+    chartSubtitle?: string;
+    chartFontFamily?: 'system' | 'serif' | 'monospace';
+    chartPrimaryColor?: string;
+    chartAccentColor?: string;
+    chartBackgroundColor?: string;
+    chartShowLegend?: boolean;
+    chartShowValueLabels?: boolean;
+    chartDecimalPlaces?: number;
+    chartXColumnKey?: string;
+    chartYColumnKey?: string;
     mapClassification?: 'continuous' | 'equal-interval' | 'quantile';
     mapClassCount?: number;
     mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
@@ -128,6 +139,45 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   const allowedChartTypes = new Set(['horizontal-bar', 'vertical-bar', 'line', 'area', 'pie', 'points', 'bubbles', 'arrows']);
   if (parsed.view?.chartType && !allowedChartTypes.has(parsed.view.chartType)) {
     throw new Error('invalid chart type in TabWin Web recipe');
+  }
+  const allowedChartFonts = new Set(['system', 'serif', 'monospace']);
+  if (parsed.view?.chartFontFamily !== undefined && !allowedChartFonts.has(parsed.view.chartFontFamily)) {
+    throw new Error('invalid chart font in TabWin Web recipe');
+  }
+  for (const [name, value, maximum] of [
+    ['title', parsed.view?.chartTitle, 160],
+    ['subtitle', parsed.view?.chartSubtitle, 240],
+  ] as const) {
+    if (value !== undefined && (typeof value !== 'string' || value.length > maximum)) {
+      throw new Error(`invalid chart ${name} in TabWin Web recipe`);
+    }
+  }
+  for (const [name, value] of [
+    ['primary color', parsed.view?.chartPrimaryColor],
+    ['accent color', parsed.view?.chartAccentColor],
+    ['background color', parsed.view?.chartBackgroundColor],
+  ] as const) {
+    if (value !== undefined && (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value))) {
+      throw new Error(`invalid chart ${name} in TabWin Web recipe`);
+    }
+  }
+  if (parsed.view?.chartShowLegend !== undefined && typeof parsed.view.chartShowLegend !== 'boolean') {
+    throw new Error('invalid chart legend visibility in TabWin Web recipe');
+  }
+  if (parsed.view?.chartShowValueLabels !== undefined && typeof parsed.view.chartShowValueLabels !== 'boolean') {
+    throw new Error('invalid chart value-label visibility in TabWin Web recipe');
+  }
+  if (parsed.view?.chartDecimalPlaces !== undefined
+    && (!Number.isInteger(parsed.view.chartDecimalPlaces) || parsed.view.chartDecimalPlaces < 0 || parsed.view.chartDecimalPlaces > 6)) {
+    throw new Error('invalid chart decimal places in TabWin Web recipe');
+  }
+  for (const [name, value] of [
+    ['x binding', parsed.view?.chartXColumnKey],
+    ['y binding', parsed.view?.chartYColumnKey],
+  ] as const) {
+    if (value !== undefined && (typeof value !== 'string' || !value)) {
+      throw new Error(`invalid chart ${name} in TabWin Web recipe`);
+    }
   }
   const allowedMapClassifications = new Set(['continuous', 'equal-interval', 'quantile']);
   if (parsed.view?.mapClassification && !allowedMapClassifications.has(parsed.view.mapClassification)) {

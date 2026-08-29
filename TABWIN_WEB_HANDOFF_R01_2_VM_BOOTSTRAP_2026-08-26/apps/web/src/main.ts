@@ -87,7 +87,7 @@ import {
   type CachedArchiveRole,
   type CachedArchiveSummary,
 } from './archive-cache.ts';
-import { renderChartSvg } from './chart-renderer.ts';
+import { renderChartSvg, type ChartFontFamily } from './chart-renderer.ts';
 import type { ChartType } from '../../../packages/visualization/src/chart-model.ts';
 import {
   createMapScale,
@@ -256,6 +256,19 @@ const exportXmlButton = element<HTMLButtonElement>('#export-xml-button');
 const chartPngButton = element<HTMLButtonElement>('#chart-png-button');
 const chartSvgButton = element<HTMLButtonElement>('#chart-svg-button');
 const chartType = element<HTMLSelectElement>('#chart-type');
+const chartTitle = element<HTMLInputElement>('#chart-title');
+const chartSubtitle = element<HTMLInputElement>('#chart-subtitle');
+const chartFontFamily = element<HTMLSelectElement>('#chart-font-family');
+const chartDecimals = element<HTMLSelectElement>('#chart-decimals');
+const chartPrimaryColor = element<HTMLInputElement>('#chart-primary-color');
+const chartAccentColor = element<HTMLInputElement>('#chart-accent-color');
+const chartBackgroundColor = element<HTMLInputElement>('#chart-background-color');
+const chartShowValues = element<HTMLInputElement>('#chart-show-values');
+const chartShowLegend = element<HTMLInputElement>('#chart-show-legend');
+const chartXBindingLabel = element<HTMLElement>('#chart-x-binding-label');
+const chartYBindingLabel = element<HTMLElement>('#chart-y-binding-label');
+const chartXBinding = element<HTMLSelectElement>('#chart-x-binding');
+const chartYBinding = element<HTMLSelectElement>('#chart-y-binding');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
 const mapClassCount = element<HTMLSelectElement>('#map-class-count');
@@ -2471,6 +2484,7 @@ function renderResult(): void {
   tableWrap.scrollTop = 0;
   renderTable(currentResult);
   updateTableOperationControls();
+  populateChartBindings(currentResult);
   renderChart(currentResult);
   populateStatisticsColumns(currentResult);
   renderStatistics();
@@ -2879,9 +2893,50 @@ function renderTable(result: TabulationResult): void {
   }
 }
 
+function populateChartBindings(result: TabulationResult): void {
+  const previousX = chartXBinding.value;
+  const previousY = chartYBinding.value;
+  chartXBinding.replaceChildren(new Option('Automático', ''));
+  chartYBinding.replaceChildren(new Option('Automático', ''));
+  for (const column of result.columns) {
+    chartXBinding.append(new Option(column.label, column.key));
+    chartYBinding.append(new Option(column.label, column.key));
+  }
+  if ([...chartXBinding.options].some((option) => option.value === previousX)) chartXBinding.value = previousX;
+  if ([...chartYBinding.options].some((option) => option.value === previousY)) chartYBinding.value = previousY;
+  updateChartBindingControls();
+}
+
+function updateChartBindingControls(): void {
+  const enabled = chartType.value === 'points' || chartType.value === 'bubbles';
+  chartXBinding.disabled = !enabled;
+  chartYBinding.disabled = !enabled;
+  chartXBindingLabel.toggleAttribute('data-disabled', !enabled);
+  chartYBindingLabel.toggleAttribute('data-disabled', !enabled);
+}
+
 function renderChart(result: TabulationResult): void {
+  const type = chartType.value as ChartType;
   chart.replaceChildren();
-  chart.append(renderChartSvg(result, chartType.value as ChartType, resultTitle.textContent ?? rowField.value));
+  chart.append(renderChartSvg(
+    result,
+    type,
+    resultTitle.textContent ?? rowField.value,
+    {
+      title: chartTitle.value,
+      subtitle: chartSubtitle.value,
+      fontFamily: chartFontFamily.value as ChartFontFamily,
+      primaryColor: chartPrimaryColor.value,
+      accentColor: chartAccentColor.value,
+      backgroundColor: chartBackgroundColor.value,
+      showLegend: chartShowLegend.checked,
+      showValueLabels: chartShowValues.checked,
+      decimalPlaces: Number(chartDecimals.value),
+      ...((type === 'points' || type === 'bubbles') && chartXBinding.value && chartYBinding.value
+        ? { xColumnKey: chartXBinding.value, yColumnKey: chartYBinding.value }
+        : {}),
+    },
+  ));
 }
 
 function populateStatisticsColumns(result: TabulationResult): void {
@@ -4164,6 +4219,17 @@ function saveRecipe(): void {
     ...(tableOperations.length ? { resultOperations: tableOperations } : {}),
     view: {
       chartType: chartType.value as ChartType,
+      chartTitle: chartTitle.value.trim(),
+      chartSubtitle: chartSubtitle.value.trim(),
+      chartFontFamily: chartFontFamily.value as ChartFontFamily,
+      chartPrimaryColor: chartPrimaryColor.value,
+      chartAccentColor: chartAccentColor.value,
+      chartBackgroundColor: chartBackgroundColor.value,
+      chartShowLegend: chartShowLegend.checked,
+      chartShowValueLabels: chartShowValues.checked,
+      chartDecimalPlaces: Number(chartDecimals.value),
+      ...(chartXBinding.value ? { chartXColumnKey: chartXBinding.value } : {}),
+      ...(chartYBinding.value ? { chartYColumnKey: chartYBinding.value } : {}),
       mapClassification: mapClassification.value as MapClassification,
       mapClassCount: Number(mapClassCount.value),
       mapPalette: mapPalette.value as MapPalette,
@@ -4353,6 +4419,15 @@ async function openRecipe(file: File): Promise<void> {
   discriminateUnclassified.checked = recipe.spec.rows.unclassifiedPolicy === 'discriminate';
   discriminateColumnUnclassified.checked = recipe.spec.columns?.unclassifiedPolicy === 'discriminate';
   if (recipe.view?.chartType) chartType.value = recipe.view.chartType;
+  if (recipe.view?.chartTitle !== undefined) chartTitle.value = recipe.view.chartTitle;
+  if (recipe.view?.chartSubtitle !== undefined) chartSubtitle.value = recipe.view.chartSubtitle;
+  if (recipe.view?.chartFontFamily) chartFontFamily.value = recipe.view.chartFontFamily;
+  if (recipe.view?.chartPrimaryColor) chartPrimaryColor.value = recipe.view.chartPrimaryColor;
+  if (recipe.view?.chartAccentColor) chartAccentColor.value = recipe.view.chartAccentColor;
+  if (recipe.view?.chartBackgroundColor) chartBackgroundColor.value = recipe.view.chartBackgroundColor;
+  if (recipe.view?.chartShowLegend !== undefined) chartShowLegend.checked = recipe.view.chartShowLegend;
+  if (recipe.view?.chartShowValueLabels !== undefined) chartShowValues.checked = recipe.view.chartShowValueLabels;
+  if (recipe.view?.chartDecimalPlaces !== undefined) chartDecimals.value = String(recipe.view.chartDecimalPlaces);
   if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
@@ -4419,6 +4494,15 @@ async function openRecipe(file: File): Promise<void> {
     const yIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsYColumnKey);
     if (xIndex >= 0) statisticsX.value = String(xIndex);
     if (yIndex >= 0) statisticsY.value = String(yIndex);
+    if (recipe.view?.chartXColumnKey
+      && [...chartXBinding.options].some((option) => option.value === recipe.view?.chartXColumnKey)) {
+      chartXBinding.value = recipe.view.chartXColumnKey;
+    }
+    if (recipe.view?.chartYColumnKey
+      && [...chartYBinding.options].some((option) => option.value === recipe.view?.chartYColumnKey)) {
+      chartYBinding.value = recipe.view.chartYColumnKey;
+    }
+    renderChart(currentResult);
     renderStatistics();
   }
   const expectedSources = recipe.sourceHints
@@ -4806,8 +4890,20 @@ tableRowAggregate.addEventListener('click', () => {
   } catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
 });
 chartType.addEventListener('change', () => {
+  updateChartBindingControls();
   if (currentResult) renderChart(currentResult);
 });
+for (const control of [chartTitle, chartSubtitle, chartPrimaryColor, chartAccentColor, chartBackgroundColor]) {
+  control.addEventListener('input', () => {
+    if (currentResult) renderChart(currentResult);
+  });
+}
+for (const control of [chartFontFamily, chartDecimals, chartShowValues, chartShowLegend, chartXBinding, chartYBinding]) {
+  control.addEventListener('change', () => {
+    if (currentResult) renderChart(currentResult);
+  });
+}
+updateChartBindingControls();
 for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins]) {
   control.addEventListener('change', renderStatistics);
 }

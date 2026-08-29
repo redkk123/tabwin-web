@@ -216,6 +216,15 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .chart-toolbar label { min-width: min(280px, 60%); }
 .chart-toolbar label > span { display: block; margin: 0 0 5px 2px; color: #60757b; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .chart-toolbar select { min-height: 38px; }
+.chart-editor { margin: 0 0 12px; padding: 12px; border: 1px solid #dce8e4; border-radius: 12px; background: #f8fbfa; }
+.chart-editor-grid { display: grid; grid-template-columns: repeat(4,minmax(120px,1fr)); gap: 8px; align-items: end; }
+.chart-editor-grid label { display: grid; gap: 4px; min-width: 0; color: #60757b; font-size: 9px; font-weight: 750; }
+.chart-editor-grid input,.chart-editor-grid select { min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #d5e0dd; border-radius: 8px; color: var(--ink); background: #fff; }
+.chart-editor-grid input[type="color"] { width: 100%; padding: 3px; cursor: pointer; }
+.chart-editor-grid .chart-toggle { min-height: 34px; display: flex; align-items: center; gap: 7px; padding: 0 4px; white-space: nowrap; }
+.chart-editor-grid .chart-toggle input { width: auto; min-height: 0; }
+.chart-editor-grid label[data-disabled] { opacity: .48; }
+.chart-editor .compatibility-note { margin: 9px 2px 0; }
 .result-chart-svg { display: block; width: 100%; height: auto; min-height: 360px; border-radius: 12px; background: #fff; }
 .result-chart-svg .chart-label { fill: #3c5861; font: 12px system-ui, sans-serif; }
 .result-chart-svg .chart-value { fill: #102c39; font: 700 12px system-ui, sans-serif; }
@@ -402,6 +411,7 @@ dialog p { color: #60757b; font-size: 13px; line-height: 1.6; }
   .bar-row { grid-template-columns: 90px 1fr 62px; gap: 8px; }
   .chart-toolbar { align-items: stretch; flex-direction: column; }
   .chart-toolbar label { width: 100%; min-width: 0; }
+  .chart-editor-grid { grid-template-columns: 1fr 1fr; }
   .statistics-toolbar { grid-template-columns: 1fr 1fr; }
   .table-operation-heading { align-items: flex-start; }
   .table-operation-grid { grid-template-columns: 1fr; }

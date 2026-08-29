@@ -353,6 +353,13 @@ mesmo sendo longo, porque é o que autoriza a palavra "compatível".
 
 **Esforço:** semanas · **Risco:** médio
 
+**Estado em 2026-08-29: EM ANDAMENTO.** O corte inicial do ChatGPT adicionou
+título/subtítulo, família de fonte, cores, fundo, casas decimais, legenda,
+rótulos e bindings X/Y explícitos para pontos/bolhas, com persistência em
+`.twrecipe`. Eixos/limites, zoom/reset, impressão por família, legenda
+multissérie completa e snapshots visuais continuam pendentes. Handoff em
+`docs/handoffs/R10_4_CHART_EDITOR_CHATGPT_START.md`.
+
 Títulos, fontes, legenda, cores, rótulos, ligação x/y para dispersão e bolhas,
 eixos, limites, zoom, impressão por família.
 
@@ -400,6 +407,13 @@ E a regra dura: **provar igualdade com `resolvePlanRecord`** antes de
 substituí-lo.
 
 ### 4.8 Testes end-to-end com Playwright
+
+**Fundação adicionada na auditoria do snapshot 5879760 (não conclui 4.8):**
+contrato zero-dependency de seletores críticos em
+`scripts/verify-e2e-contract.mjs`, executado pelo gate, e plano da primeira
+bateria em `docs/testing/PLAYWRIGHT_E2E_FOUNDATION.md`. O runner/browser ainda
+não foi adicionado porque este ambiente de auditoria não conseguiu instalar
+novas dependências; não marcar como concluído até E2E-001..003 rodarem de fato.
 
 **Esforço:** semanas · **Risco:** baixo · **Valor:** alto
 

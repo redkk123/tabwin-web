@@ -14,6 +14,11 @@ export interface ArrowDatum extends ChartDatum {
   end: number;
 }
 
+export interface ScatterDatum extends ChartDatum {
+  x: number;
+  y: number;
+}
+
 export interface ChartDataOptions {
   limit: number;
   order: 'ranked' | 'source';
@@ -36,6 +41,30 @@ export function chartDataFromResult(
   return data.slice(0, Math.max(0, options.limit));
 }
 
+/**
+ * Derives an explicit x/y series from two result columns without mutating the
+ * underlying TabulationResult. This is intentionally a presentation binding:
+ * it does not alter the query plan or the table used by exports/audit.
+ */
+export function scatterDataFromResult(
+  result: TabulationResult,
+  xColumnKey: string,
+  yColumnKey: string,
+  limit = 100,
+): ScatterDatum[] {
+  const xIndex = result.columns.findIndex((column) => column.key === xColumnKey);
+  const yIndex = result.columns.findIndex((column) => column.key === yColumnKey);
+  if (xIndex < 0 || yIndex < 0) return [];
+  return chartDataFromResult(result, { limit: result.rows.length, order: 'source' })
+    .map((item) => ({
+      ...item,
+      x: item.values[xIndex] ?? 0,
+      y: item.values[yIndex] ?? 0,
+    }))
+    .filter((item) => Number.isFinite(item.x) && Number.isFinite(item.y))
+    .slice(0, Math.max(0, limit));
+}
+
 export function arrowDataFromResult(result: TabulationResult, limit: number): ArrowDatum[] {
   if (result.columns.length < 2) return [];
   return chartDataFromResult(result, { limit: result.rows.length, order: 'source' })
@@ -47,4 +76,3 @@ export function arrowDataFromResult(result: TabulationResult, limit: number): Ar
     .sort((a, b) => Math.abs(b.end - b.start) - Math.abs(a.end - a.start) || a.label.localeCompare(b.label))
     .slice(0, Math.max(0, limit));
 }
-

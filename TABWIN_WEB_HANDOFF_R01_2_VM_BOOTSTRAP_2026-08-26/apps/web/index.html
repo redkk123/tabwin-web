@@ -379,6 +379,26 @@
                 <button class="secondary-button" id="chart-png-button" type="button" disabled>PNG</button>
               </div>
             </div>
+            <section class="chart-editor" aria-label="Editor de gráfico">
+              <div class="chart-editor-grid">
+                <label>Título<input id="chart-title" type="text" maxlength="160" placeholder="Título opcional" /></label>
+                <label>Subtítulo<input id="chart-subtitle" type="text" maxlength="240" placeholder="Subtítulo opcional" /></label>
+                <label>Fonte<select id="chart-font-family">
+                  <option value="system">Sistema</option><option value="serif">Serifada</option><option value="monospace">Monoespaçada</option>
+                </select></label>
+                <label>Casas decimais<select id="chart-decimals">
+                  <option>0</option><option>1</option><option selected>2</option><option>3</option><option>4</option><option>5</option><option>6</option>
+                </select></label>
+                <label>Cor principal<input id="chart-primary-color" type="color" value="#178b71" /></label>
+                <label>Cor de destaque<input id="chart-accent-color" type="color" value="#f16f5f" /></label>
+                <label>Fundo<input id="chart-background-color" type="color" value="#ffffff" /></label>
+                <label class="chart-toggle"><input id="chart-show-values" type="checkbox" checked /> Rótulos de valor</label>
+                <label class="chart-toggle"><input id="chart-show-legend" type="checkbox" /> Legenda</label>
+                <label id="chart-x-binding-label">Eixo X<select id="chart-x-binding"><option value="">Automático</option></select></label>
+                <label id="chart-y-binding-label">Eixo Y<select id="chart-y-binding"><option value="">Automático</option></select></label>
+              </div>
+              <p class="compatibility-note">Controles de apresentação modernos. X/Y explícitos só se aplicam a Pontos e Bolhas; sem ambos, preserva-se a apresentação por ordem das linhas.</p>
+            </section>
             <div class="chart" id="chart"></div>
           </div>
 
