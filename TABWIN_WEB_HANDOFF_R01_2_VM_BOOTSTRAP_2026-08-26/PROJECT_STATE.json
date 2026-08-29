@@ -1,10 +1,10 @@
 {
-  "revision": "faixa-3-1-l3-result-cache",
+  "revision": "faixa-3-4-tabulation-diff",
   "date": "2026-08-29",
   "phase": "feature-inventory-closure-after-first-real-golden",
   "tests": {
-    "total": 164,
-    "passed": 164,
+    "total": 172,
+    "passed": 172,
     "failed": 0,
     "command": "npm run check"
   },
@@ -181,6 +181,10 @@
     ,"lru-eviction-past-a-bounded-cache-capacity"
     ,"visible-cache-hit-indicator-in-toast-and-tabulation-log"
     ,"browser-verified-cache-hit-miss-and-reopen-invalidation-on-real-files"
+    ,"key-based-structural-and-numeric-tabulation-diff"
+    ,"tabulation-log-entry-full-result-snapshot-for-comparison"
+    ,"compare-log-entry-with-current-tabulation-ui"
+    ,"browser-verified-tabulation-diff-on-real-rdac2401-two-dimensional-change"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",

@@ -266,7 +266,17 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .tabulation-log-entry b { font-size: 11px; }
 .tabulation-log-entry time { color: #74878a; font-size: 9px; }
 .tabulation-log-entry span { grid-column: 1 / -1; color: #4d666b; font-size: 9px; }
-.tabulation-log-entry button { justify-self: end; min-height: 24px; padding: 0 8px; font-size: 9px; }
+.tabulation-log-entry-actions { display: flex; gap: 4px; justify-self: end; }
+.tabulation-log-entry-actions button { min-height: 24px; padding: 0 8px; font-size: 9px; }
+.tabulation-diff { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #cfe2dc; }
+.tabulation-diff-axis { margin: 6px 0; font-size: 9px; color: #4d666b; }
+.tabulation-diff-axis b { color: #24594e; }
+#tabulation-diff-body table { width: 100%; margin-top: 4px; font-size: 9px; border-collapse: collapse; }
+#tabulation-diff-body th, #tabulation-diff-body td { padding: 4px 6px; text-align: right; border-bottom: 1px solid #e1e8e5; }
+#tabulation-diff-body th:first-child, #tabulation-diff-body td:first-child,
+#tabulation-diff-body th:nth-child(2), #tabulation-diff-body td:nth-child(2) { text-align: left; }
+.tabulation-diff-positive { color: #1b7a5c; }
+.tabulation-diff-negative { color: #a4433a; }
 .audit-intro { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 5px 2px 13px; font-size: 11px; }
 .audit-intro p { margin: 0; color: #738489; }
 .audit-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 0 4px #dcf7ee; }

@@ -19,6 +19,7 @@ import {
   type TabulationResult,
   type TotalPolicy,
 } from '../../../packages/core/src/index.ts';
+import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
   optionsForRole,
   parseCnv,
@@ -296,6 +297,11 @@ const tabulationLogCount = element<HTMLElement>('#tabulation-log-count');
 const tabulationLogList = element<HTMLElement>('#tabulation-log-list');
 const tabulationLogCopyAll = element<HTMLButtonElement>('#tabulation-log-copy-all');
 const tabulationLogClear = element<HTMLButtonElement>('#tabulation-log-clear');
+const tabulationDiffPanel = element<HTMLElement>('#tabulation-diff-panel');
+const tabulationDiffTitle = element<HTMLElement>('#tabulation-diff-title');
+const tabulationDiffSummary = element<HTMLElement>('#tabulation-diff-summary');
+const tabulationDiffBody = element<HTMLElement>('#tabulation-diff-body');
+const tabulationDiffClose = element<HTMLButtonElement>('#tabulation-diff-close');
 const mapCanvas = element<HTMLCanvasElement>('#map-canvas');
 const mapMessage = element<HTMLElement>('#map-message');
 const mapLegend = element<HTMLElement>('#map-legend');
@@ -2229,6 +2235,9 @@ interface TabulationLogEntry {
   warningCount: number;
   /** Served from the L3 result cache instead of re-streaming the dataset. */
   cached: boolean;
+  /** Full snapshot for "compare with current" — cheap to keep: this is the
+   *  rendered table's size, never the source dataset's. */
+  result: TabulationResult;
 }
 
 /** Session-only and bounded; a work log, not a persisted audit trail. */
@@ -2263,6 +2272,7 @@ function appendTabulationLogEntry(plan: QueryPlan, result: TabulationResult, cac
     resultColumns: result.columns.length,
     warningCount: result.warnings.length,
     cached,
+    result,
   };
   // Newest first for on-screen reading; unshift keeps that without a sort.
   tabulationLog.unshift(entry);
@@ -2295,6 +2305,8 @@ function renderTabulationLog(): void {
       + `${integerFormat.format(entry.recordsSeen)} vistos → ${integerFormat.format(entry.recordsAccepted)} aceitos · `
       + `${integerFormat.format(entry.resultRows)} linha(s) × ${integerFormat.format(entry.resultColumns)} coluna(s) · `
       + `${integerFormat.format(entry.warningCount)} aviso(s)`;
+    const actions = document.createElement('div');
+    actions.className = 'tabulation-log-entry-actions';
     const copy = document.createElement('button');
     copy.type = 'button';
     copy.className = 'secondary-button';
@@ -2304,9 +2316,104 @@ function renderTabulationLog(): void {
         .then(() => showToast('Entrada do log copiada'))
         .catch((error: unknown) => showToast(error instanceof Error ? error.message : String(error), true));
     });
-    item.append(title, time, detail, copy);
+    const compare = document.createElement('button');
+    compare.type = 'button';
+    compare.className = 'secondary-button';
+    compare.textContent = 'Comparar';
+    compare.title = 'Comparar esta entrada com o resultado atualmente exibido';
+    compare.disabled = !currentResult;
+    compare.addEventListener('click', () => { renderTabulationDiff(entry); });
+    actions.append(copy, compare);
+    item.append(title, time, detail, actions);
     tabulationLogList.append(item);
   }
+}
+
+function renderTabulationDiff(entry: TabulationLogEntry): void {
+  if (!currentResult) {
+    showToast('Nenhuma tabulação atual para comparar', true);
+    return;
+  }
+  const diff: TabulationDiff = diffTabulationResults(entry.result, currentResult);
+  tabulationDiffPanel.hidden = false;
+  const dimensions = entry.columnLabel ? `${entry.rowLabel} × ${entry.columnLabel}` : entry.rowLabel;
+  tabulationDiffTitle.textContent = `Comparação: entrada de ${new Date(entry.timestamp).toLocaleTimeString('pt-BR')} (${dimensions}) × tabulação atual`;
+  tabulationDiffSummary.textContent = diff.identical
+    ? 'Nenhuma diferença encontrada.'
+    : [
+      diff.rows.added.length ? `+${integerFormat.format(diff.rows.added.length)} linha(s)` : null,
+      diff.rows.removed.length ? `-${integerFormat.format(diff.rows.removed.length)} linha(s)` : null,
+      diff.columns.added.length ? `+${integerFormat.format(diff.columns.added.length)} coluna(s)` : null,
+      diff.columns.removed.length ? `-${integerFormat.format(diff.columns.removed.length)} coluna(s)` : null,
+      diff.changedCells.length ? `${integerFormat.format(diff.changedCells.length)} célula(s) alterada(s)` : null,
+      diff.recordsSeenDelta ? `${diff.recordsSeenDelta > 0 ? '+' : ''}${integerFormat.format(diff.recordsSeenDelta)} vistos` : null,
+      diff.recordsAcceptedDelta ? `${diff.recordsAcceptedDelta > 0 ? '+' : ''}${integerFormat.format(diff.recordsAcceptedDelta)} aceitos` : null,
+    ].filter((part): part is string => part !== null).join(' · ');
+
+  tabulationDiffBody.replaceChildren();
+
+  const axisLine = (label: string, axisDiff: TabulationDiff['rows']): HTMLElement | null => {
+    if (!axisDiff.added.length && !axisDiff.removed.length) return null;
+    const line = document.createElement('div');
+    line.className = 'tabulation-diff-axis';
+    const strong = document.createElement('b');
+    strong.textContent = label;
+    const parts: string[] = [];
+    if (axisDiff.added.length) parts.push(`adicionada(s): ${axisDiff.added.map((item) => item.label).join(', ')}`);
+    if (axisDiff.removed.length) parts.push(`removida(s): ${axisDiff.removed.map((item) => item.label).join(', ')}`);
+    line.append(strong, document.createTextNode(` — ${parts.join(' · ')}`));
+    return line;
+  };
+  const rowsLine = axisLine('Linhas', diff.rows);
+  const columnsLine = axisLine('Colunas', diff.columns);
+  if (rowsLine) tabulationDiffBody.append(rowsLine);
+  if (columnsLine) tabulationDiffBody.append(columnsLine);
+
+  if (diff.changedCells.length) {
+    const table = document.createElement('table');
+    const thead = document.createElement('thead');
+    const headRow = document.createElement('tr');
+    for (const label of ['Linha', 'Coluna', 'Antes', 'Depois', 'Δ']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      headRow.append(th);
+    }
+    thead.append(headRow);
+    const tbody = document.createElement('tbody');
+    for (const cell of diff.changedCells) {
+      const row = document.createElement('tr');
+      const deltaClass = cell.delta > 0 ? 'tabulation-diff-positive' : cell.delta < 0 ? 'tabulation-diff-negative' : '';
+      const deltaText = `${cell.delta > 0 ? '+' : ''}${numberFormat.format(cell.delta)}`;
+      const cells: [string, string?][] = [
+        [cell.rowLabel], [cell.columnLabel],
+        [numberFormat.format(cell.before)], [numberFormat.format(cell.after)],
+        [deltaText, deltaClass],
+      ];
+      for (const [text, className] of cells) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (className) td.className = className;
+        row.append(td);
+      }
+      tbody.append(row);
+    }
+    table.append(thead, tbody);
+    tabulationDiffBody.append(table);
+  }
+
+  const recordsLine = document.createElement('div');
+  recordsLine.className = 'tabulation-diff-axis';
+  const recordsStrong = document.createElement('b');
+  recordsStrong.textContent = 'Registros';
+  recordsLine.append(recordsStrong, document.createTextNode(
+    ` — vistos: ${integerFormat.format(entry.recordsSeen)} → ${integerFormat.format(currentResult.recordsSeen)} `
+      + `(${diff.recordsSeenDelta >= 0 ? '+' : ''}${integerFormat.format(diff.recordsSeenDelta)}) · `
+      + `aceitos: ${integerFormat.format(entry.recordsAccepted)} → ${integerFormat.format(currentResult.recordsAccepted)} `
+      + `(${diff.recordsAcceptedDelta >= 0 ? '+' : ''}${integerFormat.format(diff.recordsAcceptedDelta)})`,
+  ));
+  tabulationDiffBody.append(recordsLine);
+
+  tabulationDiffPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 function renderAudit(): void {
@@ -3799,7 +3906,11 @@ tabulationLogCopyAll.addEventListener('click', () => {
 });
 tabulationLogClear.addEventListener('click', () => {
   tabulationLog.length = 0;
+  tabulationDiffPanel.hidden = true;
   renderTabulationLog();
+});
+tabulationDiffClose.addEventListener('click', () => {
+  tabulationDiffPanel.hidden = true;
 });
 tableOperationKind.addEventListener('change', updateTableOperationControls);
 tableOperationApply.addEventListener('click', () => {

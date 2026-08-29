@@ -172,9 +172,32 @@ históricos ficam para depois, por demanda.
 
 ### 3.4 Diff entre execuções
 
-**Esforço:** dias · **Risco:** baixo
+**Concluído em 2026-08-29.** `diffTabulationResults(before, after)` em
+`packages/core/src/tabulation-diff.ts` — diff estrutural (linhas/colunas
+adicionadas ou removidas) e numérico (delta por célula), identidade por
+`key`, nunca por rótulo ou posição, para que uma renomeação ou reordenação
+não seja lida como mudança de valor. Só compara células nas chaves comuns
+aos dois lados — nunca um produto cartesiano completo. 8 testes dedicados em
+`tests/tabulation-diff.test.mjs`.
 
-Já existe diff de manifesto de fontes. Falta comparar dois resultados e
+Cada entrada do log de tabulação agora guarda o `TabulationResult` completo
+(o tamanho da tabela renderizada, nunca o dataset de origem) e ganhou um
+botão "Comparar" ao lado de "Copiar", que abre um painel mostrando eixos
+adicionados/removidos, uma tabela de células alteradas com o delta colorido,
+e o delta de registros vistos/aceitos entre a entrada escolhida e a
+tabulação atualmente exibida.
+
+Verificado em navegador real sobre `RDAC2401.dbc`: comparação entre uma
+tabulação 1D (`MUNIC_RES`, frequência) e uma 2D (`MUNIC_RES × SEXO`)
+mostrou corretamente `+2 coluna(s) · -1 coluna(s)` e zero células
+comparáveis (nenhuma chave de coluna em comum entre os dois lados),
+com o delta de registros vistos/aceitos em `+0` como esperado (mesmo
+arquivo, mesmo filtro). Evidência em
+`docs/handoffs/R09_6_TABULATION_DIFF_REPORT.md`.
+
+**Esforço:** dias · **Risco:** baixo · **Valor:** médio
+
+Já existia diff de manifesto de fontes. Faltava comparar dois resultados e
 mostrar o que mudou, que é o que sustenta "atualizar esta análise".
 
 ---
