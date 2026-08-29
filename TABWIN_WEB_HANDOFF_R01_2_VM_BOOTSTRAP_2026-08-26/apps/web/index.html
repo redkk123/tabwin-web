@@ -102,6 +102,16 @@
             <span>Campo para somar</span>
             <select id="measure-field" disabled></select>
           </label>
+          <details class="filter-builder extra-measures-builder">
+            <summary>Medidas adicionais lado a lado <span id="extra-measure-count">nenhuma</span></summary>
+            <p class="dialog-note extra-measures-note">G017: o TabWin permite somar vários incrementos ao mesmo tempo, cada um em sua própria coluna. A medida acima continua sendo a primeira coluna; as adicionadas aqui entram depois, na ordem em que forem incluídas.</p>
+            <div id="extra-measures-list"></div>
+            <label>
+              <span>Campo a adicionar</span>
+              <select id="extra-measure-field" disabled></select>
+            </label>
+            <button class="secondary-button" id="extra-measure-add" type="button" disabled>+ Adicionar medida</button>
+          </details>
           <details class="filter-builder">
             <summary>Filtros e seleções <span id="filter-count">nenhum</span></summary>
             <label>

@@ -58,9 +58,13 @@
     ]
   },
   "comparison": {
-    "status": "captured-not-yet-executable",
-    "tolerance": null,
-    "pass": null,
-    "blocker": "multiple simultaneous measures"
+    "status": "verified-zero-tolerance",
+    "tolerance": 0,
+    "comparedAtDecimalPlaces": 2,
+    "seen": 4315,
+    "accepted": 4315,
+    "cellDiffCount": 0,
+    "pass": true,
+    "notes": "Multiple-measure execution added after this capture; verified via scripts/verify-second-goldens-local.mjs. Compared at 2 decimal places because VAL_TOT declares that precision in the DBF header (see CompareGoldenOptions.decimalPlaces) — the same principle G003 established, not a loosened tolerance."
   }
 }

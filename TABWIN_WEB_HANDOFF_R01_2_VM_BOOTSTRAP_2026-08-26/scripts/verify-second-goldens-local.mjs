@@ -18,6 +18,7 @@ import {
   filterFromDefOption,
   frequencyMeasureFromDef,
   lookupDefinitionFromDefOption,
+  sumMeasureFromDefIncrement,
 } from '../dist/packages/core/src/index.js';
 import { calculateColumnTotal } from '../dist/packages/analysis/src/table-operations.js';
 import {
@@ -164,6 +165,24 @@ const cases = [
     id: 'G021', records: [...january, ...february],
     spec: { rows: complex, measure: { kind: 'count' }, filters: [], suppressZeroRows: true },
   },
+  {
+    id: 'G017', records: january, resources: { [hospital.lookupId]: hospitalLookup },
+    // VAL_TOT declares 2 decimals in the DBF header (see CompareGoldenOptions.decimalPlaces);
+    // G003 already established that the real engine's float sum lands within a handful
+    // of ULPs of ours, so compare at that precision rather than bit-for-bit.
+    decimalPlaces: 2,
+    spec: {
+      rows: hospital,
+      measure: { kind: 'count' },
+      measures: [
+        { kind: 'count' },
+        sumMeasureFromDefIncrement(rdDef.increments.find((increment) => increment.field === 'VAL_TOT')),
+        sumMeasureFromDefIncrement(rdDef.increments.find((increment) => increment.field === 'MORTE')),
+      ],
+      filters: [],
+      suppressZeroRows: false,
+    },
+  },
 ];
 
 const report = [];
@@ -177,7 +196,10 @@ for (const item of cases) {
   const registry = { ...registryFor(...dimensions, ...filterDimensions), ...(item.resources ?? {}) };
   const plan = compileQueryPlan({ compatibilityProfile: 'tabwin-4.15', ...item.spec });
   const actual = executeInMemory(item.records, plan, registry);
-  const comparison = compareWithGolden(actual, reference.golden);
+  const comparison = compareWithGolden(actual, reference.golden, {
+    absoluteTolerance: 0,
+    ...(item.decimalPlaces !== undefined ? { decimalPlaces: item.decimalPlaces } : {}),
+  });
   const calculatedTotal = item.checkTotal
     ? calculateColumnTotal(actual, actual.columns[0].key, 'sum')
     : undefined;

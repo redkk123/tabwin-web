@@ -306,7 +306,22 @@ referenciado pelo DEF. G009 não é um caso executável: o protocolo mandava
 combinar `AIH_MA.DEF` com um arquivo `RD`, combinação que a própria definição
 não oferece. G012 preserva o resultado observado, mas o formato `N` só é
 decodificado para inspeção enquanto a categoria duplicada não for explicada.
-G017 preserva a tabela de três medidas e é o próximo degrau estrutural.
+
+**G017 (múltiplas medidas simultâneas) implementado e aprovado em
+2026-08-29.** `TabulationSpec.measures?: MeasureSpec[]` — aditivo, nunca
+quebra o `measure` único existente. Quando presente com 2+ entradas, cada
+medida vira sua própria coluna, na ordem declarada, sobre o mesmo eixo de
+linha; incompatível com dimensão de coluna explícita até existir oráculo
+para essa combinação (`compileQueryPlan` recusa a mistura com erro claro).
+Interface: seção "Medidas adicionais lado a lado" que soma incrementos além
+da medida principal, com rótulo do incremento do DEF quando existir
+(mesma regra do G003). Verificado contra o `G017` real (Hospital AC × CNES,
+Frequência + Valor Total + Óbitos): 27 linhas, zero diferença de célula,
+comparado a 2 casas decimais pelo mesmo motivo do G003 (`VAL_TOT` declara
+essa precisão no DBF). Verificado também em navegador real com combinação
+livre de medidas (Valor Total + Óbitos), incluindo o guard de coluna+medidas
+mostrando erro claro em vez de travar. Evidência em
+`docs/handoffs/R10_3_G017_MULTI_MEASURE_REPORT.md`.
 
 O G003 achou **duas divergências reais** — foi o que justificou a bateria:
 
@@ -328,8 +343,8 @@ em `docs/handoffs/R10_2_SECOND_GOLDEN_BATCH_AUDIT_2026-08-29.md`.
 **Esforço:** semanas de captura, pouco código · **Risco:** é o que reduz risco
 
 O documento mestre pede bateria por subsistema: CNV, DEF, motor, quadro,
-persistência, geografia. Doze casos executáveis já passam; G012 e G017 agora
-delimitam as duas próximas semânticas de motor que não podem ser inventadas.
+persistência, geografia. Treze casos executáveis já passam; G012 permanece
+como a última semântica de motor que não pode ser inventada sem evidência.
 
 O trabalho é operar o TabWin 4.15 e capturar, não programar. Deve começar cedo
 mesmo sendo longo, porque é o que autoriza a palavra "compatível".

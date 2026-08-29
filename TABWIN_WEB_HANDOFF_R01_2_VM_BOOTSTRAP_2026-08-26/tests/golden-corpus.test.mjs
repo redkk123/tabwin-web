@@ -118,13 +118,13 @@ test('every committed golden records a passing zero-tolerance comparison and its
 });
 
 const SECOND_BATCH_WITH_TABLES = ['G006', 'G008', 'G010', 'G012', 'G014', 'G015', 'G017', 'G018', 'G021'];
-const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G010', 'G014', 'G015', 'G018', 'G021'];
+const SECOND_BATCH_VERIFIED = ['G006', 'G008', 'G010', 'G014', 'G015', 'G017', 'G018', 'G021'];
 
 test('every second-batch normalized table agrees cell-for-cell with its original BIFF export', async () => {
   for (const id of SECOND_BATCH_WITH_TABLES) await assertGoldenAgreesWithExport(id);
 });
 
-test('the seven executable second-batch cases record zero-tolerance passes and decisive totals', async () => {
+test('the eight executable second-batch cases record zero-tolerance passes and decisive totals', async () => {
   for (const id of SECOND_BATCH_VERIFIED) {
     const { manifest } = await readCase(id);
     assert.equal(manifest.comparison.status, 'verified-zero-tolerance', `${id}: verification status`);
@@ -137,20 +137,19 @@ test('the seven executable second-batch cases record zero-tolerance passes and d
   const g014 = await readCase('G014');
   assert.equal(g014.manifest.comparison.seen, 49338, 'all procedure rows are read');
   assert.equal(g014.manifest.tabwinPresentation.tabwinTotals[0], 4315, 'DEF G weights them to AIH frequency');
+  const g017 = await readCase('G017');
+  assert.deepEqual(g017.golden.columns.map((column) => column.label), ['Freqüência', 'Valor Total', 'Óbitos']);
+  assert.equal(g017.golden.cells.length, 27);
+  assert.equal(g017.manifest.comparison.comparedAtDecimalPlaces, 2, 'VAL_TOT is compared at its declared DBF precision');
   const g021 = await readCase('G021');
   assert.equal(g021.manifest.comparison.seen, 8631, 'both months are combined');
 });
 
-test('G012 and G017 preserve new oracle evidence without pretending unsupported semantics pass', async () => {
-  for (const id of ['G012', 'G017']) {
-    const { manifest } = await readCase(id);
-    assert.equal(manifest.comparison.status, 'captured-not-yet-executable');
-    assert.equal(manifest.comparison.pass, null);
-    assert.ok(manifest.comparison.blocker);
-  }
-  const g017 = await readCase('G017');
-  assert.deepEqual(g017.golden.columns.map((column) => column.label), ['Freqüência', 'Valor Total', 'Óbitos']);
-  assert.equal(g017.golden.cells.length, 27);
+test('G012 preserves new oracle evidence without pretending unsupported semantics pass', async () => {
+  const { manifest } = await readCase('G012');
+  assert.equal(manifest.comparison.status, 'captured-not-yet-executable');
+  assert.equal(manifest.comparison.pass, null);
+  assert.ok(manifest.comparison.blocker);
 });
 
 test('second-batch manifests hash the evidence bytes they name, and G009 records the protocol blocker', async () => {

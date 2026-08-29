@@ -18,6 +18,7 @@ import {
   type ConversionRegistry,
   type DimensionLookupDefinition,
   type FilterSpec,
+  type MeasureSpec,
   type QueryPlan,
   type PortableTableV1,
   type TableOperation,
@@ -170,6 +171,10 @@ const columnConversion = element<HTMLSelectElement>('#column-conversion');
 const measureKind = element<HTMLSelectElement>('#measure-kind');
 const measureField = element<HTMLSelectElement>('#measure-field');
 const measureFieldLabel = element<HTMLElement>('#measure-field-label');
+const extraMeasureField = element<HTMLSelectElement>('#extra-measure-field');
+const extraMeasureAdd = element<HTMLButtonElement>('#extra-measure-add');
+const extraMeasuresList = element<HTMLElement>('#extra-measures-list');
+const extraMeasureCount = element<HTMLElement>('#extra-measure-count');
 const filterField = element<HTMLSelectElement>('#filter-field');
 const filterMode = element<HTMLSelectElement>('#filter-mode');
 const filterKind = element<HTMLSelectElement>('#filter-kind');
@@ -426,6 +431,8 @@ let activeFilterConversion = '';
 let activeFilterStartPosition: number | undefined;
 let configuredFilters: FilterSpec[] = [];
 let configuredCrossFieldRules: CrossFieldRuleSpec[] = [];
+/** G017: extra increments laid out beside the primary measure, in add order. */
+let extraMeasures: MeasureSpec[] = [];
 let crossFieldRuleSequence = 0;
 let lastCombinationProfile: FieldCombinationProfile | null = null;
 let mapZoom = 1;
@@ -507,12 +514,21 @@ function updateColumnControls(): void {
   columnConversion.disabled = !enabled;
   columnStartPosition.disabled = !enabled;
   discriminateColumnUnclassified.disabled = !enabled;
+  // G017's multiple-measure columns and an explicit column dimension have no
+  // combined oracle yet; compileQueryPlan rejects the pairing, so keep the
+  // "adicionar medida" control from offering a combination that always fails.
+  if (enabled) {
+    extraMeasureAdd.disabled = true;
+    extraMeasureField.disabled = true;
+  } else {
+    populateExtraMeasureField();
+  }
 }
 
 function setControlsEnabled(enabled: boolean): void {
   for (const control of [fieldSearch, rowField, columnField, rowConversion, columnConversion, measureKind, measureField, filterField, filterMode,
     filterKind, filterValueSearch, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition, columnStartPosition,
-    qualityField, qualityMinimum, qualityMaximum, suppressZero, suppressZeroColumns, discriminateUnclassified,
+    extraMeasureField, qualityField, qualityMinimum, qualityMaximum, suppressZero, suppressZeroColumns, discriminateUnclassified,
     discriminateColumnUnclassified, crossFieldLabel, ...crossFieldFields, ...crossFieldOperators, ...crossFieldValues,
     ...crossFieldSecondValues, ...combinationFields, runButton]) {
     control.disabled = !enabled;
@@ -623,20 +639,69 @@ function searchDimensionFields(): void {
   updateColumnControls();
 }
 
+function numericMeasureCandidates(): DbfHeader['fields'] {
+  if (!dbfHeader) return [];
+  const incrementNames = new Set(activeDef?.increments.map((item) => item.field.toUpperCase()) ?? []);
+  const numericTypes = new Set(['N', 'F', 'I', 'B', 'Y']);
+  return dbfHeader.fields.filter((field) =>
+    numericTypes.has(field.type) || incrementNames.has(field.name.toUpperCase()));
+}
+
 function populateMeasureFields(): void {
   if (!dbfHeader) return;
   const previous = measureField.value;
   measureField.replaceChildren();
-  const incrementNames = new Set(activeDef?.increments.map((item) => item.field.toUpperCase()) ?? []);
-  const numericTypes = new Set(['N', 'F', 'I', 'B', 'Y']);
-  const candidates = dbfHeader.fields.filter((field) =>
-    numericTypes.has(field.type) || incrementNames.has(field.name.toUpperCase()));
+  const candidates = numericMeasureCandidates();
   for (const field of candidates) measureField.add(new Option(incrementLabel(field.name), field.name));
   if (candidates.some((field) => field.name === previous)) measureField.value = previous;
   const sumOption = measureKind.querySelector<HTMLOptionElement>('option[value="sum"]');
   if (sumOption) sumOption.disabled = candidates.length === 0;
   if (!candidates.length) measureKind.value = 'count';
   updateMeasureControls();
+  populateExtraMeasureField();
+}
+
+/** G017: candidates for "medida adicional" — every numeric/incremento field not already used. */
+function populateExtraMeasureField(): void {
+  const previous = extraMeasureField.value;
+  extraMeasureField.replaceChildren();
+  const used = new Set([measureField.value, ...extraMeasures.map((measure) => measure.field ?? '')]);
+  const candidates = numericMeasureCandidates().filter((field) => !used.has(field.name));
+  for (const field of candidates) extraMeasureField.add(new Option(incrementLabel(field.name), field.name));
+  if (candidates.some((field) => field.name === previous)) extraMeasureField.value = previous;
+  extraMeasureField.disabled = !dbfHeader || candidates.length === 0;
+  extraMeasureAdd.disabled = extraMeasureField.disabled;
+}
+
+function extraMeasureLabel(measure: MeasureSpec): string {
+  return measure.label ?? incrementLabel(measure.field ?? '');
+}
+
+function renderExtraMeasures(): void {
+  extraMeasuresList.replaceChildren();
+  extraMeasureCount.textContent = extraMeasures.length
+    ? `${integerFormat.format(extraMeasures.length)} adicionada(s)`
+    : 'nenhuma';
+  extraMeasures.forEach((measure, index) => {
+    const item = document.createElement('div');
+    item.className = 'active-filter';
+    const copy = document.createElement('span');
+    const title = document.createElement('b');
+    title.textContent = `Coluna ${index + 2}: ${extraMeasureLabel(measure)}`;
+    copy.append(title);
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'secondary-button';
+    remove.textContent = 'Remover';
+    remove.addEventListener('click', () => {
+      extraMeasures.splice(index, 1);
+      renderExtraMeasures();
+      populateExtraMeasureField();
+      void runAnalysis();
+    });
+    item.append(copy, remove);
+    extraMeasuresList.append(item);
+  });
 }
 
 function populateQualityFields(): void {
@@ -1262,8 +1327,10 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   sourceDbfButton.disabled = false;
   configuredFilters = [];
   configuredCrossFieldRules = [];
+  extraMeasures = [];
   renderConfiguredFilters();
   renderCrossFieldRules();
+  renderExtraMeasures();
   datasetName = file.name;
   datasetFingerprint = source;
   populateControls(chooseDefaultField(header.fields));
@@ -1545,8 +1612,10 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   sourceDbfButton.disabled = true;
   configuredFilters = [];
   configuredCrossFieldRules = [];
+  extraMeasures = [];
   renderConfiguredFilters();
   renderCrossFieldRules();
+  renderExtraMeasures();
   datasetName = file.name;
   datasetFingerprint = source;
   populateControls(chooseDefaultField(fields));
@@ -2268,6 +2337,9 @@ function buildPlan(): QueryPlan {
       ...(discriminateColumnUnclassified.checked ? { unclassifiedPolicy: 'discriminate' as const } : {}),
     } } : {}),
     measure,
+    // G017: extra increments beside the primary measure — each its own column,
+    // in add order. `measures` only activates once there is more than one.
+    ...(extraMeasures.length ? { measures: [measure, ...extraMeasures] } : {}),
     filters: configuredFilters.map(cloneFilter),
     ...(configuredCrossFieldRules.length
       ? { crossFieldRules: configuredCrossFieldRules.map(cloneCrossFieldRule) }
@@ -4141,7 +4213,9 @@ async function openPortableTable(file: File): Promise<void> {
   selectedDbfButton.disabled = true;
   configuredFilters = [];
   configuredCrossFieldRules = [];
+  extraMeasures = [];
   renderCrossFieldRules();
+  renderExtraMeasures();
   clearCombinationProfile();
   activeDef = null;
   defInspectorButton.disabled = true;
@@ -4218,6 +4292,7 @@ async function openRecipe(file: File): Promise<void> {
     recipe.spec.rows.field,
     recipe.spec.columns?.field,
     recipe.spec.measure.field,
+    ...(recipe.spec.measures ?? []).map((measure) => measure.field),
     ...recipe.spec.filters.map((filter) => filter.field),
     ...(recipe.spec.crossFieldRules ?? []).flatMap((rule) => rule.conditions.map((condition) => condition.field)),
   ].filter((field): field is string => Boolean(field));
@@ -4228,6 +4303,11 @@ async function openRecipe(file: File): Promise<void> {
   columnField.value = recipe.spec.columns?.field ?? '';
   measureKind.value = recipe.spec.measure.kind;
   if (recipe.spec.measure.field) measureField.value = recipe.spec.measure.field;
+  // G017: measures[0] is the primary measure restored above; the rest become
+  // the "medidas adicionais" list, in the same order they were saved.
+  extraMeasures = (recipe.spec.measures ?? []).slice(1).map((measure) => ({ ...measure }));
+  renderExtraMeasures();
+  populateExtraMeasureField();
   suppressZero.checked = recipe.spec.suppressZeroRows ?? false;
   suppressZeroColumns.checked = recipe.spec.suppressZeroColumns ?? false;
   discriminateUnclassified.checked = recipe.spec.rows.unclassifiedPolicy === 'discriminate';
@@ -4480,9 +4560,23 @@ startPosition.addEventListener('change', () => void runAnalysis());
 columnStartPosition.addEventListener('change', () => void runAnalysis());
 measureKind.addEventListener('change', () => {
   updateMeasureControls();
+  populateExtraMeasureField();
   if (measureKind.value === 'count' || measureField.value) void runAnalysis();
 });
-measureField.addEventListener('change', () => void runAnalysis());
+measureField.addEventListener('change', () => {
+  populateExtraMeasureField();
+  void runAnalysis();
+});
+extraMeasureAdd.addEventListener('click', () => {
+  const field = extraMeasureField.value;
+  if (!field) return;
+  // Same DEF-increment-label rule G003/G017 established for the primary measure.
+  const increment = activeDef?.increments.find((candidate) => candidate.field.toUpperCase() === field.toUpperCase());
+  extraMeasures.push(increment ? sumMeasureFromDefIncrement(increment) : { kind: 'sum', field });
+  renderExtraMeasures();
+  populateExtraMeasureField();
+  void runAnalysis();
+});
 filterField.addEventListener('change', () => void populateFilterValues());
 filterKind.addEventListener('change', () => void populateFilterValues());
 filterValueSearch.addEventListener('input', searchFilterValues);

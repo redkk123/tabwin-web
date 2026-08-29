@@ -1,10 +1,10 @@
 {
-  "revision": "second-golden-batch-audited-with-safe-new-format-inspection",
+  "revision": "g017-multi-measure-tabulation",
   "date": "2026-08-29",
   "phase": "golden-driven-compatibility-progression",
   "tests": {
-    "total": 227,
-    "passed": 227,
+    "total": 236,
+    "passed": 236,
     "failed": 0,
     "command": "npm run check"
   },
@@ -222,7 +222,11 @@
     "def-driven-dbf-lookup-dimension-labels-and-zero-categories",
     "browser-verified-cnes-dbf-lookup-on-real-rdac2401",
     "new-format-N-fixed-columns-decoded-for-read-only-inspection",
-    "new-format-N-execution-editing-and-serialization-safety-block"
+    "new-format-N-execution-editing-and-serialization-safety-block",
+    "simultaneous-multi-measure-tabulation-columns",
+    "multi-measure-recipe-persistence",
+    "multi-measure-and-column-dimension-mutual-exclusion-guard",
+    "real-g017-multi-measure-golden-equivalence"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -319,14 +323,14 @@
       "G014",
       "G015",
       "G018",
-      "G021"
+      "G021",
+      "G017"
     ],
     "evidence_only_or_blocked": [
       "G009",
-      "G012",
-      "G017"
+      "G012"
     ],
     "tolerance": 0,
-    "notes": "G003 compares at VAL_TOT declared 2 decimals; all seven executable second-batch cases pass at zero tolerance. G009 proves a capture-protocol mismatch, while G012 and G017 remain evidence-preserving non-passes."
+    "notes": "G003 compares at VAL_TOT declared 2 decimals. G017 (multiple simultaneous measures) implemented and verified against the real capture at the same 2-decimal precision. Eight second-batch cases pass at zero tolerance. G009 proves a capture-protocol mismatch; G012 remains evidence-preserving, non-executable pending an explanation for its duplicated category."
   }
 }

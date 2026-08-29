@@ -76,6 +76,21 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
   if (spec.measure.kind === 'sum' && spec.measure.weightField) {
     throw new QueryPlanError('weightField is only valid for count/frequency measures');
   }
+  if (spec.measures) {
+    if (spec.measures.length < 2) {
+      throw new QueryPlanError('measures must have at least two entries; a single measure belongs in `measure`');
+    }
+    if (spec.columns) {
+      throw new QueryPlanError('multiple measures cannot combine with a column dimension yet — no TabWin oracle covers that pairing');
+    }
+    for (const [index, measure] of spec.measures.entries()) {
+      const label = `measures[${index}]`;
+      if (measure.kind === 'sum' && !measure.field?.trim()) throw new QueryPlanError(`${label} sum requires a field`);
+      if (measure.kind === 'sum' && measure.weightField) {
+        throw new QueryPlanError(`${label} weightField is only valid for count/frequency measures`);
+      }
+    }
+  }
   for (const [index, filter] of spec.filters.entries()) {
     validateFilter(filter, `filter ${index + 1}`);
     if (filter.mode === 'exclude') warnings.push(`filter ${index + 1} uses explicit exclusion policy; TabWin default equivalence is pending`);

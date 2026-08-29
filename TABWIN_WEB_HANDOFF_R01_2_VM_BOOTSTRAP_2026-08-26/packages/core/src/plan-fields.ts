@@ -23,6 +23,10 @@ export function fieldsUsedByPlan(plan: QueryPlan): string[] {
   add(plan.spec.columns?.field);
   add(plan.spec.measure.field);
   add(plan.spec.measure.weightField);
+  for (const measure of plan.spec.measures ?? []) {
+    add(measure.field);
+    add(measure.weightField);
+  }
   for (const filter of plan.spec.filters) add(filter.field);
   for (const rule of plan.spec.crossFieldRules ?? []) {
     for (const condition of rule.conditions) add(condition.field);

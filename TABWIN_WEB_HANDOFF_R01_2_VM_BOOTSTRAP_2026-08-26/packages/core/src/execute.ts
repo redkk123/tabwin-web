@@ -6,6 +6,7 @@ import type {
   DimensionLookupDefinition,
   DimensionSpec,
   FilterSpec,
+  MeasureSpec,
   QueryPlan,
   ResultAxisItem,
   TabulationResult,
@@ -28,14 +29,23 @@ export interface ResolvedPlanRecord {
 const UNCLASSIFIED_KEY = '__tabwin_web_unclassified__';
 const UNCLASSIFIED_LABEL = 'Não classificados';
 
-function singleColumnLabel(plan: QueryPlan): string {
+function measureColumnLabel(measure: MeasureSpec, plan: QueryPlan): string {
   // G001's lossless TabWin 4.15 export establishes the count header exactly.
   // G003 established the sum header: the real engine uses the DEF increment's
   // own label ("Valor Total" for VAL_TOT), not a generic word. "Valor" remains
   // only for a sum with no increment label behind it — a case TabWin has no
   // precedent for, since its sums always come from a DEF increment.
-  if (plan.spec.measure.kind !== 'count') return plan.spec.measure.label ?? 'Valor';
+  if (measure.kind !== 'count') return measure.label ?? 'Valor';
   return plan.spec.compatibilityProfile === 'tabwin-4.15' ? 'Freqüência' : 'Frequência';
+}
+
+function singleColumnLabel(plan: QueryPlan): string {
+  return measureColumnLabel(plan.spec.measure, plan);
+}
+
+/** G017: several DEF `I` increments laid out as columns in declared order. */
+function measureColumnKey(index: number): string {
+  return `__measure_${index}__`;
 }
 
 function getConversion(registry: ConversionRegistry, id: string): CnvDefinition {
@@ -216,12 +226,12 @@ function numericFieldValue(
   return value;
 }
 
-function measureValue(record: DataRecord, plan: QueryPlan, warnings: Set<string>): number {
-  if (plan.spec.measure.kind === 'count') {
-    const weightField = plan.spec.measure.weightField;
+function measureValueFor(record: DataRecord, measure: MeasureSpec, warnings: Set<string>): number {
+  if (measure.kind === 'count') {
+    const weightField = measure.weightField;
     return weightField ? numericFieldValue(record, weightField, warnings, 'grouped-frequency') : 1;
   }
-  const field = plan.spec.measure.field;
+  const field = measure.field;
   if (!field) return 0;
   return numericFieldValue(record, field, warnings, 'sum');
 }
@@ -341,6 +351,7 @@ export function createTabulationAccumulator(
   // not the subset that survived the ordinary filters.
   const rules = plan.spec.crossFieldRules ?? [];
   const ruleMatches = rules.map(() => 0);
+  const measures = plan.spec.measures && plan.spec.measures.length > 1 ? plan.spec.measures : undefined;
 
   function push(records: Iterable<DataRecord>): void {
     for (const record of records) {
@@ -352,10 +363,19 @@ export function createTabulationAccumulator(
       if (!resolved) continue;
 
       observedRows.set(resolved.rowKey, resolved.rowLabel);
-      observedColumns.set(resolved.columnKey, resolved.columnLabel);
       let row = totals.get(resolved.rowKey);
       if (!row) totals.set(resolved.rowKey, row = new Map<string, number>());
-      row.set(resolved.columnKey, (row.get(resolved.columnKey) ?? 0) + measureValue(record, plan, warnings));
+      if (measures) {
+        // Each simultaneous increment (G017) is its own column, computed from
+        // the same record — never confused with a column dimension's key.
+        measures.forEach((measure, index) => {
+          const key = measureColumnKey(index);
+          row!.set(key, (row!.get(key) ?? 0) + measureValueFor(record, measure, warnings));
+        });
+      } else {
+        observedColumns.set(resolved.columnKey, resolved.columnLabel);
+        row.set(resolved.columnKey, (row.get(resolved.columnKey) ?? 0) + measureValueFor(record, plan.spec.measure, warnings));
+      }
       recordsAccepted++;
     }
   }
@@ -390,9 +410,16 @@ function materializeTabulation(state: TabulationState): TabulationResult {
   } = state;
 
   let rows = axisFromDimension(plan.spec.rows, conversions, observedRows);
-  let columns = plan.spec.columns
-    ? axisFromDimension(plan.spec.columns, conversions, observedColumns)
-    : [{ key: '__single__', label: singleColumnLabel(plan), source: 'raw' as const }];
+  const measures = plan.spec.measures && plan.spec.measures.length > 1 ? plan.spec.measures : undefined;
+  let columns = measures
+    ? measures.map((measure, index): ResultAxisItem => ({
+      key: measureColumnKey(index),
+      label: measureColumnLabel(measure, plan),
+      source: 'derived' as const,
+    }))
+    : plan.spec.columns
+      ? axisFromDimension(plan.spec.columns, conversions, observedColumns)
+      : [{ key: '__single__', label: singleColumnLabel(plan), source: 'raw' as const }];
 
   let cells = rows.map((row) => {
     const accumulated = totals.get(row.key);

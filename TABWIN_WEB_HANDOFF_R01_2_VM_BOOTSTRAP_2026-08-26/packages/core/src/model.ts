@@ -115,6 +115,18 @@ export interface TabulationSpec {
   rows: DimensionSpec;
   columns?: DimensionSpec;
   measure: MeasureSpec;
+  /**
+   * DEF `I` allows several simultaneous increments — G017 proved the real
+   * engine lays each out as its own column, in declared order, sharing one
+   * row axis ("Hospital AC (CNES)" × Frequência + Valor Total + Óbitos).
+   * When present with 2+ entries, this replaces the single synthetic column
+   * `measure` would otherwise produce; `measure` itself stays required and
+   * should equal `measures[0]`, so any code path that has not been taught
+   * about `measures` still sees a coherent first measure instead of nothing.
+   * Not yet proven in combination with an explicit column dimension, so
+   * `compileQueryPlan` rejects that pairing until an oracle covers it.
+   */
+  measures?: MeasureSpec[];
   filters: FilterSpec[];
   suppressZeroRows?: boolean;
   suppressZeroColumns?: boolean;
