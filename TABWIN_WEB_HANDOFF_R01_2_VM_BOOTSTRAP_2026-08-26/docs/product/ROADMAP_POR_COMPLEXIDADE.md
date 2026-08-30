@@ -422,7 +422,22 @@ sendo escolha explícita do usuário — é a resposta certa, não uma pendênci
 
 ### 4.5 `.TAB` archaeology e replay
 
-**Esforço:** semanas · **Risco:** alto
+**Estado em 2026-08-30: INSPECTOR PRONTO, FORMATO BLOQUEADO POR CAPTURA.**
+Não é falta de esforço: não existe nenhum `.TAB` real neste ambiente, e
+escrever um parser por analogia seria inventar o formato.
+
+- `packages/formats/src/legacy-tab.ts` é um inspector read-only: identifica
+  OLE CFB, ZIP, texto ou binário desconhecido; extrai strings Windows-1252 e
+  UTF-16LE com offset; detecta referências a DEF/CNV/DBF/DBC/MAP/TAB; dá
+  janela hexadecimal; e compara duas inspeções para isolar o que mudou entre
+  duas capturas controladas.
+- `docs/reverse-engineering/RE_000_METHOD_MAP.md` recuperou os 469 métodos
+  publicados do binário Delphi com endereço, incluindo
+  `TTabula.Salvar1Click = 0x00564D94`, e estabeleceu com três evidências
+  independentes que **o `.TAB` é textual, do mesmo caminho de código do
+  `.PRN`** — classificado como FORTEMENTE INDICADO, não como provado.
+- `docs/testing/TAB_CAPTURE_PROTOCOL.md` tem as dez capturas necessárias, uma
+  propriedade por vez, para o diff isolar cada campo.
 
 Formato de container desconhecido. Comece por leitura apenas, com artefatos
 mínimos de salvar e reabrir capturados no 4.15. Escrita só para campos provados

@@ -11,3 +11,4 @@ export * from './map-parser.js';
 export * from './geojson-map.js';
 export * from './tabwin-biff.js';
 export * from './delimited.js';
+export * from './legacy-tab.js';
