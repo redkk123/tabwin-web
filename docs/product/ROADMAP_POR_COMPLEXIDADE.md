@@ -148,8 +148,9 @@ metodologia científica da ferramenta, não uma constante no código.
 
 ## 4.13 Auditoria estatística e comparação de tabelas
 
-**Estado em 2026-08-30: NÚCLEO INTEGRADO (R11.0); ORQUESTRADOR, PIPELINE DE**
-**TRANSFORMAÇÃO, FÓRMULAS E UI DE AUDITORIA AINDA NÃO EXISTEM.** Especificação
+**Estado em 2026-08-30: NÚCLEO, ORQUESTRADOR E UI DE INVESTIGAÇÃO INTEGRADOS**
+**(R11.0–R11.3); PIPELINE DE TRANSFORMAÇÃO E FÓRMULAS ESTILO EXCEL AINDA NÃO**
+**EXISTEM.** Especificação
 completa em `docs/product/TABWIN_WEB_MASTER_PRE_UI_R11_2.md` (recebida do
 ChatGPT como spec de engenharia + pré-implementação de núcleo). Esse
 documento tem 3.656 linhas e cobre seis frentes — aquisição, limpeza,
@@ -184,7 +185,7 @@ seria falso. O que foi feito:
   e o painel diz por quê, em vez de falhar em silêncio. Ligado à UI de
   Estatística: um checkbox "Sobrepor gaussiana" desenha um traço por classe do
   histograma, com o valor esperado no `title`.
-- **R11.1 — UI de comparação de tabelas, sobre o núcleo já testado.** Nova
+- **R11.2 — UI de comparação de tabelas, sobre o núcleo já testado.** Nova
   aba "Comparar": A é sempre o resultado atual; B é aberto de um `.twtable`
   salvo separadamente, nunca mesclado a A. Junção
   `inner`/`left`/`right`/`full`, casamento por chave exata ou rótulo
@@ -195,13 +196,57 @@ seria falso. O que foi feito:
   comparação ainda não entra na receita** — dito explicitamente na própria
   interface, não escondido.
 
-**Deliberadamente fora desta passada, e por quê:** o orquestrador de
-detecção (`anomaly-orchestrator.ts`), a UI de auditoria inteira (tela de
-escopo, fila de sinais, drill-down), o pipeline de transformação
-(`select`/`filter`/`mutate`/`recode`/`dedupe`/`bind`/`join`/`group by`), e o
-registro de funções estilo Excel. Cada um é, pelo cronograma do próprio spec,
-uma faixa própria (R11.2 a R11.6). Fazer qualquer um deles rápido e mal seria
-pior do que não fazer.
+- **R11.3 — Orquestrador de auditoria estatística + aba "Investigar".**
+  `packages/analysis/src/anomaly-orchestrator.ts` roda os detectores do
+  núcleo sobre um "grupo" (os filtros e regras cruzadas já ativos na sessão)
+  contra a "referência" (o resto do conjunto aberto), num único passe de
+  streaming, e devolve `StatisticalSignal[]` prontos para exibição: outlier
+  numérico (cerca robusta), divergência de subgrupo (mediana/IQR), mudança de
+  distribuição categórica (Jensen-Shannon/variação total), concentração
+  geográfica ou de subgrupo (HHI/share da maior categoria), e diferença de
+  ausência (IC de Wilson, com piso de N mínimo para uma diferença minúscula
+  não "significar" só porque N é gigante). A estatística aponta estranheza;
+  ela não decide se é erro — isso fica com quem conhece o dado, e a
+  interface diz isso explicitamente, não só no texto de apoio.
+
+  Nova aba **"Investigar"** (distinta de "Auditoria", que é o log de
+  tabulação/trilha reproduzível): campos numéricos, categóricos e
+  geográficos por seleção múltipla; rodar exige ao menos um filtro ativo —
+  sem grupo definido não há o que comparar, e a interface recusa com uma
+  mensagem em vez de rodar contra o conjunto inteiro. Cada sinal vira um
+  cartão com severidade, placar ("força da evidência, não probabilidade de
+  erro", nunca escondido), explicação, evidência numérica, um botão "Focar
+  campo" — que abre a ferramenta certa **já testada** (Qualidade, com IC
+  real da própria distribuição, para numérico; Filtro, com as categorias
+  reais, para categórico) em vez de a auditoria inventar limites por conta
+  própria — e "Marcar como esperado" (dispensa local à sessão, nunca ao
+  arquivo; sobrevive a uma nova rodada de varredura, mas nunca ao arquivo
+  reaberto).
+
+  Revisão encontrou e corrigiu um defeito real antes de qualquer uso: o
+  bucket de transbordo de cardinalidade categórica (`OTHER_CATEGORIES_KEY`)
+  carregava um byte NUL cru em vez do texto pretendido, sem nada que
+  traduzisse esse valor para um rótulo legível antes de ele poder, em tese,
+  aparecer dentro de uma explicação mostrada ao usuário. Corrigido com um
+  rótulo dedicado e testado; a prova mostrou que o sinal que usa essa chave
+  é estruturalmente incapaz de disparar com o bucket como categoria líder
+  (grupo e referência compartilham o mesmo teto de cardinalidade), então o
+  teste cobre a tradução em isolamento, não uma ponta a ponta forçada.
+
+  `npm run check`: **311/311**. `npm run e2e`: **16/16**, com um caso novo
+  que planta uma concentração real (18/20 registros do grupo num único
+  município) e confere: o sinal aparece com o nome real da categoria (nunca
+  o sentinel interno), "Focar campo" abre e preenche o filtro certo, e
+  "Marcar como esperado"/"Restaurar" funcionam mesmo depois de uma nova
+  rodada de varredura.
+
+**Deliberadamente fora desta passada, e por quê:** o pipeline de
+transformação (`select`/`filter`/`mutate`/`recode`/`dedupe`/`bind`/`join`/
+`group by`, ao estilo do que o Wanderson ensina em R/dplyr — ver conversa com
+o ChatGPT em 2026-08-30) e o registro de funções estilo Excel (`=SOMA(...)`,
+`=SE(...)`, mais funções específicas de epidemiologia como `TAXA`/`ZSCORE`).
+Cada um é, pelo cronograma do próprio spec, uma faixa própria (R11.4 a
+R11.6). Fazer qualquer um deles rápido e mal seria pior do que não fazer.
 
 ---
 

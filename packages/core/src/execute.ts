@@ -275,6 +275,26 @@ export function excludedByCrossFieldRules(
     rule.action === 'exclude' && crossFieldRuleMatches(record, rule, conversions));
 }
 
+/**
+ * Whether a record passes an explicit filter set and no exclude cross-field
+ * rule matches it - the same acceptance boundary {@link resolvePlanRecord}
+ * starts from, without also requiring the plan's row/column dimensions to
+ * resolve. A statistical audit's "group under investigation" is a filter
+ * set on its own, independent of what is being tabulated as rows or columns,
+ * so it needs this narrower question, not the full plan-record resolution.
+ */
+export function matchesFilters(
+  record: DataRecord,
+  filters: readonly FilterSpec[],
+  crossFieldRules: readonly CrossFieldRuleSpec[] | undefined,
+  conversions: ConversionRegistry = {},
+): boolean {
+  if ((crossFieldRules ?? []).some((rule) => rule.action === 'exclude' && crossFieldRuleMatches(record, rule, conversions))) {
+    return false;
+  }
+  return filters.every((filter) => acceptsFilter(record, filter, conversions));
+}
+
 export function resolvePlanRecord(
   record: DataRecord,
   plan: QueryPlan,

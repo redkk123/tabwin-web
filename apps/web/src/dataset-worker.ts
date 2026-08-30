@@ -25,14 +25,28 @@ import {
   streamDbfRecords,
   type DbfRecordBatch,
 } from '../../../packages/acquisition/src/dbf-record-stream.ts';
-import { createTabulationAccumulator, type ConversionRegistry } from '../../../packages/core/src/execute.ts';
+import {
+  createTabulationAccumulator,
+  matchesFilters,
+  type ConversionRegistry,
+} from '../../../packages/core/src/execute.ts';
 import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
 import {
   createFlowAccumulator,
   type FlowBuildResult,
 } from '../../../packages/analysis/src/spatial-flows.ts';
+import {
+  createAuditScanAccumulator,
+  type AuditScanResult,
+} from '../../../packages/analysis/src/anomaly-orchestrator.ts';
 import { createTabulationResultCache } from '../../../packages/core/src/tabulation-cache.ts';
-import type { QueryPlan, TabulationResult } from '../../../packages/core/src/model.ts';
+import type {
+  CrossFieldRuleSpec,
+  DataRecord,
+  FilterSpec,
+  QueryPlan,
+  TabulationResult,
+} from '../../../packages/core/src/model.ts';
 import {
   createDistinctValueCollector,
   createFieldCombinationProfiler,
@@ -133,6 +147,23 @@ interface MicrodatasusCsvRequest {
   maxBytes?: number;
 }
 
+/**
+ * Statistical anomaly audit. `group` is a plain filter set, deliberately not
+ * a QueryPlan - the group under investigation is independent of whatever is
+ * being tabulated as rows or columns. Every other record accepted by the
+ * open dataset is the reference.
+ */
+interface AuditScanRequest {
+  type: 'audit-scan';
+  requestId: number;
+  groupFilters: FilterSpec[];
+  groupCrossFieldRules?: CrossFieldRuleSpec[];
+  conversions?: ConversionRegistry;
+  numericFields: string[];
+  categoricalFields: string[];
+  geographyFields?: string[];
+}
+
 /** Adds a schema-compatible file to the open dataset without reopening it. */
 interface AppendRequest {
   type: 'append';
@@ -143,7 +174,7 @@ interface AppendRequest {
 type DatasetRequest =
   | OpenRequest | AppendRequest | TabulateRequest
   | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest
-  | FlowRequest | MicrodatasusCsvRequest;
+  | FlowRequest | MicrodatasusCsvRequest | AuditScanRequest;
 
 const workerScope: Worker = self as unknown as Worker;
 const BATCH_RECORDS = 5_000;
@@ -393,6 +424,30 @@ function handle(request: DatasetRequest): void {
       });
       const stats = exporter.finish();
       post({ type: 'microdatasus-ready', requestId: request.requestId, stats });
+      return;
+    }
+    case 'audit-scan': {
+      if (!header) throw new Error('Nenhum conjunto de dados aberto');
+      const conversions = request.conversions ?? {};
+      const isGroup = (record: DataRecord): boolean =>
+        matchesFilters(record, request.groupFilters, request.groupCrossFieldRules, conversions);
+      const accumulator = createAuditScanAccumulator(isGroup, {
+        numericFields: request.numericFields,
+        categoricalFields: request.categoricalFields,
+        ...(request.geographyFields ? { geographyFields: request.geographyFields } : {}),
+      });
+      // Every field a group filter or cross-field condition reads must stay
+      // in the projection too, or matchesFilters would see it as always
+      // absent and the group would silently become empty.
+      const filterFields = request.groupFilters.map((filter) => filter.field);
+      const crossFieldFields = (request.groupCrossFieldRules ?? [])
+        .flatMap((rule) => rule.conditions.map((condition) => condition.field));
+      const projectedFields = [...new Set([
+        ...request.numericFields, ...request.categoricalFields, ...filterFields, ...crossFieldFields,
+      ])];
+      streamAll(request.requestId, projectedFields, (batch) => accumulator.push(batch.records));
+      const result: AuditScanResult = accumulator.finish();
+      post({ type: 'audit-scan-ready', requestId: request.requestId, result });
       return;
     }
   }

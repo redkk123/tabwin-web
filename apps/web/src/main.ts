@@ -125,6 +125,16 @@ import type {
   FieldCombinationProfile,
   NumericFieldProfile,
 } from '../../../packages/analysis/src/data-quality.ts';
+import type {
+  AuditScanDiagnostics,
+  AuditScanResult,
+} from '../../../packages/analysis/src/anomaly-orchestrator.ts';
+import type {
+  StatisticalEvidence,
+  StatisticalSeverity,
+  StatisticalSignal,
+  StatisticalSignalKind,
+} from '../../../packages/analysis/src/statistical-anomaly.ts';
 import {
   applyTableOperation,
   calculateColumnTotal,
@@ -134,7 +144,7 @@ import {
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
-type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'compare' | 'audit';
+type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'compare' | 'investigate' | 'audit';
 
 interface LoadedSource {
   name: string;
@@ -447,6 +457,12 @@ const compareAddPairButton = element<HTMLButtonElement>('#compare-add-pair-butto
 const compareRunButton = element<HTMLButtonElement>('#compare-run-button');
 const compareExportButton = element<HTMLButtonElement>('#compare-export-button');
 const compareResult = element<HTMLElement>('#compare-result');
+const investigateNumericFields = element<HTMLSelectElement>('#investigate-numeric-fields');
+const investigateCategoricalFields = element<HTMLSelectElement>('#investigate-categorical-fields');
+const investigateGeographyFields = element<HTMLSelectElement>('#investigate-geography-fields');
+const investigateRunButton = element<HTMLButtonElement>('#investigate-run-button');
+const investigateGateMessage = element<HTMLElement>('#investigate-gate-message');
+const investigateResult = element<HTMLElement>('#investigate-result');
 const toast = element<HTMLElement>('#toast');
 const aboutDialog = element<HTMLDialogElement>('#about-dialog');
 const catalogDialog = element<HTMLDialogElement>('#catalog-dialog');
@@ -519,6 +535,10 @@ let configuredCrossFieldRules: CrossFieldRuleSpec[] = [];
 let extraMeasures: MeasureSpec[] = [];
 let crossFieldRuleSequence = 0;
 let lastCombinationProfile: FieldCombinationProfile | null = null;
+/** Kept so "restaurar sinais descartados" can re-render without re-running the scan. */
+let lastInvestigateResult: AuditScanResult | null = null;
+/** Session-local only: a dismissal never survives a reload, and a fresh dataset clears it. */
+const dismissedInvestigateSignalIds = new Set<string>();
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -693,6 +713,7 @@ function populateControls(preferredField?: string): void {
   populateMeasureFields();
   populateFilterFields();
   populateQualityFields();
+  populateInvestigateFields();
   populateCrossFieldFields();
   populateCombinationFields();
   populateConversions();
@@ -893,6 +914,272 @@ function applyQualityRange(): void {
   void runAnalysis();
 }
 
+function populateInvestigateFields(): void {
+  if (!dbfHeader) return;
+  const numericTypes = new Set(['N', 'F', 'I', 'B', 'Y']);
+  const previousNumeric = new Set(selectedCatalogValues(investigateNumericFields));
+  const previousCategorical = new Set(selectedCatalogValues(investigateCategoricalFields));
+  const previousGeography = new Set(selectedCatalogValues(investigateGeographyFields));
+
+  const numericFields = dbfHeader.fields.filter((field) => numericTypes.has(field.type));
+  const categoricalFields = dbfHeader.fields.filter((field) => !numericTypes.has(field.type));
+
+  investigateNumericFields.replaceChildren(
+    ...numericFields.map((field) => new Option(selectionLabel(field.name), field.name)));
+  investigateCategoricalFields.replaceChildren(
+    ...categoricalFields.map((field) => new Option(selectionLabel(field.name), field.name)));
+  investigateGeographyFields.replaceChildren(
+    ...categoricalFields.map((field) => new Option(selectionLabel(field.name), field.name)));
+
+  for (const option of investigateNumericFields.options) option.selected = previousNumeric.has(option.value);
+  for (const option of investigateCategoricalFields.options) option.selected = previousCategorical.has(option.value);
+  for (const option of investigateGeographyFields.options) option.selected = previousGeography.has(option.value);
+
+  investigateNumericFields.disabled = numericFields.length === 0;
+  investigateCategoricalFields.disabled = categoricalFields.length === 0;
+  investigateGeographyFields.disabled = categoricalFields.length === 0;
+  updateInvestigateRunState();
+}
+
+function updateInvestigateRunState(): void {
+  const hasGroup = configuredFilters.length > 0 || configuredCrossFieldRules.length > 0;
+  const hasFields = investigateNumericFields.selectedOptions.length > 0
+    || investigateCategoricalFields.selectedOptions.length > 0;
+  investigateRunButton.disabled = !dbfHeader || !hasGroup || !hasFields;
+  investigateGateMessage.textContent = !dbfHeader ? ''
+    : !hasGroup ? 'Configure ao menos um filtro ativo para definir o grupo investigado.'
+    : !hasFields ? 'Escolha ao menos um campo numérico ou categórico.'
+    : '';
+}
+
+function conversionsForFilters(
+  filters: readonly FilterSpec[],
+  crossFieldRules: readonly CrossFieldRuleSpec[],
+): ConversionRegistry {
+  const conversions: Record<string, CnvDefinition | DimensionLookupDefinition> = {};
+  for (const id of [
+    ...filters.map((filter) => filter.conversionId),
+    ...crossFieldRules.flatMap((rule) => rule.conditions.map((condition) => condition.conversionId)),
+  ]) {
+    if (!id) continue;
+    const definition = cnvByName.get(id);
+    if (definition) conversions[id] = definition;
+  }
+  return conversions;
+}
+
+function severityLabel(severity: StatisticalSeverity): string {
+  return severity === 'strong' ? 'Forte' : severity === 'review' ? 'Revisar' : 'Informativo';
+}
+
+function investigateKindLabel(kind: StatisticalSignalKind): string {
+  switch (kind) {
+    case 'numeric-outlier': return 'Valor numérico extremo';
+    case 'temporal-outlier': return 'Padrão temporal atípico';
+    case 'rare-category': return 'Categoria rara';
+    case 'distribution-shift': return 'Distribuição difere da referência';
+    case 'subgroup-divergence': return 'Divergência do subgrupo';
+    case 'geographic-concentration': return 'Concentração geográfica';
+    case 'missingness-shift': return 'Lacuna de preenchimento difere';
+  }
+}
+
+function formatEvidenceValue(evidence: StatisticalEvidence): string {
+  const digits = Number.isInteger(evidence.value) ? 0 : 3;
+  const parts = [metricText(evidence.value, digits) + (evidence.unit ? ` ${evidence.unit}` : '')];
+  if (evidence.reference !== undefined) parts.push(`referência ${metricText(evidence.reference, digits)}`);
+  if (evidence.threshold !== undefined) parts.push(`limiar ${metricText(evidence.threshold, digits)}`);
+  if (evidence.note) parts.push(evidence.note);
+  return parts.join(' · ');
+}
+
+/**
+ * Jumps to whichever existing, already-tested tool actually knows how to
+ * isolate this field - the numeric Qualidade profiler (real IQR fences from
+ * the live data) for a numeric field, the ordinary filter builder (real
+ * categories from the live data) otherwise - rather than this panel
+ * fabricating filter bounds of its own from evidence numbers alone.
+ */
+/** Opens the collapsible `<details>` a sidebar control lives in, so jumping to it is actually visible. */
+function revealControl(control: HTMLElement): void {
+  control.closest('details')?.setAttribute('open', '');
+}
+
+function focusFieldForInvestigateSignal(field: string): void {
+  if (!field) return;
+  const numericTypes = new Set(['N', 'F', 'I', 'B', 'Y']);
+  const type = dbfHeader?.fields.find((candidate) => candidate.name === field)?.type;
+  if (type && numericTypes.has(type) && [...qualityField.options].some((option) => option.value === field)) {
+    revealControl(qualityField);
+    qualityField.value = field;
+    qualityField.dispatchEvent(new Event('change'));
+    qualityField.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    showToast(`${selectionLabel(field)} selecionado em Qualidade — confira a sugestão de faixa`);
+    return;
+  }
+  if ([...filterField.options].some((option) => option.value === field)) {
+    revealControl(filterField);
+    filterField.value = field;
+    filterField.dispatchEvent(new Event('change'));
+    filterField.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    showToast(`${selectionLabel(field)} selecionado em Filtro — escolha as categorias a isolar`);
+    return;
+  }
+  showToast(`${selectionLabel(field)} não está disponível para seleção`, true);
+}
+
+function renderInvestigateSignalCard(signal: StatisticalSignal): HTMLElement {
+  const card = document.createElement('article');
+  card.className = `investigate-signal severity-${signal.severity}`;
+
+  const header = document.createElement('div');
+  header.className = 'investigate-signal-header';
+  const badge = document.createElement('span');
+  badge.className = `severity-badge severity-${signal.severity}`;
+  badge.textContent = severityLabel(signal.severity);
+  const kind = document.createElement('span');
+  kind.className = 'investigate-signal-kind';
+  kind.textContent = investigateKindLabel(signal.kind);
+  const title = document.createElement('strong');
+  title.textContent = signal.label;
+  header.append(badge, kind, title);
+
+  const score = document.createElement('div');
+  score.className = 'investigate-signal-score';
+  const scoreValue = document.createElement('b');
+  scoreValue.textContent = `${signal.score}/100`;
+  const scoreNote = document.createElement('small');
+  scoreNote.textContent = 'força da evidência, não probabilidade de erro';
+  score.append(scoreValue, scoreNote);
+
+  const explanation = document.createElement('p');
+  explanation.textContent = signal.explanation;
+
+  const evidenceList = document.createElement('ul');
+  evidenceList.className = 'investigate-evidence';
+  for (const item of signal.evidence) {
+    const entry = document.createElement('li');
+    entry.textContent = `${item.metric}: ${formatEvidenceValue(item)}`;
+    evidenceList.append(entry);
+  }
+
+  const actions = document.createElement('div');
+  actions.className = 'investigate-signal-actions';
+  const focusButton = document.createElement('button');
+  focusButton.type = 'button';
+  focusButton.className = 'secondary-button';
+  focusButton.textContent = 'Focar campo';
+  focusButton.addEventListener('click', () => focusFieldForInvestigateSignal(signal.fields[0] ?? ''));
+  const dismissButton = document.createElement('button');
+  dismissButton.type = 'button';
+  dismissButton.className = 'text-button';
+  dismissButton.textContent = 'Marcar como esperado';
+  dismissButton.addEventListener('click', () => {
+    dismissedInvestigateSignalIds.add(signal.id);
+    if (lastInvestigateResult) renderInvestigateResult(lastInvestigateResult);
+  });
+  actions.append(focusButton, dismissButton);
+
+  card.append(header, score, explanation, evidenceList, actions);
+  return card;
+}
+
+function renderInvestigateResult(result: AuditScanResult): void {
+  investigateResult.replaceChildren();
+
+  const summary = document.createElement('p');
+  summary.className = 'investigate-summary';
+  summary.textContent = `Grupo: ${integerFormat.format(result.groupRecords)} registro(s) · `
+    + `Referência: ${integerFormat.format(result.referenceRecords)} registro(s) · `
+    + `${integerFormat.format(result.diagnostics.testsPerformed)} teste(s) em `
+    + `${integerFormat.format(result.diagnostics.fieldsAnalyzed)} de `
+    + `${integerFormat.format(result.diagnostics.fieldsRequested)} campo(s).`;
+  investigateResult.append(summary);
+
+  if (result.diagnostics.warnings.length) {
+    const warnings = document.createElement('ul');
+    warnings.className = 'investigate-warnings';
+    for (const warning of result.diagnostics.warnings) {
+      const item = document.createElement('li');
+      item.textContent = warning;
+      warnings.append(item);
+    }
+    investigateResult.append(warnings);
+  }
+
+  const visibleSignals = result.signals.filter((signal) => !dismissedInvestigateSignalIds.has(signal.id));
+  const dismissedCount = result.signals.length - visibleSignals.length;
+
+  if (!result.signals.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Nenhum sinal estatístico nos campos escolhidos para este grupo.';
+    investigateResult.append(empty);
+  } else if (!visibleSignals.length) {
+    const empty = document.createElement('p');
+    empty.textContent = 'Todos os sinais encontrados foram marcados como esperados.';
+    investigateResult.append(empty);
+  } else {
+    const severityOrder: Record<StatisticalSeverity, number> = { strong: 0, review: 1, info: 2 };
+    const sorted = [...visibleSignals].sort((a, b) =>
+      severityOrder[a.severity] - severityOrder[b.severity] || b.score - a.score);
+    const list = document.createElement('div');
+    list.className = 'investigate-signal-list';
+    for (const signal of sorted) list.append(renderInvestigateSignalCard(signal));
+    investigateResult.append(list);
+  }
+
+  if (dismissedCount) {
+    const restore = document.createElement('button');
+    restore.type = 'button';
+    restore.className = 'text-button';
+    restore.textContent = `Restaurar ${integerFormat.format(dismissedCount)} sinal(is) marcado(s) como esperado(s)`;
+    restore.addEventListener('click', () => {
+      dismissedInvestigateSignalIds.clear();
+      if (lastInvestigateResult) renderInvestigateResult(lastInvestigateResult);
+    });
+    investigateResult.append(restore);
+  }
+}
+
+async function runInvestigation(): Promise<void> {
+  if (!dbfHeader || investigateRunButton.disabled) return;
+  const numericFields = selectedCatalogValues(investigateNumericFields);
+  const categoricalFields = selectedCatalogValues(investigateCategoricalFields);
+  const selectedGeography = selectedCatalogValues(investigateGeographyFields);
+  const geographyFields = selectedGeography.filter((field) => categoricalFields.includes(field));
+
+  investigateRunButton.disabled = true;
+  investigateResult.replaceChildren();
+  const status = document.createElement('p');
+  status.textContent = 'Executando auditoria estatística…';
+  investigateResult.append(status);
+  try {
+    const conversions = conversionsForFilters(configuredFilters, configuredCrossFieldRules);
+    const { result } = await askDataset<{ result: AuditScanResult }>({
+      type: 'audit-scan',
+      groupFilters: configuredFilters.map(cloneFilter),
+      ...(configuredCrossFieldRules.length
+        ? { groupCrossFieldRules: configuredCrossFieldRules.map(cloneCrossFieldRule) }
+        : {}),
+      conversions,
+      numericFields,
+      categoricalFields,
+      ...(geographyFields.length ? { geographyFields } : {}),
+    }, { label: 'Auditoria estatística' });
+    lastInvestigateResult = result;
+    renderInvestigateResult(result);
+  } catch (error) {
+    investigateResult.replaceChildren();
+    const message = error instanceof Error ? error.message : String(error);
+    const paragraph = document.createElement('p');
+    paragraph.textContent = message;
+    investigateResult.append(paragraph);
+    showToast(message, true);
+  } finally {
+    updateInvestigateRunState();
+  }
+}
+
 function populateFilterFields(): void {
   if (!dbfHeader) return;
   const previous = filterField.value;
@@ -1059,6 +1346,7 @@ function renderConfiguredFilters(): void {
     activeFilterList.append(item);
   });
   updateFilterCount();
+  updateInvestigateRunState();
 }
 
 function cloneFilter(filter: FilterSpec): FilterSpec {
@@ -1204,6 +1492,7 @@ function renderCrossFieldRules(): void {
   crossFieldCount.textContent = configuredCrossFieldRules.length
     ? `${integerFormat.format(configuredCrossFieldRules.length)} ativa(s)`
     : 'nenhuma';
+  updateInvestigateRunState();
 }
 
 function toggleCrossFieldAction(): void {
@@ -1406,6 +1695,8 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   configuredFilters = [];
   configuredCrossFieldRules = [];
   extraMeasures = [];
+  lastInvestigateResult = null;
+  dismissedInvestigateSignalIds.clear();
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -1748,6 +2039,8 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   configuredFilters = [];
   configuredCrossFieldRules = [];
   extraMeasures = [];
+  lastInvestigateResult = null;
+  dismissedInvestigateSignalIds.clear();
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -5378,6 +5671,8 @@ async function openPortableTable(file: File): Promise<void> {
   configuredFilters = [];
   configuredCrossFieldRules = [];
   extraMeasures = [];
+  lastInvestigateResult = null;
+  dismissedInvestigateSignalIds.clear();
   renderCrossFieldRules();
   renderExtraMeasures();
   clearCombinationProfile();
@@ -5878,6 +6173,10 @@ compareBInput.addEventListener('change', () => {
 compareAddPairButton.addEventListener('click', addComparePair);
 compareRunButton.addEventListener('click', runTableComparison);
 compareExportButton.addEventListener('click', exportCompareCsv);
+investigateNumericFields.addEventListener('change', updateInvestigateRunState);
+investigateCategoricalFields.addEventListener('change', updateInvestigateRunState);
+investigateGeographyFields.addEventListener('change', updateInvestigateRunState);
+investigateRunButton.addEventListener('click', () => void runInvestigation());
 suppressZero.addEventListener('change', () => void runAnalysis());
 suppressZeroColumns.addEventListener('change', () => void runAnalysis());
 discriminateUnclassified.addEventListener('change', () => void runAnalysis());

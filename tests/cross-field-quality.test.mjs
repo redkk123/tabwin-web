@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { profileFieldCombinations } from '../dist/packages/analysis/src/data-quality.js';
 import { compileQueryPlan, QueryPlanError } from '../dist/packages/core/src/plan.js';
-import { executeInMemory } from '../dist/packages/core/src/execute.js';
+import { executeInMemory, matchesFilters } from '../dist/packages/core/src/execute.js';
 import { parseRecipe, serializeRecipe } from '../dist/packages/core/src/recipe.js';
 
 /** A pregnancy notification set where one record is the implausible combination. */
@@ -185,4 +185,21 @@ test('combination profile is bounded and rejects unusable arguments', () => {
   assert.throws(() => profileFieldCombinations(records, ['A', 'A']), /distinct fields/);
   assert.throws(() => profileFieldCombinations(records, ['A', ' ']), /non-empty fields/);
   assert.throws(() => profileFieldCombinations(records, ['A', 'B'], { limit: 0 }), /limite inválido/);
+});
+
+test('matchesFilters answers the same acceptance question resolvePlanRecord starts from, without needing row/column dimensions to resolve', () => {
+  const filters = [{ field: 'UF', acceptedCategories: ['AC'] }];
+  assert.equal(matchesFilters(RECORDS[0], filters, undefined), true);
+  assert.equal(matchesFilters(RECORDS[3], filters, undefined), false);
+
+  // PREGNANT_OVER_55 only flags - a flag-only rule must never remove a
+  // record from the group, matching how it never removes one from a
+  // tabulation either.
+  assert.equal(matchesFilters(RECORDS[2], [], [PREGNANT_OVER_55]), true);
+
+  // An exclude-action rule does remove it, the same as resolvePlanRecord's
+  // own excludedByCrossFieldRules check.
+  const excludeRule = { ...PREGNANT_OVER_55, action: 'exclude' };
+  assert.equal(matchesFilters(RECORDS[2], [], [excludeRule]), false);
+  assert.equal(matchesFilters(RECORDS[0], [], [excludeRule]), true);
 });

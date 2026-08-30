@@ -411,3 +411,65 @@ test('a comparação de tabelas alinha por chave, reporta o que não casou e nã
   expect(text).toContain('AM');
   expect(text).toContain('SP');
 });
+
+test('a auditoria estatística encontra um sinal real, nunca vaza o rótulo interno e "Focar campo" abre a ferramenta certa', async ({ page }) => {
+  // 40 reference records (adult ages, MUNIC spread over 8 codes) plus 20
+  // group records (IDADE=8, 18/20 concentrated in MUNIC=M007, mostly
+  // EVOLUCAO=ignorado, one DIAS=90 outlier) - the same shape of anomaly the
+  // module was built to generalize from, not hardcoded to any one disease.
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  await page.locator('[data-view="investigate"]').click();
+  await expect(page.locator('#investigate-run-button')).toBeDisabled();
+  await expect(page.locator('#investigate-gate-message')).toContainText('filtro ativo');
+
+  // Define the group under investigation: the 20 IDADE=8 records. The
+  // filter builder lives in a collapsed <details>; open it first.
+  await page.locator('summary', { hasText: 'Filtros e seleções' }).click();
+  await page.locator('#filter-field').selectOption('IDADE');
+  await page.locator('#filter-kind').selectOption('numeric-range');
+  await page.locator('#filter-maximum').fill('10');
+  await page.locator('#add-filter-button').click();
+  await expect(page.locator('#investigate-gate-message')).toContainText('campo numérico ou categórico');
+
+  await page.locator('#investigate-numeric-fields').selectOption('DIAS');
+  await page.locator('#investigate-categorical-fields').selectOption(['MUNIC', 'EVOLUCAO']);
+  await page.locator('#investigate-geography-fields').selectOption('MUNIC');
+  await expect(page.locator('#investigate-run-button')).toBeEnabled();
+  await expect(page.locator('#investigate-gate-message')).toHaveText('');
+
+  await page.locator('#investigate-run-button').click();
+  const result = page.locator('#investigate-result');
+  await expect(result).toContainText('Grupo: 20 registro(s)');
+  await expect(result).toContainText('Referência: 40 registro(s)');
+  await expect(result.getByText('força da evidência, não probabilidade de erro').first()).toBeVisible();
+
+  // The concentration signal must show the real category name (M007) -
+  // never a raw internal sentinel, which is exactly what once leaked here
+  // before the cardinality-overflow bucket's key was fixed and translated.
+  const munCard = page.locator('.investigate-signal', { hasText: 'Concentração incomum de MUNIC' });
+  await expect(munCard).toContainText('M007');
+  await expect(munCard).not.toContainText('outras_categorias');
+
+  // The seeded DIAS=90 outlier must also surface as its own signal.
+  await expect(page.locator('.investigate-signal', { hasText: 'Valores extremos em DIAS' })).toBeVisible();
+
+  await munCard.getByRole('button', { name: 'Focar campo' }).click();
+  await expect(page.locator('#filter-field')).toHaveValue('MUNIC');
+
+  // "Marcar como esperado" is session-local: it hides the card, offers a
+  // restore, and a fresh run does not resurrect it on its own.
+  await page.locator('[data-view="investigate"]').click();
+  await munCard.getByRole('button', { name: 'Marcar como esperado' }).click();
+  await expect(page.locator('.investigate-signal', { hasText: 'Concentração incomum de MUNIC' })).toHaveCount(0);
+  const restoreButton = result.getByRole('button', { name: /Restaurar/ });
+  await expect(restoreButton).toBeVisible();
+
+  await page.locator('#investigate-run-button').click();
+  await expect(page.locator('.investigate-signal', { hasText: 'Concentração incomum de MUNIC' })).toHaveCount(0);
+
+  await restoreButton.click();
+  await expect(page.locator('.investigate-signal', { hasText: 'Concentração incomum de MUNIC' })).toBeVisible();
+});

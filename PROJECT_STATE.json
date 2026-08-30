@@ -1,15 +1,15 @@
 {
-  "revision": "r10-14-microdatasus-plus-tab-decoded-plus-three-tracks-decided",
+  "revision": "r11-3-anomaly-orchestrator-plus-investigate-ui",
   "date": "2026-08-30",
-  "phase": "faixa-4-closed-r11-decided-not-yet-implemented",
+  "phase": "faixa-4-r11-core-orchestrator-and-audit-ui-done-transform-and-formulas-pending",
   "tests": {
-    "total": 304,
-    "passed": 304,
+    "total": 311,
+    "passed": 311,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 15,
-    "e2e_passed": 15
+    "e2e_total": 16,
+    "e2e_passed": 16
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -296,7 +296,15 @@
     "new-format-N-cnv-serialization-write-path",
     "tab-format-decoded-but-no-writer-and-five-edge-cases-uncaptured-quantile-breaks-multi-file-quoted-row-label-two-selections-discriminated-unclassified",
     "duckdb-wasm-in-browser-decided-on-demand-loading-not-yet-wired-to-ui",
-    "r11-analytics-track-specified-not-implemented-transform-pipeline-formulas-table-comparison-statistical-anomaly-audit-epidemiology-stats"
+    "r11-0-statistical-anomaly-and-table-comparison-core-with-wilson-interval-fix",
+    "r11-0-gaussian-overlay-fit-density-and-histogram-checkbox",
+    "r11-1-general-review-chart-zoom-leaking-into-export-and-print-fixed",
+    "r11-1-axis-bounds-validation-consolidated-where-cross-package-import-is-safe",
+    "r11-2-table-comparison-ui-inner-left-right-full-join-coverage-diagnostics-csv-export",
+    "r11-3-anomaly-orchestrator-group-vs-reference-streaming-scan-five-signal-kinds",
+    "r11-3-matches-filters-shared-acceptance-boundary-independent-of-plan-dimensions",
+    "r11-3-investigate-ui-signal-cards-focus-field-and-session-local-dismissal",
+    "r11-analytics-track-remaining-transform-pipeline-formulas-and-epidemiology-stats-not-implemented"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -321,11 +329,9 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-1-anomaly-orchestrator-and-audit-scan-plan",
-    "r11-transform-pipeline-select-filter-mutate-recode-dedupe-bind-join-groupby",
-    "r11-excel-style-formula-functions-registry",
-    "r11-statistical-audit-ui-scope-detectors-signal-queue-drilldown",
-    "r11-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
+    "r11-4-transform-pipeline-select-filter-mutate-recode-dedupe-bind-join-groupby-with-per-step-history",
+    "r11-5-excel-style-formula-functions-registry-sum-average-if-plus-epidemiology-rate-zscore",
+    "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",
     "continue-cataloged-tabwin-415-feature-families",

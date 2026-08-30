@@ -279,6 +279,7 @@
             <button data-view="map" type="button">Mapa</button>
             <button data-view="statistics" type="button">Estatística</button>
             <button data-view="compare" type="button">Comparar</button>
+            <button data-view="investigate" type="button">Investigar</button>
             <button data-view="audit" type="button">Auditoria</button>
           </nav>
 
@@ -543,6 +544,23 @@
               <p>Abra uma segunda tabela (<code>.twtable</code>) para comparar com o resultado atual.</p>
             </div>
             <p class="compatibility-note">Comparação geral entre tabelas de fontes, períodos ou filtros diferentes — não exige que as duas tenham as mesmas linhas. Chave duplicada falha em vez de somar em silêncio; denominador zero mostra "—", nunca um zero inventado. Este plano ainda não entra na receita.</p>
+          </div>
+
+          <div class="view-panel" id="investigate-view" data-panel="investigate" hidden>
+            <p class="investigate-intro">O <strong>grupo</strong> investigado é o resultado dos filtros e regras cruzadas ativos agora; a <strong>referência</strong> é o restante do conjunto aberto. Escolha os campos a examinar e execute.</p>
+            <div class="investigate-toolbar">
+              <label><span>Campos numéricos <small>(Ctrl/Cmd para múltiplos)</small></span><select id="investigate-numeric-fields" multiple size="6" disabled></select></label>
+              <label><span>Campos categóricos <small>(Ctrl/Cmd para múltiplos)</small></span><select id="investigate-categorical-fields" multiple size="6" disabled></select></label>
+              <label><span>Tratar como geografia <small>(subconjunto dos categóricos acima)</small></span><select id="investigate-geography-fields" multiple size="4" disabled></select></label>
+            </div>
+            <div class="investigate-actions">
+              <button class="primary-button" id="investigate-run-button" type="button" disabled><span>Executar auditoria</span><span aria-hidden="true">→</span></button>
+              <span id="investigate-gate-message" class="investigate-gate-message"></span>
+            </div>
+            <div class="investigate-result" id="investigate-result">
+              <p>Configure ao menos um filtro ativo para definir o grupo, escolha campos acima e execute.</p>
+            </div>
+            <p class="compatibility-note">A estatística aponta estranheza; ela não decide se é erro — isso é julgamento de domínio, de quem conhece o dado. Um placar não é probabilidade de erro nem gatilho automático: nenhuma ação é tomada sozinha. A detecção é pelo formato do sinal, não pelo assunto — o mesmo motor separaria idades concentradas num só município, uma categoria rara demais em todo lugar, ou uma lacuna de preenchimento maior que o normal, qualquer que seja o grupo.</p>
           </div>
 
           <div class="view-panel" id="audit-view" data-panel="audit" hidden>
