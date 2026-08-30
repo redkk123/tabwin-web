@@ -115,6 +115,12 @@ import {
   pearsonCorrelation,
   simpleLinearRegression,
 } from '../../../packages/analysis/src/statistics.ts';
+import {
+  compareTables,
+  type RowMatchMode,
+  type TableComparisonResult,
+  type TableJoinMode,
+} from '../../../packages/analysis/src/table-comparison.ts';
 import type {
   FieldCombinationProfile,
   NumericFieldProfile,
@@ -128,7 +134,7 @@ import {
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
-type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'audit';
+type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'compare' | 'audit';
 
 interface LoadedSource {
   name: string;
@@ -431,6 +437,16 @@ const histogramBins = element<HTMLInputElement>('#histogram-bins');
 const histogramGaussianLabel = element<HTMLElement>('#histogram-gaussian-label');
 const histogramGaussian = element<HTMLInputElement>('#histogram-gaussian');
 const statisticsResult = element<HTMLElement>('#statistics-result');
+const compareBLabel = element<HTMLElement>('#compare-b-label');
+const compareOpenBButton = element<HTMLButtonElement>('#compare-open-b-button');
+const compareBInput = element<HTMLInputElement>('#compare-b-input');
+const compareJoin = element<HTMLSelectElement>('#compare-join');
+const compareRowMatch = element<HTMLSelectElement>('#compare-row-match');
+const comparePairsContainer = element<HTMLElement>('#compare-pairs');
+const compareAddPairButton = element<HTMLButtonElement>('#compare-add-pair-button');
+const compareRunButton = element<HTMLButtonElement>('#compare-run-button');
+const compareExportButton = element<HTMLButtonElement>('#compare-export-button');
+const compareResult = element<HTMLElement>('#compare-result');
 const toast = element<HTMLElement>('#toast');
 const aboutDialog = element<HTMLDialogElement>('#about-dialog');
 const catalogDialog = element<HTMLDialogElement>('#catalog-dialog');
@@ -2677,6 +2693,7 @@ function renderResult(): void {
   renderChart(currentResult);
   populateStatisticsColumns(currentResult);
   renderStatistics();
+  updateCompareControls();
   renderAudit();
   renderDataQualityOutcomes();
   renderCrossFieldRules();
@@ -3413,6 +3430,290 @@ function renderStatistics(): void {
     message.textContent = error instanceof Error ? error.message : String(error);
     statisticsResult.append(message);
   }
+}
+
+/**
+ * Table comparison ("Comparar" tab).
+ *
+ * This generalises `include-table`: that operation requires every row key to
+ * already line up and folds columns from B straight into A's own table. This
+ * keeps A and B as two independent tables and produces a third, explicit
+ * comparison artifact - coverage, unmatched rows and label mismatches shown
+ * before any number, exactly as packages/analysis/src/table-comparison.ts
+ * requires.
+ *
+ * B is loaded from a `.twtable` the same way "Incluir tabela" already reads
+ * one - parse, then replay its operations - but kept separate rather than
+ * merged, since the whole point here is to compare two tables, not combine
+ * them into one.
+ */
+interface CompareTableSide {
+  title: string;
+  result: TabulationResult;
+}
+
+interface ComparePairState {
+  id: string;
+  leftColumnKey: string;
+  rightColumnKey: string;
+}
+
+let compareTableB: CompareTableSide | undefined;
+let comparePairs: ComparePairState[] = [];
+let comparePairSequence = 0;
+
+async function openCompareTableB(file: File): Promise<void> {
+  const table = parsePortableTable(await file.text());
+  const result = replayTableOperations(table.baseResult, table.operations);
+  compareTableB = { title: table.title || file.name, result };
+  compareBLabel.textContent = `${file.name} · ${table.title || 'sem título'}`;
+  resetComparePairsToAutoGuess();
+  renderComparePairs();
+  updateCompareControls();
+  compareResult.replaceChildren(
+    Object.assign(document.createElement('p'), {
+      textContent: 'Escolha os pares de colunas e clique em "Comparar".',
+    }),
+  );
+  compareExportButton.disabled = true;
+}
+
+/**
+ * Pairs every A column that shares a key with a B column - the common case
+ * for two periods or two filtered subsets of the same tabulation - and falls
+ * back to pairing the sole column on each side when neither table has more
+ * than one. Anything else is left for the user to build with "+ Par de
+ * colunas": guessing a pairing between differently-shaped tables would be
+ * exactly the kind of silent semantic assumption this feature exists to
+ * avoid.
+ */
+function resetComparePairsToAutoGuess(): void {
+  comparePairs = [];
+  if (!currentResult || !compareTableB) return;
+  const rightByKey = new Map(compareTableB.result.columns.map((column) => [column.key, column]));
+  for (const column of currentResult.columns) {
+    if (rightByKey.has(column.key)) {
+      comparePairs.push({ id: `pair-${comparePairSequence++}`, leftColumnKey: column.key, rightColumnKey: column.key });
+    }
+  }
+  if (!comparePairs.length && currentResult.columns.length === 1 && compareTableB.result.columns.length === 1) {
+    comparePairs.push({
+      id: `pair-${comparePairSequence++}`,
+      leftColumnKey: currentResult.columns[0]!.key,
+      rightColumnKey: compareTableB.result.columns[0]!.key,
+    });
+  }
+}
+
+function renderComparePairs(): void {
+  comparePairsContainer.replaceChildren();
+  if (!currentResult || !compareTableB) return;
+  for (const pair of comparePairs) {
+    const row = document.createElement('div');
+    row.className = 'compare-pair-row';
+    const left = document.createElement('select');
+    for (const column of currentResult.columns) left.append(new Option(column.label, column.key));
+    left.value = pair.leftColumnKey;
+    left.addEventListener('change', () => { pair.leftColumnKey = left.value; });
+    const arrow = document.createElement('span');
+    arrow.textContent = '↔';
+    arrow.setAttribute('aria-hidden', 'true');
+    const right = document.createElement('select');
+    for (const column of compareTableB.result.columns) right.append(new Option(column.label, column.key));
+    right.value = pair.rightColumnKey;
+    right.addEventListener('change', () => { pair.rightColumnKey = right.value; });
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'compare-pair-remove';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', 'Remover par de colunas');
+    remove.addEventListener('click', () => {
+      comparePairs = comparePairs.filter((item) => item.id !== pair.id);
+      renderComparePairs();
+      updateCompareControls();
+    });
+    row.append(left, arrow, right, remove);
+    comparePairsContainer.append(row);
+  }
+}
+
+function updateCompareControls(): void {
+  const ready = Boolean(currentResult && compareTableB);
+  compareAddPairButton.disabled = !ready;
+  compareRunButton.disabled = !ready || !comparePairs.length;
+}
+
+function addComparePair(): void {
+  if (!currentResult || !compareTableB) return;
+  comparePairs.push({
+    id: `pair-${comparePairSequence++}`,
+    leftColumnKey: currentResult.columns[0]!.key,
+    rightColumnKey: compareTableB.result.columns[0]!.key,
+  });
+  renderComparePairs();
+  updateCompareControls();
+}
+
+/** `null` prints as "—": an honest gap, never a fabricated zero. */
+function metricText(value: number | null, digits = 2): string {
+  return value === null ? '—' : value.toLocaleString('pt-BR', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+}
+
+function runTableComparison(): void {
+  if (!currentResult || !compareTableB) return;
+  if (!comparePairs.length) {
+    showToast('Adicione ao menos um par de colunas para comparar', true);
+    return;
+  }
+  try {
+    const comparison = compareTables(currentResult, compareTableB.result, {
+      version: 1,
+      leftLabel: resultTitle.textContent?.trim() || 'A',
+      rightLabel: compareTableB.title,
+      join: compareJoin.value as TableJoinMode,
+      rowMatch: compareRowMatch.value as RowMatchMode,
+      columnPairs: comparePairs.map((pair) => ({
+        id: pair.id, leftColumnKey: pair.leftColumnKey, rightColumnKey: pair.rightColumnKey,
+      })),
+    });
+    lastCompareResult = comparison;
+    renderCompareResult(comparison);
+    compareExportButton.disabled = false;
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+    compareExportButton.disabled = true;
+  }
+}
+
+let lastCompareResult: TableComparisonResult | undefined;
+
+function renderCompareResult(comparison: TableComparisonResult): void {
+  compareResult.replaceChildren();
+  const diagnostics = comparison.diagnostics;
+  const diagnosticsGrid = document.createElement('div');
+  diagnosticsGrid.className = 'statistics-grid';
+  diagnosticsGrid.append(
+    statisticCard('Linhas em A', integerFormat.format(diagnostics.leftRows)),
+    statisticCard('Linhas em B', integerFormat.format(diagnostics.rightRows)),
+    statisticCard('Correspondentes', integerFormat.format(diagnostics.matchedRows)),
+    statisticCard('Somente em A', integerFormat.format(diagnostics.leftOnlyRows)),
+    statisticCard('Somente em B', integerFormat.format(diagnostics.rightOnlyRows)),
+    statisticCard('Cobertura A', `${(diagnostics.leftCoverage * 100).toFixed(1)}%`),
+    statisticCard('Cobertura B', `${(diagnostics.rightCoverage * 100).toFixed(1)}%`),
+    statisticCard('Rótulos divergentes', integerFormat.format(diagnostics.labelMismatches.length)),
+  );
+  compareResult.append(diagnosticsGrid);
+
+  if (comparison.warnings.length) {
+    const warnings = document.createElement('ul');
+    warnings.className = 'compare-warnings';
+    for (const warning of comparison.warnings) {
+      const item = document.createElement('li');
+      item.textContent = warning;
+      warnings.append(item);
+    }
+    compareResult.append(warnings);
+  }
+
+  const summaries = comparison.pairSummaries.filter((summary) => summary.matchedNumericRows > 0);
+  if (summaries.length) {
+    const summaryGrid = document.createElement('div');
+    summaryGrid.className = 'statistics-grid';
+    for (const summary of summaries) {
+      const pairLabel = comparison.plan.columnPairs.find((pair) => pair.id === summary.pairId)?.label ?? summary.pairId;
+      summaryGrid.append(
+        statisticCard(`${pairLabel} · EMA`, metricText(summary.meanAbsoluteDifference ?? null)),
+        statisticCard(`${pairLabel} · REQM`, metricText(summary.rootMeanSquaredDifference ?? null)),
+        ...(summary.meanAbsolutePercentageError === undefined ? []
+          : [statisticCard(`${pairLabel} · EPAM`, `${summary.meanAbsolutePercentageError.toFixed(1)}%`)]),
+        ...(summary.pearsonCorrelation === undefined ? []
+          : [statisticCard(`${pairLabel} · Pearson`, summary.pearsonCorrelation.toFixed(3))]),
+      );
+    }
+    compareResult.append(summaryGrid);
+    const note = document.createElement('p');
+    note.className = 'compatibility-note';
+    note.textContent = 'Correlação alta não significa concordância entre A e B - é só a força da relação linear.';
+    compareResult.append(note);
+  }
+
+  const table = document.createElement('table');
+  table.className = 'compare-table';
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  const headings = ['Linha', 'Status', ...comparison.plan.columnPairs.flatMap((pair) => {
+    const label = pair.label ?? pair.id;
+    return [`${label} · A`, `${label} · B`, `${label} · Δ`, `${label} · Δ%`, `${label} · B/A`];
+  })];
+  for (const text of headings) {
+    const cell = document.createElement('th');
+    cell.textContent = text;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  const body = document.createElement('tbody');
+  const statusLabel: Record<string, string> = { matched: 'ambas', 'left-only': 'só A', 'right-only': 'só B' };
+  for (const row of comparison.rows) {
+    const tr = document.createElement('tr');
+    tr.className = `compare-row-${row.status}`;
+    const labelCell = document.createElement('td');
+    labelCell.textContent = row.displayLabel;
+    const statusCell = document.createElement('td');
+    statusCell.textContent = statusLabel[row.status] ?? row.status;
+    tr.append(labelCell, statusCell);
+    for (const pair of comparison.plan.columnPairs) {
+      const metric = row.metrics[pair.id];
+      const cells = metric
+        ? [metric.left, metric.right, metric.difference, metric.relativeDifferencePct, metric.ratioRightToLeft]
+        : [null, null, null, null, null];
+      const RELATIVE_DIFFERENCE_INDEX = 3;
+      for (const [index, value] of cells.entries()) {
+        const cell = document.createElement('td');
+        cell.textContent = index === RELATIVE_DIFFERENCE_INDEX && value !== null
+          ? `${value.toFixed(1)}%`
+          : metricText(value);
+        tr.append(cell);
+      }
+    }
+    body.append(tr);
+  }
+  table.append(head, body);
+  const scroll = document.createElement('div');
+  scroll.className = 'compare-table-scroll';
+  scroll.append(table);
+  compareResult.append(scroll);
+}
+
+/** Always-quoted CSV field, matching the ; delimiter and BOM convention Microdatasus exports use. */
+function compareCsvField(value: string): string {
+  return `"${value.replace(/"/g, '""')}"`;
+}
+
+function exportCompareCsv(): void {
+  if (!lastCompareResult) return;
+  const comparison = lastCompareResult;
+  const headings = ['Linha', 'Status', ...comparison.plan.columnPairs.flatMap((pair) => {
+    const label = pair.label ?? pair.id;
+    return [`${label} A`, `${label} B`, `${label} Delta`, `${label} DeltaPct`, `${label} RazaoBA`];
+  })];
+  const csvValue = (value: number | null): string => (value === null ? '' : String(value));
+  const lines = [headings.map(compareCsvField).join(';')];
+  const statusLabel: Record<string, string> = { matched: 'ambas', 'left-only': 'so A', 'right-only': 'so B' };
+  for (const row of comparison.rows) {
+    const cells = [row.displayLabel, statusLabel[row.status] ?? row.status];
+    for (const pair of comparison.plan.columnPairs) {
+      const metric = row.metrics[pair.id];
+      cells.push(
+        csvValue(metric?.left ?? null), csvValue(metric?.right ?? null), csvValue(metric?.difference ?? null),
+        csvValue(metric?.relativeDifferencePct ?? null), csvValue(metric?.ratioRightToLeft ?? null),
+      );
+    }
+    lines.push(cells.map(compareCsvField).join(';'));
+  }
+  downloadBlob(
+    new Blob([`﻿${lines.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' }),
+    `${exportBaseName()}-comparacao.csv`,
+  );
 }
 
 /**
@@ -4904,6 +5205,10 @@ function showView(view: ViewName): void {
     panel.classList.toggle('active', active);
   }
   if (view === 'map') void ensureMap();
+  // Columns can change between visits (a re-tabulation, an added measure);
+  // refreshing here means the dropdowns are never stale when actually seen,
+  // without needing every column-changing code path to know about this tab.
+  if (view === 'compare' && compareTableB) renderComparePairs();
 }
 
 function exportBaseName(): string {
@@ -5563,6 +5868,16 @@ includeTableInput.addEventListener('change', () => {
   void includePortableTable(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
   includeTableInput.value = '';
 });
+compareOpenBButton.addEventListener('click', () => compareBInput.click());
+compareBInput.addEventListener('change', () => {
+  const file = compareBInput.files?.[0];
+  compareBInput.value = '';
+  if (!file) return;
+  void openCompareTableB(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
+});
+compareAddPairButton.addEventListener('click', addComparePair);
+compareRunButton.addEventListener('click', runTableComparison);
+compareExportButton.addEventListener('click', exportCompareCsv);
 suppressZero.addEventListener('change', () => void runAnalysis());
 suppressZeroColumns.addEventListener('change', () => void runAnalysis());
 discriminateUnclassified.addEventListener('change', () => void runAnalysis());

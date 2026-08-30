@@ -359,3 +359,55 @@ test('o histograma sobrepõe uma gaussiana ajustada, e sabe quando não pode aju
   await expect(page.locator('#statistics-result')).toContainText('A gaussiana não pôde ser ajustada');
   await expect(marks).toHaveCount(0);
 });
+
+test('a comparação de tabelas alinha por chave, reporta o que não casou e não inventa zero na divisão', async ({ page }) => {
+  // Table B first: tabulated separately, saved as .twtable, then reopened
+  // from inside the "Comparar" panel while A stays whatever the app already
+  // has loaded - the two tables never share a session.
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/compare-b-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('UF');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  const saveDownload = page.waitForEvent('download');
+  await page.locator('#save-table-button').click();
+  const tableBFile = await (await saveDownload).path();
+
+  // Now load table A - AC=2, AM=1 - into the live session. B (AC=3, SP=1)
+  // only ever exists as the file just saved.
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/compare-a-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('UF');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toContainText('AC');
+
+  await page.locator('[data-view="compare"]').click();
+  await expect(page.locator('#compare-run-button')).toBeDisabled();
+  await page.locator('#compare-open-b-button').click();
+  await page.locator('#compare-b-input').setInputFiles(tableBFile!);
+  await expect(page.locator('#compare-run-button')).toBeEnabled();
+
+  await page.locator('#compare-run-button').click();
+  const result = page.locator('#compare-result');
+  // AC exists in both (matched); AM only in A; SP only in B.
+  await expect(result).toContainText('2');
+  await expect(result.locator('.compare-row-matched')).toContainText('AC');
+  await expect(result.locator('.compare-row-left-only')).toContainText('AM');
+  await expect(result.locator('.compare-row-right-only')).toContainText('SP');
+  // AC: A=2, B=3, difference=1 - never a fabricated zero for the unmatched rows.
+  const acRow = result.locator('.compare-row-matched');
+  await expect(acRow).toContainText('3,00');
+  await expect(acRow).toContainText('1,00');
+  const unmatchedCells = result.locator('.compare-row-left-only td, .compare-row-right-only td');
+  await expect(unmatchedCells.filter({ hasText: '—' }).first()).toBeVisible();
+
+  const download = page.waitForEvent('download');
+  await page.locator('#compare-export-button').click();
+  const exported = await (await download).path();
+  const text = await (await import('node:fs/promises')).readFile(exported!, 'utf8');
+  expect(text.replace(/^﻿/, '')).toContain('AC');
+  expect(text).toContain('AM');
+  expect(text).toContain('SP');
+});

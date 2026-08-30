@@ -278,6 +278,7 @@
             <button data-view="chart" type="button">Gráfico</button>
             <button data-view="map" type="button">Mapa</button>
             <button data-view="statistics" type="button">Estatística</button>
+            <button data-view="compare" type="button">Comparar</button>
             <button data-view="audit" type="button">Auditoria</button>
           </nav>
 
@@ -509,6 +510,39 @@
               <p>Execute uma análise para calcular estatísticas sobre as colunas do resultado.</p>
             </div>
             <p class="compatibility-note">Cálculo moderno e auditável sobre a tabela atual. A equivalência numérica com o TabWin 4.15 ainda depende de casos-oráculo.</p>
+          </div>
+
+          <div class="view-panel" id="compare-view" data-panel="compare" hidden>
+            <div class="compare-toolbar">
+              <div class="compare-source">
+                <span class="compare-source-label">A</span>
+                <strong id="compare-a-label">Resultado atual</strong>
+              </div>
+              <div class="compare-source">
+                <span class="compare-source-label">B</span>
+                <button class="secondary-button" id="compare-open-b-button" type="button">Abrir tabela (.twtable)</button>
+                <strong id="compare-b-label">Nenhuma</strong>
+                <input id="compare-b-input" type="file" accept=".twtable" hidden />
+              </div>
+              <label>Junção<select id="compare-join">
+                <option value="inner">Somente correspondentes</option>
+                <option value="left">Manter tudo de A</option>
+                <option value="right">Manter tudo de B</option>
+                <option value="full" selected>Manter tudo de ambas</option>
+              </select></label>
+              <label>Casamento de linhas<select id="compare-row-match">
+                <option value="key" selected>Chave exata</option>
+                <option value="normalized-label">Rótulo normalizado</option>
+              </select></label>
+              <div class="compare-pairs" id="compare-pairs"></div>
+              <button class="text-button" id="compare-add-pair-button" type="button" disabled>+ Par de colunas</button>
+              <button class="primary-button" id="compare-run-button" type="button" disabled><span>Comparar</span><span aria-hidden="true">→</span></button>
+              <button class="secondary-button" id="compare-export-button" type="button" disabled>Exportar CSV</button>
+            </div>
+            <div class="compare-result" id="compare-result">
+              <p>Abra uma segunda tabela (<code>.twtable</code>) para comparar com o resultado atual.</p>
+            </div>
+            <p class="compatibility-note">Comparação geral entre tabelas de fontes, períodos ou filtros diferentes — não exige que as duas tenham as mesmas linhas. Chave duplicada falha em vez de somar em silêncio; denominador zero mostra "—", nunca um zero inventado. Este plano ainda não entra na receita.</p>
           </div>
 
           <div class="view-panel" id="audit-view" data-panel="audit" hidden>

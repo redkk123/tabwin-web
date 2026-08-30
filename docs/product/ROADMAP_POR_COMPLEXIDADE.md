@@ -184,14 +184,24 @@ seria falso. O que foi feito:
   e o painel diz por quê, em vez de falhar em silêncio. Ligado à UI de
   Estatística: um checkbox "Sobrepor gaussiana" desenha um traço por classe do
   histograma, com o valor esperado no `title`.
+- **R11.1 — UI de comparação de tabelas, sobre o núcleo já testado.** Nova
+  aba "Comparar": A é sempre o resultado atual; B é aberto de um `.twtable`
+  salvo separadamente, nunca mesclado a A. Junção
+  `inner`/`left`/`right`/`full`, casamento por chave exata ou rótulo
+  normalizado, pares de coluna com auto-sugestão por chave igual (e reversão
+  para o par único quando as duas tabelas têm uma coluna só), diagnóstico de
+  cobertura e rótulos divergentes antes de qualquer número, denominador zero
+  mostrado como "—" nunca como zero inventado, e export CSV. **O plano de
+  comparação ainda não entra na receita** — dito explicitamente na própria
+  interface, não escondido.
 
 **Deliberadamente fora desta passada, e por quê:** o orquestrador de
 detecção (`anomaly-orchestrator.ts`), a UI de auditoria inteira (tela de
 escopo, fila de sinais, drill-down), o pipeline de transformação
-(`select`/`filter`/`mutate`/`recode`/`dedupe`/`bind`/`join`/`group by`), o
-registro de funções estilo Excel e a UI de comparação de tabelas. Cada um é,
-pelo cronograma do próprio spec, uma faixa própria (R11.1 a R11.6). Fazer
-qualquer um deles rápido e mal seria pior do que não fazer.
+(`select`/`filter`/`mutate`/`recode`/`dedupe`/`bind`/`join`/`group by`), e o
+registro de funções estilo Excel. Cada um é, pelo cronograma do próprio spec,
+uma faixa própria (R11.2 a R11.6). Fazer qualquer um deles rápido e mal seria
+pior do que não fazer.
 
 ---
 

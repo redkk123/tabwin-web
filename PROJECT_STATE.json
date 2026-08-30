@@ -8,8 +8,8 @@
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 14,
-    "e2e_passed": 14
+    "e2e_total": 15,
+    "e2e_passed": 15
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -255,7 +255,8 @@
     "table-comparison-core-inner-left-right-full-explicit-row-mapping-coverage-diagnostics",
     "gaussian-fit-density-and-histogram-overlay-descriptive-not-a-normality-test",
     "chart-zoom-excluded-from-svg-png-export-and-print-not-just-from-recipe",
-    "shared-axis-bounds-validation-across-recipe-and-editor"
+    "shared-axis-bounds-validation-across-recipe-and-editor",
+    "table-comparison-ui-compare-view-ab-diagnostics-csv-export"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -321,7 +322,6 @@
   },
   "next": [
     "r11-1-anomaly-orchestrator-and-audit-scan-plan",
-    "r11-1-table-comparison-ui-selector-diagnostics-side-by-side",
     "r11-transform-pipeline-select-filter-mutate-recode-dedupe-bind-join-groupby",
     "r11-excel-style-formula-functions-registry",
     "r11-statistical-audit-ui-scope-detectors-signal-queue-drilldown",
