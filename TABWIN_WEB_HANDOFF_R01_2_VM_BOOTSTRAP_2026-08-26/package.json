@@ -25,13 +25,17 @@
     "bench:record-stream": "npm run build && node --expose-gc --max-old-space-size=6144 scripts/measure-record-stream-memory.mjs",
     "bench:decode-breakdown": "npm run build && node scripts/measure-decode-breakdown.mjs",
     "bench:plan-projection": "npm run build && node --max-old-space-size=8192 scripts/measure-plan-projection.mjs",
-    "check": "npm run test && npm run typecheck:web && npm run web:build"
+    "check": "npm run test && npm run typecheck:web && npm run web:build",
+    "e2e": "playwright test",
+    "e2e:headed": "playwright test --headed",
+    "check:all": "npm run check && npm run e2e"
   },
   "dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
     "fflate": "0.8.2"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "typescript": "5.8.3",
     "vite": "8.2.2",
     "wrangler": "4.127.0"

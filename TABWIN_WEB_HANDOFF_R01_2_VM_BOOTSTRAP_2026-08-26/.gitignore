@@ -13,3 +13,8 @@ coverage/
 legacy-binaries/
 private-fixtures/
 dist-web-old/
+# Playwright run output. The report is a CI artifact, not a tracked file.
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/

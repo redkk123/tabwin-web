@@ -405,6 +405,7 @@ const catalogMonth = element<HTMLSelectElement>('#catalog-month');
 const catalogUf = element<HTMLSelectElement>('#catalog-uf');
 const catalogMonthLabel = element<HTMLElement>('#catalog-month-label');
 const catalogUfLabel = element<HTMLElement>('#catalog-uf-label');
+const catalogNationalNote = element<HTMLElement>('#catalog-national-note');
 const catalogCapabilitiesOutput = element<HTMLElement>('#catalog-capabilities');
 const catalogAuxiliary = element<HTMLInputElement>('#catalog-auxiliary');
 const catalogSearchButton = element<HTMLButtonElement>('#catalog-search-button');
@@ -3705,7 +3706,14 @@ function updateCatalogGeography(): void {
   if (type?.coverage !== 'UF') catalogUf.add(new Option('Brasil', 'BR'));
   if (type?.coverage !== 'BR') for (const uf of ufs) catalogUf.add(new Option(uf, uf));
   if (catalogUf.options[0]) catalogUf.options[0].selected = true;
-  catalogUfLabel.hidden = type?.coverage === 'BR';
+  // A national collection has no UF to choose, but hiding the control silently
+  // reads as a missing feature. Say why instead: the file is one country-wide
+  // download and the UF is a filter afterwards - which in SINAN is the honest
+  // answer anyway, because residence UF and notification UF are not the same
+  // question and the catalogue has no business picking one for the user.
+  const national = type?.coverage === 'BR';
+  catalogUfLabel.hidden = national;
+  catalogNationalNote.hidden = !national;
   renderCatalogCapabilities();
 }
 

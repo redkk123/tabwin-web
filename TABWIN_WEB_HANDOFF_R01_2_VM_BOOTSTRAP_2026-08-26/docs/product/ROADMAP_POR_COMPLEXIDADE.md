@@ -413,18 +413,30 @@ substituí-lo.
 
 ### 4.8 Testes end-to-end com Playwright
 
-**Fundação adicionada na auditoria do snapshot 5879760 (não conclui 4.8):**
-contrato zero-dependency de seletores críticos em
-`scripts/verify-e2e-contract.mjs`, executado pelo gate, e plano da primeira
-bateria em `docs/testing/PLAYWRIGHT_E2E_FOUNDATION.md`. O runner/browser ainda
-não foi adicionado porque este ambiente de auditoria não conseguiu instalar
-novas dependências; não marcar como concluído até E2E-001..003 rodarem de fato.
+**Estado em 2026-08-30: CONCLUÍDA.** `@playwright/test` instalado, Chromium
+baixado, `npm run e2e` com **7 testes passando** na VM e a CI rodando a mesma
+suíte depois do `npm run check`, com o relatório subindo como artefato quando
+falha. Handoff em `docs/handoffs/R10_9_E2E_PLAYWRIGHT.md`.
+
+O que a suíte cobre hoje: CSV local → Web Worker → tabulação exibida;
+catálogo nacional postando `uf[]=BR` explicitamente; catálogo por UF postando
+a UF escolhida; editor de gráficos redesenhando o SVG sem refazer a
+tabulação; limites de eixo inválidos recusados; zoom por `viewBox` e
+reenquadrar; e ida e volta do estilo pela receita.
+
+**Correção de registro:** a auditoria do snapshot `5879760` descreveu aqui um
+`scripts/verify-e2e-contract.mjs` "executado pelo gate". Esse arquivo nunca
+existiu nesta árvore, e o gate nunca o executou. A suíte Playwright real
+substitui a ideia: ela exercita os mesmos seletores num navegador de verdade,
+que é o que o contrato tentava aproximar sem poder rodar.
 
 **Esforço:** semanas · **Risco:** baixo · **Valor:** alto
 
-Não existe nenhum hoje. O bug do `uf=BR` passou por 121 testes verdes porque
-todos eram unitários e fixavam o comportamento defeituoso. Um e2e que faz uma
-busca real teria pego.
+A motivação original continua valendo como registro: o bug do `uf=BR` passou
+por 121 testes verdes porque todos eram unitários e fixavam o comportamento
+defeituoso. Os dois testes de catálogo desta suíte são exatamente a rede que
+faltava — e um deles agora também exige que a interface **explique** por que
+não há UF para escolher, em vez de só esconder o seletor.
 
 ---
 
