@@ -1,5 +1,183 @@
 # Roadmap do que falta, ordenado por complexidade
 
+## Decisão estrutural de 2026-08-30 — três trilhas, não uma fila
+
+**Status: DECIDIDO.** Análise em
+`docs/product/DECISAO_DUCKDB_NAVEGADOR.md`, revisada pelo ChatGPT e aprovada
+pelo dono do projeto.
+
+O projeto deixa de ser uma fila única de faixas e passa a ter **três trilhas
+permanentes**, com dependências explícitas entre elas:
+
+```text
+                      TABWIN WEB
+                          │
+        ┌─────────────────┴─────────────────┐
+        │                                   │
+ TABULAÇÃO COMPATÍVEL                EXPLORAÇÃO AVANÇADA
+     COM TABWIN                        DE MICRODADO
+        │                                   │
+ executor próprio                     DuckDB WASM
+ DEF / CNV / lookup / startPosition    SQL / joins / window
+ goldens, .TAB, .MAP                   sob demanda
+        │                                   │
+        └─────────────────┬─────────────────┘
+                          │
+                     EPIDEMIOLOGIA
+            denominadores, taxas, IC, padronização
+```
+
+### Trilha 1 — Compatibilidade TabWin
+
+Autoridade única sobre `DEF`, `CNV`, lookup DBF, `startPosition`,
+unclassified e goldens. **Não depende do DuckDB e nunca vai depender.**
+Continua sendo o motor que responde por qualquer alegação de equivalência.
+
+### Trilha 2 — Exploração de microdado
+
+DuckDB WASM, **carregado sob demanda**. É deliberadamente *outro produto
+dentro do produto*, não um segundo executor da trilha 1.
+
+- **Nome na interface: "Explorar microdados"**, não "SQL" nem "DuckDB". O
+  usuário comum não precisa saber o nome do motor.
+- O carregamento é anunciado antes de acontecer: *"O módulo é carregado no
+  dispositivo quando aberto pela primeira vez."*
+- **Fronteira de produto, não limitação escondida.** Todo resultado carrega
+  a procedência do motor, e ela **entra na receita**:
+
+```text
+  Exploração:                    Tabulação oficial:
+    Motor: DuckDB                  Motor: Compatibilidade TabWin
+    Fonte: microdado bruto         DEF: RD2008.DEF
+    DEF/CNV: não aplicados         Conversões CNV: aplicadas
+```
+
+Isso não é aviso legal: é **propriedade científica**. Fica impossível
+confundir microdado bruto analisado com resultado segundo a semântica do
+TabWin.
+
+### Trilha 3 — Epidemiologia
+
+Consome a saída das duas outras. **Não depende da decisão do DuckDB** e pode
+começar antes dela.
+
+---
+
+## 4.11 Exploração de microdado (trilha 2)
+
+**Motivação registrada do dono do projeto:**
+
+> "sobre a ideia do microdatasus, era pra ter mais filtros pro usuário, saca?
+> a nível do que tu consegue fazer com o R"
+
+A exportação Microdatasus (4.9) entregou a **saída**: o CSV é exatamente o
+subconjunto da tabulação. O que falta é a **entrada** — poder chegar num
+subconjunto que os dois filtros atuais (categorias e faixa numérica) não
+alcançam.
+
+Ordem, do mais para o menos justificado:
+
+1. **campos derivados** — `CASE WHEN`, aritmética, diferença de datas;
+2. **expressão derivada como filtro** — `VAL_TOT / DIAS_PERM > x`;
+3. **padrão textual** — `PROC_REA LIKE '04%'`, CID malformado;
+4. **funções de data** — `YEAR()`, `MONTH()`, intervalos, diferença temporal;
+5. **`group_by` arbitrário** — mais de duas dimensões;
+6. **filtro pós-agregação (`HAVING`)** — "municípios com mais de 100";
+7. **janela / percentil** — "os 10% mais caros";
+8. **deduplicação** por chave escolhida;
+9. **`JOIN`** com tabela auxiliar trazida pelo usuário.
+
+**Tirado da lista por revisão:** "sexo feminino **e** procedimento em lista"
+não é capacidade nova — é composição booleana que os filtros de categoria já
+fazem por interseção. Vale como melhoria de UX, não como argumento a favor do
+DuckDB.
+
+---
+
+## 4.12 Bancada epidemiológica (trilha 3)
+
+**Motivação registrada do dono do projeto:**
+
+> "e eu não vi uma ideia minha aí: estatística avançada"
+
+Hoje existem quatro operações: descritiva, correlação de Pearson, regressão
+linear simples e histograma. O salto que interessa não é virar um SPSS. É
+sair de
+
+> "o DF teve 12.000 internações"
+
+para
+
+> "o DF teve X por 100 mil habitantes, IC95%, padronizado por idade,
+> comparável ao resto do Brasil."
+
+Ordem acordada, por valor epidemiológico real e **não** por sofisticação:
+
+| # | Item | Nota |
+| --- | --- | --- |
+| 1 | **Denominadores populacionais do IBGE** | tratado como capacidade própria, não como detalhe |
+| 2 | **Taxas com IC** | por 100 mil, com intervalo |
+| 3 | **Padronização direta por idade** | o item de maior valor da lista |
+| 4 | Proporções com IC | |
+| 5 | RR / OR com IC | |
+| 6 | Qui-quadrado e Fisher | tabela de contingência |
+| 7 | Série temporal e tendência | |
+| 8 | Padronização indireta / SMR | |
+| 9 | Regressão logística múltipla | |
+| 10 | Regressão linear múltipla | |
+
+### População padrão: default declarado, nunca invisível
+
+O princípio acordado é literal: **default pode existir; default invisível
+não.**
+
+```text
+População padrão
+  ● Brasil [versão / fonte]
+  ○ OMS 2000–2025
+  ○ Personalizada
+```
+
+E o resultado sempre carrega, sem opção de esconder:
+
+> Padronização direta por idade · População padrão: Brasil — [fonte, versão]
+
+Isso entra na receita. **Antes de congelar qual padrão brasileiro**, é
+preciso uma rodada própria de evidência e documentação: isso vira parte da
+metodologia científica da ferramenta, não uma constante no código.
+
+---
+
+## Limpeza de dados: o que entra e o que não entra
+
+A limpeza assistida **já existe** (perfil numérico com IQR, faixa válida
+sugerida e manual, regras cross-field com `flag`/`exclude`, perfil de
+combinações raras) e é **não destrutiva por construção**: uma regra vira um
+`FilterSpec` marcado com `origin: 'data-quality'`, visível na lista e na
+receita, com o dado original intocado.
+
+Fica **fora do caminho principal, por decisão**: **imputação**. O risco é
+específico e grave:
+
+```text
+ausente → algoritmo escolhe valor → o valor entra na frequência,
+na taxa e na regressão → o resultado parece dado do DATASUS
+```
+
+Se algum dia entrar, entra numa área chamada **"Transformações analíticas"**,
+nunca em "Limpeza", com proveniência por registro
+(`IDADE_ORIGINAL = NA`, `IDADE_ANALISE = 47`, método declarado) e marca
+visível no resultado. Não está no roadmap atual.
+
+O que **entra** na limpeza, por ter retorno alto e não fabricar informação:
+deduplicação por chave, consistência de data (internação depois da saída,
+óbito antes da entrada), dígito verificador (CNS, CNPJ) e padrão textual
+(CID malformado, procedimento fora da SIGTAP). Três dos quatro são triviais
+na trilha 2.
+
+---
+
+
 **Data:** 2026-08-28
 **Para que serve:** o `REMAINING_IMPLEMENTATION_PLAN.md` ordena por bloco
 funcional (P0–P5). Este documento ordena a **mesma coisa restante** por esforço
@@ -422,10 +600,17 @@ sendo escolha explícita do usuário — é a resposta certa, não uma pendênci
 
 ### 4.5 `.TAB` archaeology e replay
 
-**Estado em 2026-08-30: INSPECTOR PRONTO, FORMATO BLOQUEADO POR CAPTURA.**
-Não é falta de esforço: não existe nenhum `.TAB` real neste ambiente, e
-escrever um parser por analogia seria inventar o formato.
+**Estado em 2026-08-30: FORMATO DECIFRADO.** As dez capturas chegaram e o
+formato está descrito em `docs/reverse-engineering/RE_001_TAB.md`: assinatura
+`NEW`, cabeçalho estilo INI com seções `[Mapa]`, `[Opções]`,
+`[Seleções_Ativas]` e `[Arquivos]`, depois a tabela delimitada por `;` com
+rótulos entre aspas. **Windows-1252 provado por bytes crus.** O mapa é
+**referência por caminho, nunca embutido**. Casas decimais são presentação
+gravada no próprio valor, o que torna o `.TAB` um formato **com perda**.
 
+Falta escrever o leitor, e cinco capturas a mais fecham os cantos que sobraram
+(quantis no mapa, vários arquivos, aspas na descrição de linha, duas seleções,
+não classificados discriminados).
 - `packages/formats/src/legacy-tab.ts` é um inspector read-only: identifica
   OLE CFB, ZIP, texto ou binário desconhecido; extrai strings Windows-1252 e
   UTF-16LE com offset; detecta referências a DEF/CNV/DBF/DBC/MAP/TAB; dá
@@ -463,11 +648,14 @@ Handoff em `docs/handoffs/R10_12_DUCKDB_PARIDADE.md`.
 - O DuckDB é dependência **só de desenvolvimento**. Nada disso vai para o
   navegador.
 
-**Decisão pendente do usuário:** o `@duckdb/duckdb-wasm` desempacota em
-**149 MB**. Ligar o adapter a ele muda o caráter de um aplicativo que hoje
-entrega 234 KB de bundle. A afirmação que a faixa precisava — "o SQL que
-geramos concorda com o executor" — já está provada e não depende de onde o
-DuckDB roda.
+**Decisão tomada em 2026-08-30: carregamento sob demanda (opção B).** Ver a
+seção de trilhas no topo deste documento. O número que circulou antes — 149 MB —
+era o pacote npm inteiro desempacotado; o que um navegador carrega é o
+`duckdb-eh.wasm`, **34 MB brutos, ~7 MB comprimidos**, uma vez, com cache
+depois. Isso é a mesma ordem de grandeza dos mapas do Brasil que já embarcamos.
+
+O DuckDB **não vira o executor do TabWin**. Ele é a trilha 2, com nome de
+produto próprio e procedência de motor visível no resultado e na receita.
 
 ### 4.7 Armazenamento colunar e cache L2
 
