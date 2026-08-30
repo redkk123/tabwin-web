@@ -219,6 +219,14 @@ function stepToR(step: TransformStep): RVerb[] {
           ...(step.originField ? [`coluna de origem: ${step.originField}`] : []),
         ],
       }];
+    case 'join': {
+      const fn = { inner: 'inner_join', left: 'left_join', right: 'right_join', full: 'full_join' }[step.joinType];
+      const by = step.keyPairs.map((pair) => `${rString(pair.current)} = ${rString(pair.source)}`).join(', ');
+      return [{
+        code: `dplyr::${fn}(${step.source.label.replace(/[^a-zA-Z0-9_]/g, '_')}, by = c(${by}))`,
+        notes: [`junta a base ${step.source.label} pela chave; diagnóstico de cardinalidade fica no TabWin Web`],
+      }];
+    }
   }
 }
 
@@ -289,6 +297,15 @@ function stepToPython(step: TransformStep): string[] {
       ];
       if (step.originField) lines.splice(1, 0, `# coluna de origem: ${step.originField}`);
       return lines;
+    }
+    case 'join': {
+      const how = step.joinType === 'inner' ? 'inner' : step.joinType === 'left' ? 'left' : step.joinType === 'right' ? 'right' : 'outer';
+      const leftKeys = pyList(step.keyPairs.map((pair) => pair.current));
+      const rightKeys = pyList(step.keyPairs.map((pair) => pair.source));
+      return [
+        `# diagnóstico de cardinalidade (N:N bloqueado) fica no TabWin Web`,
+        line(`df = df.merge(${step.source.label.replace(/[^a-zA-Z0-9_]/g, '_')}, how="${how}", left_on=${leftKeys}, right_on=${rightKeys})`),
+      ];
     }
   }
 }

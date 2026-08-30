@@ -378,6 +378,18 @@ seria falso. O que foi feito:
   campos derivados de texto.
   `npm run check`: **384/384**. `npm run e2e`: **23/23**.
 
+- **R11.4.6 — Juntar bases por chave (`join`) — fecha o pipeline.** Traz as
+  colunas de uma segunda base para os microdados atuais, casando por chave
+  explícita (nomes podem diferir dos dois lados). `inner`/`left`/`right`/
+  `full`; N:N bloqueado por padrão (multiplica linhas); prefixo opcional
+  contra colisão; sem valor inventado (sem correspondência → null);
+  diagnóstico de cardinalidade. Diferente da comparação de tabelas (R11.2),
+  que compara duas tabelas já tabuladas — o join opera sobre microdados,
+  antes de tabular. **Com esta faixa o módulo de transformação está
+  completo**: 11 verbos (select, filter, mutate, cast, data, texto/código,
+  dedupe, group_by+summarise, bind_rows, join) mais "ver código
+  equivalente". `npm run check`: **392/392**. `npm run e2e`: **24/24**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

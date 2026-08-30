@@ -814,3 +814,36 @@ test('bind-rows stacks a second base, unions columns, and marks each record\'s o
   await expect(body.locator('tr', { hasText: 'base_a' })).toContainText('30');
   await expect(body.locator('tr')).toHaveCount(1);
 });
+
+test('join brings a second base\'s column onto the records by key, keeping the left side', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/join-casos-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  await page.locator('#transform-step-kind').selectOption('join');
+  await page.locator('#transform-join-file-input').setInputFiles('e2e/fixtures/join-pop-e2e.csv');
+  await expect(page.locator('#transform-join-status')).toContainText('join-pop');
+  await page.locator('#transform-join-type').selectOption('left');
+  await page.locator('#transform-join-key-current').selectOption('UF');
+  await page.locator('#transform-join-key-source').selectOption('UF');
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-apply-button').click();
+  const report = page.locator('#transform-result');
+  // AC and AM match; SP has no population row; RJ (source-only) is dropped by left.
+  await expect(report).toContainText('registrosCorrespondentes: 2');
+  await expect(report).toContainText('registrosSoFonte: 0');
+
+  await expect(page.locator('#row-field')).toContainText('POPULACAO');
+  await page.locator('#row-field').selectOption('UF');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('POPULACAO');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  const body = page.locator('#result-table tbody');
+  // AC=900, AM=4200; SP joined to nothing so its population is null, not a
+  // fabricated zero - its row is suppressed and the total is just 5.100.
+  await expect(body.locator('tr', { hasText: 'AC' })).toContainText('900');
+  await expect(body.locator('tr', { hasText: 'AM' })).toContainText('4.200');
+  await expect(body.locator('tr', { hasText: 'SP' })).toHaveCount(0);
+});

@@ -633,3 +633,101 @@ test('bind-rows validates its own shape', () => {
   assert.throws(() => run({ source: { label: 'X', fields: ['UF'], records: [] }, originField: 'UF' }), /field UF already exists/);
   assert.throws(() => run({ source: { label: 'X', fields: ['UF', 'FONTE'], records: [] }, originField: 'FONTE' }), /source already has a field named FONTE/);
 });
+
+// --- join: bring a second source's columns onto the current records --------
+
+const LEFT = [
+  { UF: 'AC', CASOS: 10 },
+  { UF: 'AM', CASOS: 20 },
+  { UF: 'SP', CASOS: 30 },
+];
+const POP = { label: 'ibge', fields: ['UF', 'POPULACAO'], records: [
+  { UF: 'AC', POPULACAO: 900 },
+  { UF: 'AM', POPULACAO: 4200 },
+  { UF: 'RJ', POPULACAO: 17000 },
+] };
+
+const join = (overrides) => ({
+  id: 'j1', kind: 'join', source: POP, keyPairs: [{ current: 'UF', source: 'UF' }], joinType: 'inner', ...overrides,
+});
+
+test('an inner join keeps only matched rows and brings the source columns', () => {
+  const result = applyTransformPipeline(LEFT, ['UF', 'CASOS'], [join({})]);
+  // AC and AM match; SP has no population row, RJ is source-only.
+  assert.equal(result.records.length, 2);
+  assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'CASOS', 'POPULACAO']);
+  assert.deepEqual(result.records.map((record) => [record.UF, record.POPULACAO]), [['AC', 900], ['AM', 4200]]);
+  assert.equal(result.steps[0].detail.registrosCorrespondentes, 2);
+  assert.equal(result.steps[0].detail.registrosSemCorrespondencia, 1);
+});
+
+test('a left join keeps every current row, with nulls where the source had no match', () => {
+  const result = applyTransformPipeline(LEFT, ['UF', 'CASOS'], [join({ joinType: 'left' })]);
+  assert.equal(result.records.length, 3);
+  const sp = result.records.find((record) => record.UF === 'SP');
+  assert.equal(sp.POPULACAO, null, 'no fabricated population for the unmatched row');
+});
+
+test('a right join keeps every source row, and a full join keeps both sides', () => {
+  const right = applyTransformPipeline(LEFT, ['UF', 'CASOS'], [join({ joinType: 'right' })]);
+  // AC, AM (matched) + RJ (source-only). SP is dropped.
+  assert.deepEqual(right.records.map((record) => record.UF).sort(), ['AC', 'AM', 'RJ']);
+  const rj = right.records.find((record) => record.UF === 'RJ');
+  assert.equal(rj.CASOS, null, 'the current-side column is absent for a source-only row');
+  assert.equal(rj.POPULACAO, 17000);
+
+  const full = applyTransformPipeline(LEFT, ['UF', 'CASOS'], [join({ joinType: 'full' })]);
+  // AC, AM, SP (current) + RJ (source-only).
+  assert.deepEqual(full.records.map((record) => record.UF).sort(), ['AC', 'AM', 'RJ', 'SP']);
+  assert.equal(full.steps[0].detail.registrosSoFonte, 1);
+});
+
+test('the key fields may be named differently on each side', () => {
+  const source = { label: 'sim', fields: ['CODMUNRES', 'OBITOS'], records: [{ CODMUNRES: '530010', OBITOS: 3 }] };
+  const current = [{ MUNIC_RES: '530010', N: 1 }];
+  const result = applyTransformPipeline(current, ['MUNIC_RES', 'N'], [
+    { id: 'j1', kind: 'join', source, keyPairs: [{ current: 'MUNIC_RES', source: 'CODMUNRES' }], joinType: 'inner' },
+  ]);
+  assert.equal(result.records[0].OBITOS, 3);
+  // The source key field is not brought in - it is already the current key.
+  assert.ok(!result.fields.some((field) => field.name === 'CODMUNRES'));
+});
+
+test('a many-to-many key is blocked unless explicitly allowed', () => {
+  const current = [{ K: 'x', A: 1 }, { K: 'x', A: 2 }];
+  const source = { label: 's', fields: ['K', 'B'], records: [{ K: 'x', B: 10 }, { K: 'x', B: 20 }] };
+  const step = { id: 'j1', kind: 'join', source, keyPairs: [{ current: 'K', source: 'K' }], joinType: 'inner' };
+  assert.throws(() => applyTransformPipeline(current, ['K', 'A'], [step]), /N:N/);
+  // Opted in, it multiplies: 2 current x 2 source = 4 rows.
+  const allowed = applyTransformPipeline(current, ['K', 'A'], [{ ...step, allowManyToMany: true }]);
+  assert.equal(allowed.records.length, 4);
+});
+
+test('a source prefix keeps a brought-in column from colliding with a current one', () => {
+  const current = [{ UF: 'AC', VALOR: 1 }];
+  const source = { label: 's', fields: ['UF', 'VALOR'], records: [{ UF: 'AC', VALOR: 99 }] };
+  const step = { id: 'j1', kind: 'join', source, keyPairs: [{ current: 'UF', source: 'UF' }], joinType: 'inner' };
+  // VALOR is on both sides and would collide.
+  assert.throws(() => applyTransformPipeline(current, ['UF', 'VALOR'], [step]), /collides with a current field/);
+  const prefixed = applyTransformPipeline(current, ['UF', 'VALOR'], [{ ...step, sourcePrefix: 'sim_' }]);
+  assert.equal(prefixed.records[0].VALOR, 1);
+  assert.equal(prefixed.records[0].sim_VALOR, 99);
+});
+
+test('a joined column becomes referencable by a later step', () => {
+  const result = applyTransformPipeline(LEFT.slice(0, 2), ['UF', 'CASOS'], [
+    join({ joinType: 'left' }),
+    { id: 'd1', kind: 'derive-column', field: 'TAXA', formula: 'RATE([CASOS]; [POPULACAO]; 1000)', divisionByZero: 'zero' },
+  ]);
+  // AC: 10/900*1000 = 11.11..., AM: 20/4200*1000 = 4.76...
+  assert.ok(Math.abs(result.records[0].TAXA - (10 / 900 * 1000)) < 1e-9);
+});
+
+test('join validates its own shape', () => {
+  const run = (overrides) => applyTransformPipeline(LEFT, ['UF', 'CASOS'], [join(overrides)]);
+  assert.throws(() => run({ keyPairs: [] }), /has no key/);
+  assert.throws(() => run({ joinType: 'cross' }), /join type is invalid/);
+  assert.throws(() => run({ keyPairs: [{ current: 'NADA', source: 'UF' }] }), /field NADA does not exist/);
+  assert.throws(() => run({ keyPairs: [{ current: 'UF', source: 'NADA' }] }), /the source has no field NADA/);
+  assert.throws(() => run({ bringFields: ['NADA'] }), /no field NADA to bring in/);
+});

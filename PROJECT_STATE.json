@@ -1,15 +1,15 @@
 {
-  "revision": "r11-4-5-bind-rows-second-source-union",
+  "revision": "r11-4-6-microdata-join-completes-transform-pipeline",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 384,
-    "passed": 384,
+    "total": 392,
+    "passed": 392,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 23,
-    "e2e_passed": 23
+    "e2e_total": 24,
+    "e2e_passed": 24
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -265,7 +265,9 @@
     "r11-4-3-group-summarize-count-sum-mean-median-min-max-distinct-one-row-per-key",
     "r11-4-4-ver-codigo-equivalente-dplyr-pandas-read-only-derived-from-plan",
     "r11-4-5-bind-rows-stack-second-csv-tsv-source-union-columns-origin-marker",
-    "r11-4-5-worker-synthesizes-pipeline-field-type-by-value-inspection-not-fixed-numeric"
+    "r11-4-5-worker-synthesizes-pipeline-field-type-by-value-inspection-not-fixed-numeric",
+    "r11-4-6-microdata-join-inner-left-right-full-explicit-key-nn-blocked-cardinality-diagnostic",
+    "transform-pipeline-complete-11-verbs-plus-equivalent-r-python-code-view"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -344,7 +346,8 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-6-transform-pipeline-microdata-join-inner-left-right-full-with-cardinality-diagnostic",
+    "transform-pipeline-persist-to-recipe-then-schema-drift-aware-re-execution-and-dbf-second-source",
+    "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

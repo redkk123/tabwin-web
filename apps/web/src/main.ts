@@ -157,7 +157,7 @@ import {
   transformPipelineToCode,
   type PipelineCodeTarget,
 } from '../../../packages/analysis/src/transform-pipeline-code.ts';
-import type { PipelineSource } from '../../../packages/analysis/src/transform-pipeline.ts';
+import type { JoinType, PipelineSource } from '../../../packages/analysis/src/transform-pipeline.ts';
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
@@ -295,6 +295,7 @@ const transformConfigByKind: Record<TransformStep['kind'], HTMLElement> = {
   'text-normalize': element<HTMLElement>('#transform-config-text-normalize'),
   'group-summarize': element<HTMLElement>('#transform-config-group-summarize'),
   'bind-rows': element<HTMLElement>('#transform-config-bind-rows'),
+  join: element<HTMLElement>('#transform-config-join'),
 };
 const transformSelectFields = element<HTMLSelectElement>('#transform-select-fields');
 const transformFilterField = element<HTMLSelectElement>('#transform-filter-field');
@@ -335,6 +336,13 @@ const transformBindOriginCheck = element<HTMLInputElement>('#transform-bind-orig
 const transformBindOriginRow = element<HTMLElement>('#transform-bind-origin-row');
 const transformBindOriginField = element<HTMLInputElement>('#transform-bind-origin-field');
 const transformBindCurrentLabel = element<HTMLInputElement>('#transform-bind-current-label');
+const transformJoinStatus = element<HTMLElement>('#transform-join-status');
+const transformJoinFileButton = element<HTMLButtonElement>('#transform-join-file-button');
+const transformJoinFileInput = element<HTMLInputElement>('#transform-join-file-input');
+const transformJoinType = element<HTMLSelectElement>('#transform-join-type');
+const transformJoinPrefix = element<HTMLInputElement>('#transform-join-prefix');
+const transformJoinKeyCurrent = element<HTMLSelectElement>('#transform-join-key-current');
+const transformJoinKeySource = element<HTMLSelectElement>('#transform-join-key-source');
 const transformAddStep = element<HTMLButtonElement>('#transform-add-step');
 const transformStepList = element<HTMLElement>('#transform-step-list');
 const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
@@ -633,6 +641,8 @@ let transformGroupAggRows: Array<{ kind: SummaryAggregation['kind']; field: stri
 ];
 /** The second base staged for a bind-rows step, parsed but not yet committed. */
 let transformBindSource: PipelineSource | null = null;
+/** The second base staged for a join step, parsed but not yet committed. */
+let transformJoinSource: PipelineSource | null = null;
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -1302,6 +1312,10 @@ function populateTransformFields(): void {
     control.value = names.includes(previous) ? previous : (names[0] ?? '');
   }
 
+  const previousJoinKey = transformJoinKeyCurrent.value;
+  transformJoinKeyCurrent.replaceChildren(...options());
+  transformJoinKeyCurrent.value = names.includes(previousJoinKey) ? previousJoinKey : (names[0] ?? '');
+
   const previousGroupFields = new Set(selectedCatalogValues(transformGroupFields));
   transformGroupFields.replaceChildren(...options());
   for (const option of transformGroupFields.options) option.selected = previousGroupFields.has(option.value);
@@ -1320,6 +1334,7 @@ function populateTransformFields(): void {
     transformDatePartField, transformDatePartPart, transformDatePartTarget,
     transformTextField, transformTextOperations,
     transformGroupFields, transformGroupAddAgg, transformBindFileButton,
+    transformJoinFileButton, transformJoinType, transformJoinKeyCurrent, transformJoinPrefix,
   ]) control.disabled = false;
   renderTransformGroupAggregations();
 
@@ -1477,6 +1492,8 @@ function transformStepSummary(step: TransformStep): string {
       return `Agrupar por ${step.groupFields.map(selectionLabel).join(', ')} → ${step.aggregations.map((aggregation) => aggregation.as).join(', ')}`;
     case 'bind-rows':
       return `Empilhar ${step.source.label} (${integerFormat.format(step.source.records.length)} registro(s))`;
+    case 'join':
+      return `Juntar ${step.source.label} (${step.joinType}) por ${step.keyPairs.map((pair) => pair.current).join(', ')}`;
   }
 }
 
@@ -1532,6 +1549,22 @@ async function loadTransformBindSource(file: File): Promise<void> {
     records: parsed.records as PipelineSource['records'],
   };
   transformBindStatus.textContent = `${transformBindSource.label}: ${integerFormat.format(transformBindSource.records.length)} registro(s), ${transformBindSource.fields.length} coluna(s)`;
+}
+
+async function loadTransformJoinSource(file: File): Promise<void> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let text: string;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { text = textDecoder.decode(bytes); }
+  const parsed = parseDelimited(text, extensionOf(file.name) === 'TSV' ? { delimiter: '\t' } : {});
+  transformJoinSource = {
+    label: file.name.replace(/\.[^.]+$/, ''),
+    fields: parsed.fields.map((field) => field.name),
+    records: parsed.records as PipelineSource['records'],
+  };
+  transformJoinStatus.textContent = `${transformJoinSource.label}: ${integerFormat.format(transformJoinSource.records.length)} registro(s), ${transformJoinSource.fields.length} coluna(s)`;
+  transformJoinKeySource.replaceChildren(...transformJoinSource.fields.map((name) => new Option(name, name)));
+  transformJoinKeySource.disabled = false;
 }
 
 function addTransformStep(): void {
@@ -1613,6 +1646,18 @@ function addTransformStep(): void {
       .map((value) => ({ kind: value }) as TextOperation);
     if (!operations.length) throw new Error('Escolha ao menos uma operação');
     step = { id, kind, field, operations };
+  } else if (kind === 'join') {
+    if (!transformJoinSource) throw new Error('Carregue uma segunda base (CSV/TSV) para juntar');
+    const current = transformJoinKeyCurrent.value;
+    const source = transformJoinKeySource.value;
+    if (!current || !source) throw new Error('Escolha a chave dos dois lados');
+    const prefix = transformJoinPrefix.value.trim();
+    step = {
+      id, kind, source: transformJoinSource,
+      keyPairs: [{ current, source }],
+      joinType: transformJoinType.value as JoinType,
+      ...(prefix ? { sourcePrefix: prefix } : {}),
+    };
   } else if (kind === 'bind-rows') {
     if (!transformBindSource) throw new Error('Carregue uma segunda base (CSV/TSV) para empilhar');
     const originField = transformBindOriginCheck.checked ? transformBindOriginField.value.trim() : undefined;
@@ -2258,6 +2303,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   transformRecodeRows = [{ from: '', to: '' }];
   transformGroupAggRows = [{ kind: 'count', field: '', as: 'N' }];
   transformBindSource = null;
+  transformJoinSource = null;
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -6742,6 +6788,14 @@ transformGroupAddAgg.addEventListener('click', () => {
 });
 transformBindOriginCheck.addEventListener('change', () => {
   transformBindOriginRow.hidden = !transformBindOriginCheck.checked;
+});
+transformJoinFileButton.addEventListener('click', () => transformJoinFileInput.click());
+transformJoinFileInput.addEventListener('change', () => {
+  const file = transformJoinFileInput.files?.[0];
+  transformJoinFileInput.value = '';
+  if (!file) return;
+  void loadTransformJoinSource(file).catch((error) =>
+    showToast(error instanceof Error ? error.message : String(error), true));
 });
 transformBindFileButton.addEventListener('click', () => transformBindFileInput.click());
 transformBindFileInput.addEventListener('change', () => {

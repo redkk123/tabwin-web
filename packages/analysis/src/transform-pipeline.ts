@@ -186,6 +186,27 @@ export interface BindRowsStep extends TransformStepBase {
   originField?: string;
 }
 
+export type JoinType = 'inner' | 'left' | 'right' | 'full';
+
+/**
+ * `join()`: brings the second source's columns onto the current records,
+ * matched on an explicit key. `keyPairs` maps a current field to a source
+ * field (they may be named differently). A many-to-many match is blocked by
+ * default - it multiplies rows in a way that is almost always a mistake, so
+ * it must be opted into with `allowManyToMany`.
+ */
+export interface JoinStep extends TransformStepBase {
+  kind: 'join';
+  source: PipelineSource;
+  keyPairs: Array<{ current: string; source: string }>;
+  joinType: JoinType;
+  /** Source fields to bring in; the key fields are always excluded (they are already on the row). Defaults to every non-key source field. */
+  bringFields?: string[];
+  /** Prefix applied to brought-in field names, to avoid colliding with current fields. */
+  sourcePrefix?: string;
+  allowManyToMany?: boolean;
+}
+
 export type TransformStep =
   | SelectColumnsStep
   | FilterRowsStep
@@ -197,7 +218,8 @@ export type TransformStep =
   | DatePartStep
   | TextNormalizeStep
   | GroupSummarizeStep
-  | BindRowsStep;
+  | BindRowsStep
+  | JoinStep;
 
 export interface TransformStepResult {
   id: string;
@@ -244,6 +266,7 @@ function defaultLabel(step: TransformStep): string {
     case 'text-normalize': return `Normalizar ${step.field} (${step.operations.length} operação(ões))`;
     case 'group-summarize': return `Agrupar por ${step.groupFields.join(', ')} (${step.aggregations.length} resumo(s))`;
     case 'bind-rows': return `Empilhar ${step.source.label} (${step.source.records.length} registro(s))`;
+    case 'join': return `Juntar ${step.source.label} (${step.joinType}) por ${step.keyPairs.map((pair) => pair.current).join(', ')}`;
   }
 }
 
@@ -504,6 +527,37 @@ function validateStepShape(step: TransformStep, label: string, currentFields: re
       }
       if (source.fields.includes(step.originField)) throw new TransformPipelineError(`${label}: the source already has a field named ${step.originField}`);
     }
+  } else if (step.kind === 'join') {
+    const source = step.source;
+    if (!source || typeof source !== 'object') throw new TransformPipelineError(`${label} has no source`);
+    if (typeof source.label !== 'string' || !source.label.trim()) throw new TransformPipelineError(`${label} source has no label`);
+    if (!Array.isArray(source.fields) || source.fields.length === 0) throw new TransformPipelineError(`${label} source has no fields`);
+    if (!Array.isArray(source.records)) throw new TransformPipelineError(`${label} source has no records`);
+    if (!['inner', 'left', 'right', 'full'].includes(step.joinType)) throw new TransformPipelineError(`${label} join type is invalid`);
+    if (!Array.isArray(step.keyPairs) || step.keyPairs.length === 0) throw new TransformPipelineError(`${label} has no key`);
+    const sourceFieldSet = new Set(source.fields);
+    for (const [index, pair] of step.keyPairs.entries()) {
+      const position = `${label} key ${index + 1}`;
+      if (!pair || typeof pair.current !== 'string' || typeof pair.source !== 'string') throw new TransformPipelineError(`${position} is malformed`);
+      requireKnownField(pair.current, currentFields, label);
+      if (!sourceFieldSet.has(pair.source)) throw new TransformPipelineError(`${position}: the source has no field ${pair.source}`);
+    }
+    const keySourceFields = new Set(step.keyPairs.map((pair) => pair.source));
+    const bring = step.bringFields ?? source.fields.filter((name) => !keySourceFields.has(name));
+    for (const name of bring) {
+      if (!sourceFieldSet.has(name)) throw new TransformPipelineError(`${label}: the source has no field ${name} to bring in`);
+    }
+    if (step.sourcePrefix !== undefined && typeof step.sourcePrefix !== 'string') throw new TransformPipelineError(`${label} sourcePrefix must be a string`);
+    // The brought-in fields, once prefixed, must not collide with a current
+    // field or with each other, so the joined row has no ambiguous column.
+    const currentNames = new Set(currentFields.map((candidate) => candidate.name));
+    const produced = new Set<string>();
+    for (const name of bring.filter((candidate) => !keySourceFields.has(candidate))) {
+      const finalName = `${step.sourcePrefix ?? ''}${name}`;
+      if (currentNames.has(finalName)) throw new TransformPipelineError(`${label}: brought-in field ${finalName} collides with a current field; set a prefix`);
+      if (produced.has(finalName)) throw new TransformPipelineError(`${label}: brought-in field ${finalName} is produced more than once`);
+      produced.add(finalName);
+    }
   } else {
     throw new TransformPipelineError(`${label} has an unknown kind`);
   }
@@ -739,6 +793,104 @@ function runBindRows(
   };
 }
 
+function runJoin(
+  records: readonly DataRecord[],
+  step: JoinStep,
+  currentFields: readonly TransformedField[],
+): { records: DataRecord[]; fields: TransformedField[]; detail: Record<string, number> } {
+  const keySourceFields = new Set(step.keyPairs.map((pair) => pair.source));
+  const bring = (step.bringFields ?? step.source.fields.filter((name) => !keySourceFields.has(name)))
+    .filter((name) => !keySourceFields.has(name));
+  const prefix = step.sourcePrefix ?? '';
+  const broughtNames = bring.map((name) => ({ source: name, final: `${prefix}${name}` }));
+
+  const keyOf = (record: DataRecord, side: 'current' | 'source'): string =>
+    JSON.stringify(step.keyPairs.map((pair) => {
+      const value = record[side === 'current' ? pair.current : pair.source];
+      return value === undefined || value === '' ? null : value;
+    }));
+
+  // Index the source by key so each current record's match is a lookup, not a scan.
+  const sourceByKey = new Map<string, DataRecord[]>();
+  for (const record of step.source.records) {
+    const key = keyOf(record, 'source');
+    const bucket = sourceByKey.get(key);
+    if (bucket) bucket.push(record); else sourceByKey.set(key, [record]);
+  }
+  const currentByKey = new Map<string, DataRecord[]>();
+  for (const record of records) {
+    const key = keyOf(record, 'current');
+    const bucket = currentByKey.get(key);
+    if (bucket) bucket.push(record); else currentByKey.set(key, [record]);
+  }
+
+  // A many-to-many key (duplicated on both sides) multiplies rows; block it
+  // unless the author opted in, since it is almost always a mistake.
+  if (!step.allowManyToMany) {
+    for (const [key, currents] of currentByKey) {
+      if (currents.length > 1 && (sourceByKey.get(key)?.length ?? 0) > 1) {
+        throw new TransformPipelineError(
+          `join: a chave ${key} aparece ${currents.length}x na base atual e ${sourceByKey.get(key)!.length}x na fonte (N:N); confirme antes de multiplicar linhas`,
+        );
+      }
+    }
+  }
+
+  const emptySource = (): DataRecord => Object.fromEntries(broughtNames.map(({ final }) => [final, null]));
+  const withSource = (base: DataRecord, sourceRecord: DataRecord | null): DataRecord => {
+    const next: DataRecord = { ...base };
+    for (const { source, final } of broughtNames) next[final] = sourceRecord ? (sourceRecord[source] ?? null) : null;
+    return next;
+  };
+
+  const output: DataRecord[] = [];
+  let matchedCurrent = 0;
+  const matchedSourceKeys = new Set<string>();
+  for (const record of records) {
+    const key = keyOf(record, 'current');
+    const matches = sourceByKey.get(key);
+    if (matches && matches.length) {
+      matchedCurrent++;
+      matchedSourceKeys.add(key);
+      for (const match of matches) output.push(withSource(record, match));
+    } else if (step.joinType === 'left' || step.joinType === 'full') {
+      output.push(withSource(record, null));
+    }
+    // inner/right with no match: the current record is dropped.
+  }
+  // right/full: source records whose key matched nothing on the current side.
+  let sourceOnly = 0;
+  if (step.joinType === 'right' || step.joinType === 'full') {
+    for (const [key, sourceRecords] of sourceByKey) {
+      if (matchedSourceKeys.has(key)) continue;
+      for (const sourceRecord of sourceRecords) {
+        sourceOnly++;
+        // The current-side columns are absent for a source-only row, but the
+        // key columns are known - fill them from the source's key fields.
+        const base: DataRecord = {};
+        for (const field of currentFields) base[field.name] = null;
+        for (const pair of step.keyPairs) base[pair.current] = sourceRecord[pair.source] ?? null;
+        output.push(withSource(base, sourceRecord));
+      }
+    }
+  }
+
+  const fields: TransformedField[] = [
+    ...currentFields,
+    ...broughtNames.map(({ final }) => ({ name: final })),
+  ];
+  return {
+    records: output,
+    fields,
+    detail: {
+      registrosCorrespondentes: matchedCurrent,
+      registrosSemCorrespondencia: records.length - matchedCurrent,
+      registrosSoFonte: sourceOnly,
+      colunasTrazidas: broughtNames.length,
+    },
+  };
+}
+
 function runCastType(
   records: readonly DataRecord[],
   step: CastTypeStep,
@@ -965,6 +1117,11 @@ export function applyTransformPipeline(
         detail = outcome.detail;
       } else if (step.kind === 'bind-rows') {
         const outcome = runBindRows(currentRecords, step, currentFields);
+        currentRecords = outcome.records;
+        currentFields = outcome.fields;
+        detail = outcome.detail;
+      } else if (step.kind === 'join') {
+        const outcome = runJoin(currentRecords, step, currentFields);
         currentRecords = outcome.records;
         currentFields = outcome.fields;
         detail = outcome.detail;
