@@ -471,16 +471,25 @@ DuckDB roda.
 
 ### 4.7 Armazenamento colunar e cache L2
 
-**Esforço:** semanas · **Risco:** alto
+**Estado em 2026-08-30: ARMAZENAMENTO E CACHE CONCLUÍDOS E MEDIDOS.**
+Handoff em `docs/handoffs/R10_13_COLUNAR_L2.md`.
 
-**Deixou de ser pré-requisito** — a projeção por campos do plano já resolveu o
-Dengue. Continua valendo para levar reanálise de 13 s a milissegundos, mas o
-L3 entrega a maior parte desse ganho por muito menos.
+- `packages/core/src/columnar-cache.ts` codifica por dicionário em lotes,
+  com índice `Uint16` até 65.536 distintos e `Uint32` acima, preservando
+  `null`, `undefined`, string, número, booleano e `Date` como valores
+  distintos — não como o texto deles.
+- Cache L2 LRU por fonte + conjunto de campos, servindo um pedido mais
+  estreito a partir do menor superset já guardado, sem copiar buffer.
+- `executeColumnarProjection` reconstrói os registros e chama **o executor de
+  referência**. Não existe segundo motor.
+- Medido em `RDAC2401.dbc` com `npm run bench:columnar`: **9,5x** menos
+  memória que os mesmos registros como objetos, resultado idêntico ao do
+  caminho normal, e o cache servindo o pedido estreito pelo superset.
 
-Se for feito: cardinalidade medida no Dengue não passa de 29.539 por coluna,
-índice de 2 bytes serve para todas, e as 121 colunas somam cerca de 228 MiB.
-E a regra dura: **provar igualdade com `resolvePlanRecord`** antes de
-substituí-lo.
+**Deliberadamente fora:** executor vetorizado direto sobre os índices. Criá-lo
+agora duplicaria `resolvePlanRecord` e a semântica do motor — que é o erro que
+a 4.6 evita explicitamente. Só entra com corpus suficiente para provar
+igualdade contra os goldens, do mesmo jeito que o caminho SQL.
 
 ### 4.8 Testes end-to-end com Playwright
 

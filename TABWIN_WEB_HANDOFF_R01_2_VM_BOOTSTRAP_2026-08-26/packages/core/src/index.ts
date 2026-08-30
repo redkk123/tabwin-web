@@ -7,3 +7,4 @@ export * from './golden.js';
 export * from './portable-table.js';
 export * from './spatial-selection.js';
 export * from './duckdb-plan.js';
+export * from './columnar-cache.js';
