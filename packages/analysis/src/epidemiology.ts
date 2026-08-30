@@ -79,6 +79,8 @@ export interface DirectStandardizationResult {
   standardizedRate: number | null;
   lower: number | null;
   upper: number | null;
+  /** Standard error of the standardized rate, on the same `per` scale - exposed so a rate ratio can compose from two of these. */
+  standardError: number | null;
   /** The crude rate over the same strata, for comparison. */
   crudeRate: number | null;
   per: number;
@@ -139,7 +141,10 @@ export function directlyStandardizedRate(
 
   const crudeRate = totalPopulation > 0 ? (totalEvents / totalPopulation) * per : null;
   if (weightSum <= 0) {
-    return { standardizedRate: null, lower: null, upper: null, crudeRate, per, strataUsed: used, strataSkipped: skipped };
+    return {
+      standardizedRate: null, lower: null, upper: null, standardError: null,
+      crudeRate, per, strataUsed: used, strataSkipped: skipped,
+    };
   }
   const dsr = weightedRateSum / weightSum;
   const standardError = Math.sqrt(varianceNumerator) / weightSum;
@@ -147,9 +152,125 @@ export function directlyStandardizedRate(
     standardizedRate: dsr * per,
     lower: Math.max(0, dsr - Z_95 * standardError) * per,
     upper: (dsr + Z_95 * standardError) * per,
+    standardError: standardError * per,
     crudeRate,
     per,
     strataUsed: used,
     strataSkipped: skipped,
+  };
+}
+
+export interface IndirectStandardizationStratum {
+  label?: string;
+  /** Observed events in this stratum of the group under study. */
+  events: number;
+  /** The group's own population for this stratum. */
+  population: number;
+  /** The reference population's rate for this stratum, as events per person (not per 100k). */
+  referenceRate: number;
+}
+
+export interface IndirectStandardizationResult {
+  /** Standardized Mortality/Morbidity Ratio: observed / expected. `null` when nothing was expected. */
+  smr: number | null;
+  lower: number | null;
+  upper: number | null;
+  observed: number;
+  /** Events the reference rates predict for this group's own age structure. */
+  expected: number;
+  strataUsed: number;
+  strataSkipped: number;
+}
+
+/**
+ * Indirect standardization (SMR): applies a **reference population's**
+ * age-specific rates to the group's own age structure, and compares what was
+ * observed against what those rates predict.
+ *
+ *   expected = sum(referenceRate_i * population_i),  SMR = observed / expected
+ *
+ * This is the method to reach for when the group's own age-specific rates are
+ * too sparse to standardize directly - the usual case for a small municipality
+ * or a rare outcome. The CI comes from Byar's interval on the observed count
+ * divided by the (treated as fixed) expected count, which is the standard
+ * approach.
+ *
+ * An SMR is a ratio, not a rate: 1 means "as expected". It is deliberately
+ * not scaled by `per`, and never multiplied by 100 here - a caller that wants
+ * percent points says so itself.
+ */
+export function indirectlyStandardizedRatio(
+  strata: readonly IndirectStandardizationStratum[],
+): IndirectStandardizationResult {
+  let observed = 0;
+  let expected = 0;
+  let used = 0;
+  let skipped = 0;
+
+  for (const stratum of strata) {
+    const { events, population, referenceRate } = stratum;
+    if (!Number.isFinite(events) || events < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid events`);
+    if (!Number.isFinite(population) || population < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid population`);
+    if (!Number.isFinite(referenceRate) || referenceRate < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid reference rate`);
+
+    observed += events;
+    if (population <= 0 || referenceRate <= 0) { skipped++; continue; }
+    used++;
+    expected += referenceRate * population;
+  }
+
+  if (expected <= 0) {
+    return { smr: null, lower: null, upper: null, observed, expected, strataUsed: used, strataSkipped: skipped };
+  }
+  // Byar's interval on the observed count, scaled by the expected count.
+  const countInterval = crudeRateInterval(Math.round(observed), 1, 1);
+  return {
+    smr: observed / expected,
+    lower: (countInterval.lower ?? 0) / expected,
+    upper: (countInterval.upper ?? 0) / expected,
+    observed,
+    expected,
+    strataUsed: used,
+    strataSkipped: skipped,
+  };
+}
+
+export interface RateRatioResult {
+  /** Ratio of the two directly standardized rates. `null` when either is unavailable or the denominator is zero. */
+  ratio: number | null;
+  lower: number | null;
+  upper: number | null;
+}
+
+/**
+ * Standardized rate ratio: two directly standardized rates compared, with a
+ * CI from the log-ratio's approximate variance
+ *
+ *   Var(log SRR) ~= (SE1/DSR1)^2 + (SE2/DSR2)^2
+ *
+ * The interval is built on the log scale and exponentiated, so it is
+ * asymmetric around the ratio and can never reach below zero - which is what
+ * a ratio requires and a naive symmetric interval would get wrong.
+ *
+ * Both rates must already be standardized to the **same** standard
+ * population; comparing rates standardized to different ones is meaningless,
+ * and this function cannot detect it - the caller is responsible.
+ */
+export function standardizedRateRatio(
+  numerator: DirectStandardizationResult,
+  denominator: DirectStandardizationResult,
+): RateRatioResult {
+  const a = numerator.standardizedRate;
+  const b = denominator.standardizedRate;
+  if (a === null || b === null || b === 0 || a === 0) return { ratio: null, lower: null, upper: null };
+  const ratio = a / b;
+  const seA = numerator.standardError ?? 0;
+  const seB = denominator.standardError ?? 0;
+  const logVariance = (seA / a) ** 2 + (seB / b) ** 2;
+  const halfWidth = Z_95 * Math.sqrt(logVariance);
+  return {
+    ratio,
+    lower: ratio * Math.exp(-halfWidth),
+    upper: ratio * Math.exp(halfWidth),
   };
 }

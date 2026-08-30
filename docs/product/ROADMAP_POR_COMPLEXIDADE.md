@@ -403,6 +403,20 @@ seria falso. O que foi feito:
   opcional) → taxa bruta e padronizada com IC 95%, e tabela por estrato.
   `npm run check`: **403/403**. `npm run e2e`: **25/25**.
 
+- **R11.6.2 — Padronização indireta (SMR) e razão de taxas padronizadas.**
+  `indirectlyStandardizedRatio` aplica as taxas por idade de uma população de
+  **referência** à estrutura etária do próprio grupo e compara o observado
+  com o que elas preveem — o método para quando as taxas do próprio grupo são
+  esparsas demais para padronizar diretamente (município pequeno, desfecho
+  raro). IC de Byar sobre o observado dividido pelo esperado. SMR é razão,
+  não taxa: 1 é "como esperado", e a interface lê o intervalo em voz alta
+  ("contém 1", "inteiramente acima"). Nada esperado → sem SMR, nunca divisão
+  por zero. `standardizedRateRatio` compara dois DSRs com intervalo na escala
+  log (assimétrico, nunca abaixo de zero) — existe e é testado no núcleo, mas
+  ainda **sem lugar na UI**, porque comparar dois grupos precisa de duas
+  tabelas, território da aba Comparar.
+  `npm run check`: **412/412**. `npm run e2e`: **26/26**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

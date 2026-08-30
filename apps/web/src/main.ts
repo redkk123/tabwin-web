@@ -118,6 +118,8 @@ import {
 import {
   crudeRateInterval,
   directlyStandardizedRate,
+  indirectlyStandardizedRatio,
+  type IndirectStandardizationStratum,
   type StandardizationStratum,
 } from '../../../packages/analysis/src/epidemiology.ts';
 import {
@@ -540,7 +542,11 @@ const statisticsX = element<HTMLSelectElement>('#statistics-x');
 const statisticsXLabel = element<HTMLElement>('#statistics-x-label');
 const statisticsY = element<HTMLSelectElement>('#statistics-y');
 const statisticsYLabel = element<HTMLElement>('#statistics-y-label');
+const epiMethod = element<HTMLSelectElement>('#epi-method');
+const epiMethodLabel = element<HTMLElement>('#epi-method-label');
 const epiStandard = element<HTMLSelectElement>('#epi-standard');
+const epiReference = element<HTMLSelectElement>('#epi-reference');
+const epiReferenceLabel = element<HTMLElement>('#epi-reference-label');
 const epiStandardLabel = element<HTMLElement>('#epi-standard-label');
 const epiPer = element<HTMLSelectElement>('#epi-per');
 const epiPerLabel = element<HTMLElement>('#epi-per-label');
@@ -4301,11 +4307,14 @@ function renderStatistics(): void {
   statisticsXLabel.firstChild!.textContent = epidemiology ? 'Óbitos/eventos' : 'Coluna X';
   statisticsYLabel.firstChild!.textContent = epidemiology ? 'População' : 'Coluna Y';
   statisticsYLabel.hidden = !pairedOperation && !epidemiology;
-  epiStandardLabel.hidden = !epidemiology;
+  const indirect = epidemiology && epiMethod.value === 'indirect';
+  epiMethodLabel.hidden = !epidemiology;
+  epiStandardLabel.hidden = !epidemiology || indirect;
+  epiReferenceLabel.hidden = !indirect;
   epiPerLabel.hidden = !epidemiology;
   histogramBinsLabel.hidden = operation !== 'histogram';
   histogramGaussianLabel.hidden = operation !== 'histogram';
-  if (epidemiology) populateEpiStandardColumn();
+  if (epidemiology) populateEpiColumnPickers();
   statisticsResult.replaceChildren();
   if (!currentResult?.columns.length) {
     const message = document.createElement('p');
@@ -4404,13 +4413,18 @@ function renderStatistics(): void {
   }
 }
 
-function populateEpiStandardColumn(): void {
-  const previous = epiStandard.value;
-  epiStandard.replaceChildren(new Option('— só taxa bruta —', ''));
-  currentResult?.columns.forEach((column, index) => {
-    epiStandard.add(new Option(column.label, String(index)));
-  });
-  epiStandard.value = [...epiStandard.options].some((option) => option.value === previous) ? previous : '';
+function populateEpiColumnPickers(): void {
+  for (const [select, placeholder] of [
+    [epiStandard, '— só taxa bruta —'],
+    [epiReference, '— escolha a coluna —'],
+  ] as const) {
+    const previous = select.value;
+    select.replaceChildren(new Option(placeholder, ''));
+    currentResult?.columns.forEach((column, index) => {
+      select.add(new Option(column.label, String(index)));
+    });
+    select.value = [...select.options].some((option) => option.value === previous) ? previous : '';
+  }
 }
 
 /** A rate and its interval, honest about a null (no denominator). */
@@ -4429,6 +4443,10 @@ function renderEpidemiology(): void {
   const per = Number(epiPer.value) || 100_000;
   const eventsCol = statisticsColumn(Number(statisticsX.value));
   const populationCol = statisticsColumn(Number(statisticsY.value));
+  if (epiMethod.value === 'indirect') {
+    renderIndirectStandardization(eventsCol, populationCol);
+    return;
+  }
   const standardIndex = epiStandard.value === '' ? -1 : Number(epiStandard.value);
   const standardCol = standardIndex >= 0 ? statisticsColumn(standardIndex) : null;
 
@@ -4504,6 +4522,52 @@ function renderEpidemiology(): void {
   else parts.push('Escolha uma coluna de população-padrão para a taxa padronizada por idade.');
   if (nonIntegerEvents) parts.push('Alguns valores de evento não eram inteiros e foram arredondados para o IC de contagem.');
   note.textContent = parts.join(' ');
+  statisticsResult.append(note);
+}
+
+/**
+ * Indirect standardization: the reference population's age-specific rates are
+ * applied to this group's own age structure, and the observed count compared
+ * against what they predict. The method to use when the group's own
+ * age-specific rates are too sparse to standardize directly.
+ */
+function renderIndirectStandardization(eventsCol: number[], populationCol: number[]): void {
+  const referenceIndex = epiReference.value === '' ? -1 : Number(epiReference.value);
+  if (referenceIndex < 0) {
+    const message = document.createElement('p');
+    message.textContent = 'Escolha a coluna com as taxas de referência por estrato (eventos por pessoa, não por 100 mil).';
+    statisticsResult.append(message);
+    return;
+  }
+  const referenceCol = statisticsColumn(referenceIndex);
+  const strata: IndirectStandardizationStratum[] = (currentResult?.rows ?? []).map((row, index) => ({
+    label: row.label,
+    events: eventsCol[index] ?? 0,
+    population: populationCol[index] ?? 0,
+    referenceRate: referenceCol[index] ?? 0,
+  }));
+  const result = indirectlyStandardizedRatio(strata);
+
+  const grid = document.createElement('div');
+  grid.className = 'statistics-grid';
+  grid.append(
+    statisticCard('Observados', numberFormat.format(result.observed)),
+    statisticCard('Esperados', numberFormat.format(result.expected)),
+    statisticCard('SMR (IC95%)', result.smr === null ? '—'
+      : `${numberFormat.format(result.smr)} (${numberFormat.format(result.lower ?? 0)}–${numberFormat.format(result.upper ?? 0)})`),
+  );
+  if (result.strataSkipped > 0) {
+    grid.append(statisticCard('Estratos sem população/taxa', integerFormat.format(result.strataSkipped)));
+  }
+  statisticsResult.append(grid);
+
+  const note = document.createElement('p');
+  note.className = 'compatibility-note';
+  const reading = result.smr === null ? 'Nenhum evento esperado: sem SMR — nunca uma divisão por zero.'
+    : result.lower !== null && result.lower > 1 ? 'O intervalo está inteiramente acima de 1: mais eventos do que as taxas de referência preveem.'
+    : result.upper !== null && result.upper < 1 ? 'O intervalo está inteiramente abaixo de 1: menos eventos do que as taxas de referência preveem.'
+    : 'O intervalo contém 1: o observado é compatível com o que as taxas de referência preveem.';
+  note.textContent = `SMR é razão, não taxa: 1 significa "como esperado". A coluna de referência deve trazer a taxa por pessoa de cada estrato (ex.: 0,004 e não 400). IC por Byar sobre o observado. ${reading}`;
   statisticsResult.append(note);
 }
 
@@ -7164,7 +7228,7 @@ chart.addEventListener('keydown', (event) => {
 chartPrintButton.addEventListener('click', printChart);
 updateChartBindingControls();
 applyChartZoom();
-for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins, histogramGaussian, epiStandard, epiPer]) {
+for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins, histogramGaussian, epiStandard, epiPer, epiMethod, epiReference]) {
   control.addEventListener('change', renderStatistics);
 }
 chartSvgButton.addEventListener('click', exportChartSvg);

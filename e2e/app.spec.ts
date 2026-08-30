@@ -858,10 +858,10 @@ test('the epidemiology panel gives crude and age-standardized rates with confide
   await page.locator('#measure-kind').selectOption('sum');
   await page.locator('#measure-field').selectOption('OBITOS');
   await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
-  await page.locator('#extra-measure-field').selectOption('POP');
-  await page.locator('#extra-measure-add').click();
-  await page.locator('#extra-measure-field').selectOption('PADRAO');
-  await page.locator('#extra-measure-add').click();
+  for (const field of ['POP', 'PADRAO', 'TXREF']) {
+    await page.locator('#extra-measure-field').selectOption(field);
+    await page.locator('#extra-measure-add').click();
+  }
   await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
   await expect(page.locator('#result-table tbody')).toBeVisible();
 
@@ -873,17 +873,58 @@ test('the epidemiology panel gives crude and age-standardized rates with confide
   await page.locator('#epi-per').selectOption('1000');
 
   const result = page.locator('#statistics-result');
-  // Crude 25/1500 = 16.67 per 1000; standardized (equal weights) = 22.5.
+  // Crude 30/1500 = 20 per 1000; standardized with equal weights:
+  // (6/1000 + 24/500)/2 = 0.027 -> 27 per 1000.
   await expect(result).toContainText('Taxa bruta');
-  await expect(result).toContainText('16,67');
+  await expect(result).toContainText('20');
   await expect(result).toContainText('Taxa padronizada');
-  await expect(result).toContainText('22,5');
-  // The old stratum's crude rate is 40 per 1000 with a Byar interval.
-  await expect(result.locator('tr', { hasText: '60+' })).toContainText('40');
+  await expect(result).toContainText('27');
+  // The old stratum's own crude rate is 48 per 1000, with a Byar interval.
+  await expect(result.locator('tr', { hasText: '60+' })).toContainText('48');
   await expect(result).toContainText('Byar');
 
-  // Dropping the standard leaves only the crude rate - no standardized row.
+  // Dropping the standard leaves only the crude rate - no standardized card.
   await page.locator('#epi-standard').selectOption('');
   await expect(result).toContainText('Taxa bruta');
   await expect(result).not.toContainText('Taxa padronizada');
+});
+
+test('the indirect method reports observed against expected as an SMR, and reads the interval out loud', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/epi-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  await page.locator('#row-field').selectOption('FAIXA');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('OBITOS');
+  await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
+  for (const field of ['POP', 'PADRAO', 'TXREF']) {
+    await page.locator('#extra-measure-field').selectOption(field);
+    await page.locator('#extra-measure-add').click();
+  }
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('epidemiology');
+  await page.locator('#epi-method').selectOption('indirect');
+  // The standard-population picker is replaced by the reference-rate one.
+  await expect(page.locator('#epi-standard-label')).toBeHidden();
+  await expect(page.locator('#epi-reference-label')).toBeVisible();
+
+  const result = page.locator('#statistics-result');
+  // Nothing is computed until the reference column is named.
+  await expect(result).toContainText('taxas de referência');
+
+  await page.locator('#statistics-x').selectOption('0'); // events
+  await page.locator('#statistics-y').selectOption('1'); // population
+  await page.locator('#epi-reference').selectOption('3'); // TXREF, per person
+  // Reference rates 0.005 and 0.04 over 1000 and 500 predict 5 + 20 = 25;
+  // 30 were observed, so the SMR is 1.2 and its interval still contains 1.
+  await expect(result).toContainText('Observados');
+  await expect(result).toContainText('30');
+  await expect(result).toContainText('Esperados');
+  await expect(result).toContainText('25');
+  await expect(result).toContainText('1,2');
+  await expect(result).toContainText('intervalo contém 1');
 });
