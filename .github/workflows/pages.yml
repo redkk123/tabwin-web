@@ -17,9 +17,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: TABWIN_WEB_HANDOFF_R01_2_VM_BOOTSTRAP_2026-08-26
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -28,7 +25,7 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: TABWIN_WEB_HANDOFF_R01_2_VM_BOOTSTRAP_2026-08-26/package-lock.json
+          cache-dependency-path: package-lock.json
       - name: Install dependencies
         run: npm ci
       - name: Verify kernel and web application
@@ -42,7 +39,7 @@ jobs:
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: TABWIN_WEB_HANDOFF_R01_2_VM_BOOTSTRAP_2026-08-26/dist-web
+          path: dist-web
 
   deploy:
     environment:

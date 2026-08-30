@@ -5,7 +5,7 @@ Copie e envie o texto abaixo quando o Claude voltar:
 ---
 
 Retome o TabWin Web em
-`C:\projetos\tabwin-web\TABWIN_WEB_HANDOFF_R01_2_VM_BOOTSTRAP_2026-08-26`.
+`C:\projetos\tabwin-web\a raiz do repositório`.
 
 Antes de agir, leia integralmente:
 
