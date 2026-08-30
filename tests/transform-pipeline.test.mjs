@@ -275,3 +275,158 @@ test('a bad formula is rejected while the pipeline is validated, before any reco
   ]), /missing column NAO_EXISTE/);
   assert.deepEqual(NUMERIC_RECORDS, before);
 });
+
+// --- cast-type, date-part and text-normalize -------------------------------
+
+test('cast-type converts what it can and reports what it could not, without guessing', () => {
+  const records = [{ V: '10' }, { V: '3,5' }, { V: 'texto' }, { V: '' }, { V: null }];
+  const missing = applyTransformPipeline(records, ['V'], [
+    { id: 'c1', kind: 'cast-type', field: 'V', to: 'number', onFailure: 'missing' },
+  ]);
+  assert.deepEqual(missing.records.map((record) => record.V), [10, 3.5, null, '', null]);
+  assert.equal(missing.steps[0].detail.convertidos, 2);
+  assert.equal(missing.steps[0].detail.falhas, 1);
+  assert.equal(missing.steps[0].detail.jaAusentes, 2, 'blank and null were already absent, not failures');
+
+  // "keep" loses nothing: the unconvertible value stays exactly as it was.
+  const keep = applyTransformPipeline(records, ['V'], [
+    { id: 'c1', kind: 'cast-type', field: 'V', to: 'number', onFailure: 'keep' },
+  ]);
+  assert.equal(keep.records[2].V, 'texto');
+});
+
+test('cast-type reads the date shapes DATASUS actually ships, and rejects impossible ones', () => {
+  const records = [
+    { D: '20240115' }, { D: '2024-01-15' }, { D: '15/01/2024' },
+    { D: new Date(Date.UTC(2024, 0, 15)) }, { D: '20240231' }, { D: 'ontem' },
+  ];
+  const result = applyTransformPipeline(records, ['D'], [
+    { id: 'c1', kind: 'cast-type', field: 'D', to: 'date', onFailure: 'missing' },
+  ]);
+  const iso = result.records.map((record) => (record.D instanceof Date ? record.D.toISOString().slice(0, 10) : record.D));
+  assert.deepEqual(iso, ['2024-01-15', '2024-01-15', '2024-01-15', '2024-01-15', null, null]);
+  // 31 February must not roll forward into March in silence.
+  assert.equal(result.steps[0].detail.falhas, 2);
+});
+
+test('date-part extracts the unambiguous calendar parts', () => {
+  const records = [{ D: '20240115' }, { D: '20241231' }, { D: 'invalido' }];
+  const part = (name, target) => applyTransformPipeline(records, ['D'], [
+    { id: 'p1', kind: 'date-part', field: 'D', target, part: name },
+  ]).records.map((record) => record[target]);
+
+  assert.deepEqual(part('year', 'ANO'), [2024, 2024, null]);
+  assert.deepEqual(part('month', 'MES'), [1, 12, null]);
+  assert.deepEqual(part('day', 'DIA'), [15, 31, null]);
+  assert.deepEqual(part('quarter', 'TRI'), [1, 4, null]);
+});
+
+test('epidemiological week follows the MMWR/MS rule: Sunday start, week 1 has four days in January', () => {
+  const week = (date) => applyTransformPipeline([{ D: date }], ['D'], [
+    { id: 'p1', kind: 'date-part', field: 'D', target: 'SE', part: 'epidemiological-week' },
+  ]).records[0].SE;
+  const epiYear = (date) => applyTransformPipeline([{ D: date }], ['D'], [
+    { id: 'p1', kind: 'date-part', field: 'D', target: 'ANO_SE', part: 'epidemiological-year' },
+  ]).records[0].ANO_SE;
+
+  // 2024: Jan 1 is a Monday, so the week Dec 31 2023 - Jan 6 2024 ends Jan 6,
+  // which is >= 4, making it SE 1 of 2024.
+  assert.equal(week('20240101'), 1);
+  assert.equal(week('20231231'), 1, 'a Sunday in December can open week 1 of the next epidemiological year');
+  assert.equal(epiYear('20231231'), 2024);
+  assert.equal(week('20240106'), 1);
+  assert.equal(week('20240107'), 2, 'the next Sunday opens SE 2');
+
+  // 2021: Jan 1 is a Friday, so the week ending Jan 2 has only two January
+  // days and belongs to 2020 - Jan 1 2021 is in the LAST week of 2020.
+  assert.equal(epiYear('20210101'), 2020);
+  assert.equal(week('20210103'), 1, 'the Sunday that opens the four-day week starts SE 1 of 2021');
+  assert.equal(epiYear('20210103'), 2021);
+
+  // A week number never leaves the legal range.
+  for (const date of ['20200101', '20201231', '20240630', '20251231']) {
+    const value = week(date);
+    assert.ok(value >= 1 && value <= 53, `${date} produced SE ${value}`);
+  }
+});
+
+test('text-normalize applies its operations in order, and leaves what it cannot read alone', () => {
+  const records = [{ T: '  abc  ' }, { T: 'XYZ' }];
+  const result = applyTransformPipeline(records, ['T'], [
+    { id: 't1', kind: 'text-normalize', field: 'T', operations: [{ kind: 'trim' }, { kind: 'upper' }] },
+  ]);
+  assert.deepEqual(result.records.map((record) => record.T), ['ABC', 'XYZ']);
+  // Only the first record actually changed.
+  assert.equal(result.steps[0].detail.registrosAlterados, 1);
+});
+
+test('the IBGE operation standardizes to 6 digits without destroying a leading zero', () => {
+  const records = [
+    { M: '5300108' },  // 7 digits: the check digit TabWin tables omit
+    { M: '530010' },   // already 6
+    { M: '11001' },    // 5: the leading zero a spreadsheet ate
+    { M: 11001 },      // same, but the reader handed back a number
+    { M: 'ABC' },      // not a code at all
+  ];
+  const result = applyTransformPipeline(records, ['M'], [
+    { id: 't1', kind: 'text-normalize', field: 'M', operations: [{ kind: 'ibge-municipality' }] },
+  ]);
+  assert.deepEqual(result.records.map((record) => record.M), ['530010', '530010', '011001', '011001', 'ABC']);
+  assert.equal(result.steps[0].detail.naoReconhecidos, 1, 'a value it could not read is counted, never blanked');
+});
+
+test('pad-start and substring cover the code shapes the IBGE helper does not', () => {
+  const records = [{ C: '7' }, { C: 'A1234567' }];
+  const padded = applyTransformPipeline(records, ['C'], [
+    { id: 't1', kind: 'text-normalize', field: 'C', operations: [{ kind: 'pad-start', length: 3, fill: '0' }] },
+  ]);
+  assert.deepEqual(padded.records.map((record) => record.C), ['007', 'A1234567']);
+
+  const cut = applyTransformPipeline(records, ['C'], [
+    { id: 't1', kind: 'text-normalize', field: 'C', operations: [{ kind: 'substring', start: 2, length: 4 }] },
+  ]);
+  assert.deepEqual(cut.records.map((record) => record.C), ['', '1234']);
+});
+
+test('the new steps validate their own shape before touching a record', () => {
+  const records = [{ V: '1' }];
+  const run = (step) => applyTransformPipeline(records, ['V'], [{ id: 's1', ...step }]);
+
+  assert.throws(() => run({ kind: 'cast-type', field: 'V', to: 'boolean', onFailure: 'keep' }), /target type is invalid/);
+  assert.throws(() => run({ kind: 'cast-type', field: 'V', to: 'number', onFailure: 'shrug' }), /onFailure policy is invalid/);
+  assert.throws(() => run({ kind: 'cast-type', field: 'NADA', to: 'number', onFailure: 'keep' }), /field NADA does not exist/);
+  assert.throws(() => run({ kind: 'date-part', field: 'V', target: 'V', part: 'year' }), /field V already exists/);
+  assert.throws(() => run({ kind: 'date-part', field: 'V', target: 'X', part: 'decade' }), /date part is invalid/);
+  assert.throws(() => run({ kind: 'text-normalize', field: 'V', operations: [] }), /has no operations/);
+  assert.throws(() => run({ kind: 'text-normalize', field: 'V', operations: [{ kind: 'reverse' }] }), /kind is invalid/);
+  assert.throws(() => run({ kind: 'text-normalize', field: 'V', operations: [{ kind: 'pad-start', length: 0, fill: '0' }] }), /positive whole number/);
+  assert.throws(() => run({ kind: 'text-normalize', field: 'V', operations: [{ kind: 'pad-start', length: 3, fill: '00' }] }), /single character/);
+  assert.throws(() => run({ kind: 'text-normalize', field: 'V', operations: [{ kind: 'substring', start: 0 }] }), /positive whole number/);
+});
+
+test('the cleaning pipeline the spec sketches runs end to end, in one pass', () => {
+  // Standardize the municipality code, extract the notification year and
+  // epidemiological week, mark the sentinel as absent, keep only confirmed.
+  const records = [
+    { MUN: '5300108', DT: '20240115', EVOL: '9', CLASSI: '1' },
+    { MUN: '11001', DT: '20240107', EVOL: '1', CLASSI: '1' },
+    { MUN: '355030', DT: '20231231', EVOL: '1', CLASSI: '2' },
+  ];
+  const result = applyTransformPipeline(records, ['MUN', 'DT', 'EVOL', 'CLASSI'], [
+    { id: '1', kind: 'text-normalize', field: 'MUN', operations: [{ kind: 'ibge-municipality' }] },
+    { id: '2', kind: 'date-part', field: 'DT', target: 'ANO', part: 'year' },
+    { id: '3', kind: 'date-part', field: 'DT', target: 'SE', part: 'epidemiological-week' },
+    { id: '4', kind: 'missing-value-policy', field: 'EVOL', sentinelValues: ['9'] },
+    { id: '5', kind: 'filter-rows', filters: [{ field: 'CLASSI', acceptedCategories: ['1'] }] },
+  ]);
+
+  assert.equal(result.records.length, 2);
+  assert.deepEqual(result.records.map((record) => record.MUN), ['530010', '011001']);
+  assert.deepEqual(result.records.map((record) => record.ANO), [2024, 2024]);
+  assert.deepEqual(result.records.map((record) => record.SE), [3, 2]);
+  assert.equal(result.records[0].EVOL, null, 'the sentinel became absent');
+  assert.deepEqual(result.fields.map((field) => field.name), ['MUN', 'DT', 'EVOL', 'CLASSI', 'ANO', 'SE']);
+  // Every step reported its own before/after, which is the audit trail.
+  assert.deepEqual(result.steps.map((step) => [step.recordsBefore, step.recordsAfter]),
+    [[3, 3], [3, 3], [3, 3], [3, 3], [3, 2]]);
+});

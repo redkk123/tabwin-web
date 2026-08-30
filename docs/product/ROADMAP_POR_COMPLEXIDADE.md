@@ -319,6 +319,27 @@ seria falso. O que foi feito:
   fingir uma origem que não existe.
   `npm run check`: **354/354**. `npm run e2e`: **19/19**.
 
+- **R11.4.2 — Tipos, datas e normalização de texto/código.** Mais três
+  tipos de etapa da seção 5.3 do spec, que são exatamente as operações do
+  exemplo de limpeza que o ChatGPT desenhou em 2026-08-30.
+  `cast-type` converte para número/texto/data com política explícita para o
+  que não converter (`keep` não perde nada; `missing` marca), e conta valor
+  já vazio separado de falha real. As formas de data aceitas são as que o
+  DATASUS entrega (`AAAAMMDD`, `AAAA-MM-DD`, `DD/MM/AAAA`, campo `D` do
+  DBF); `20240231` é **recusada** em vez de rolar para março em silêncio,
+  e tudo é UTC para uma data não mudar de dia pelo fuso do leitor.
+  `date-part` extrai ano/mês/dia/trimestre e **semana epidemiológica** pela
+  regra MMWR/MS — semana de domingo a sábado, SE 1 é a que tem pelo menos
+  quatro dias em janeiro. Por isso o **ano epidemiológico é coluna à
+  parte**: 31/12/2023 é SE 1 de 2024, e 01/01/2021 é a última semana de
+  2020. Os dois casos estão ancorados em teste.
+  `text-normalize` encadeia `trim`/`upper`/`lower`/`pad-start`/`substring` e
+  a ferramenta de **código IBGE** que o ChatGPT pediu por nome: 7 dígitos
+  perdem o verificador (`5300108` → `530010`), 5 ou menos recuperam o zero
+  à esquerda (`11001` → `011001`), e o que não é código fica **intacto** e
+  contado — nunca apagado.
+  `npm run check`: **363/363**. `npm run e2e`: **20/20**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

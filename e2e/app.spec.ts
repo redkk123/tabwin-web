@@ -647,3 +647,57 @@ test('the transform pipeline computes a new field with the same formula language
   await expect(page.locator('#transform-result')).toContainText('unknown function eval');
   await expect(page.locator('#row-field')).not.toContainText('PROIBIDA');
 });
+
+test('the cleaning steps standardize an IBGE code and derive the epidemiological week', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/limpeza-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  // The flagship example: 5300108 (7 digits, with check digit) and 11001
+  // (5 digits, leading zero eaten) both have to land on the 6-digit form
+  // every DATASUS municipality table keys on.
+  await page.locator('#transform-step-kind').selectOption('text-normalize');
+  await page.locator('#transform-text-field').selectOption('MUN');
+  await page.locator('#transform-text-operations').selectOption(['ibge-municipality']);
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-step-kind').selectOption('date-part');
+  await page.locator('#transform-datepart-field').selectOption('DT');
+  await page.locator('#transform-datepart-part').selectOption('epidemiological-week');
+  await page.locator('#transform-datepart-target').fill('SE');
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-step-kind').selectOption('date-part');
+  await page.locator('#transform-datepart-part').selectOption('epidemiological-year');
+  await page.locator('#transform-datepart-target').fill('ANO_SE');
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-apply-button').click();
+  const report = page.locator('#transform-result');
+  await expect(report).toContainText('naoReconhecidos: 0');
+  await expect(report).toContainText('semDataValida: 0');
+
+  await page.locator('#row-field').selectOption('MUN');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  const body = page.locator('#result-table tbody');
+  // 5300108 lost its check digit and joined the existing 530010 (so: 2),
+  // and 11001 got its leading zero back.
+  await expect(body).toContainText('011001');
+  await expect(body.locator('tr', { hasText: '530010' })).toContainText('2');
+  await expect(body).not.toContainText('5300108');
+
+  // 31 Dec 2023 belongs to epidemiological week 1 of 2024, which is exactly
+  // why the epidemiological year is its own column.
+  await page.locator('#row-field').selectOption('ANO_SE');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(body).toContainText('2024');
+  await expect(body).not.toContainText('2023');
+
+  await page.locator('#row-field').selectOption('SE');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  // 31/12/2023 -> 1, 07/01 -> 2, 15/01 -> 3, 01/07 -> 27: four distinct
+  // weeks, one record each. The row label is each row's first cell.
+  await expect(body.locator('tr')).toHaveCount(4);
+  expect(await body.locator('tr > :first-child').allTextContents()).toEqual(['1', '2', '3', '27']);
+});

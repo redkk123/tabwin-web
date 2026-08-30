@@ -96,13 +96,52 @@ export interface DeriveColumnStep extends TransformStepBase {
   divisionByZero: 'error' | 'zero';
 }
 
+export interface CastTypeStep extends TransformStepBase {
+  kind: 'cast-type';
+  field: string;
+  to: 'number' | 'text' | 'date';
+  /** What a value that will not convert becomes. There is no silent option. */
+  onFailure: 'missing' | 'keep';
+}
+
+export type DatePart =
+  | 'year' | 'month' | 'day' | 'quarter'
+  | 'epidemiological-week' | 'epidemiological-year';
+
+export interface DatePartStep extends TransformStepBase {
+  kind: 'date-part';
+  /** Source field, read as a date; see {@link parseDateValue} for what counts as one. */
+  field: string;
+  /** Name of the numeric field being created. */
+  target: string;
+  part: DatePart;
+}
+
+export type TextOperation =
+  | { kind: 'trim' }
+  | { kind: 'upper' }
+  | { kind: 'lower' }
+  | { kind: 'pad-start'; length: number; fill: string }
+  | { kind: 'substring'; start: number; length?: number }
+  /** Standardizes a Brazilian municipality code to 6 digits without destroying a leading zero. */
+  | { kind: 'ibge-municipality' };
+
+export interface TextNormalizeStep extends TransformStepBase {
+  kind: 'text-normalize';
+  field: string;
+  operations: TextOperation[];
+}
+
 export type TransformStep =
   | SelectColumnsStep
   | FilterRowsStep
   | RecodeStep
   | MissingValuePolicyStep
   | DedupeStep
-  | DeriveColumnStep;
+  | DeriveColumnStep
+  | CastTypeStep
+  | DatePartStep
+  | TextNormalizeStep;
 
 export interface TransformStepResult {
   id: string;
@@ -144,7 +183,86 @@ function defaultLabel(step: TransformStep): string {
     case 'missing-value-policy': return `Ausentes em ${step.field}`;
     case 'dedupe': return `Deduplicar por ${step.keyFields.join(', ')}`;
     case 'derive-column': return `Criar ${step.field}`;
+    case 'cast-type': return `Converter ${step.field} para ${step.to}`;
+    case 'date-part': return `Extrair ${step.part} de ${step.field}`;
+    case 'text-normalize': return `Normalizar ${step.field} (${step.operations.length} operação(ões))`;
   }
+}
+
+/**
+ * Reads a raw field value as a calendar date, accepting the shapes DATASUS
+ * actually ships: a real Date (DBF type `D`), the bare `YYYYMMDD` string used
+ * by DTOBITO/DT_NOTIFIC and friends, ISO `YYYY-MM-DD`, and `DD/MM/YYYY`.
+ * Anything else returns undefined - it is not guessed at.
+ *
+ * Everything is handled in UTC, so a date never shifts a day because of the
+ * reader's time zone.
+ */
+export function parseDateValue(raw: unknown): Date | undefined {
+  if (raw instanceof Date) return Number.isNaN(raw.getTime()) ? undefined : raw;
+  if (raw === null || raw === undefined) return undefined;
+  const text = String(raw).trim();
+  if (!text) return undefined;
+
+  let year: number;
+  let month: number;
+  let day: number;
+  const compact = /^(\d{4})(\d{2})(\d{2})$/.exec(text);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  const brazilian = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text);
+  if (compact) [, year, month, day] = compact.map(Number) as [number, number, number, number];
+  else if (iso) [, year, month, day] = iso.map(Number) as [number, number, number, number];
+  else if (brazilian) {
+    const [, d, m, y] = brazilian.map(Number) as [number, number, number, number];
+    year = y; month = m; day = d;
+  } else return undefined;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  // Rejects 2024-02-31 and friends, which Date would roll forward silently.
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return undefined;
+  }
+  return date;
+}
+
+/**
+ * Brazilian epidemiological week (semana epidemiológica), which follows the
+ * same construction as the CDC's MMWR week:
+ *
+ * - a week runs Sunday through Saturday;
+ * - week 1 of a year is the one ending on the first Saturday of January that
+ *   falls on the 4th or later, i.e. the first week with at least four of its
+ *   days in the new year.
+ *
+ * A date in early January can therefore belong to the last week of the
+ * previous epidemiological year, and a date in late December to week 1 of
+ * the next - which is why the epidemiological *year* is reported separately
+ * rather than assumed equal to the calendar year.
+ */
+function epidemiologicalWeek(date: Date): { week: number; year: number } {
+  /** The Saturday that closes the Sunday-Saturday week containing `value`. */
+  const weekEnd = (value: Date): Date => {
+    const end = new Date(value.getTime());
+    end.setUTCDate(end.getUTCDate() + (6 - end.getUTCDay()));
+    return end;
+  };
+  /** The Saturday that closes week 1 of the given epidemiological year. */
+  const firstWeekEnd = (year: number): Date => {
+    // Jan 4 is in week 1 by definition: any week containing it necessarily
+    // has at least four January days.
+    return weekEnd(new Date(Date.UTC(year, 0, 4)));
+  };
+
+  const end = weekEnd(date);
+  // The epidemiological year is the calendar year the week *ends* in, unless
+  // that week is still week 1 of the following year.
+  let year = end.getUTCFullYear();
+  if (end.getTime() >= firstWeekEnd(year + 1).getTime()) year += 1;
+  else if (end.getTime() < firstWeekEnd(year).getTime()) year -= 1;
+
+  const start = firstWeekEnd(year);
+  const week = Math.round((end.getTime() - start.getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1;
+  return { week, year };
 }
 
 /** Same coercion the rest of the project uses for a raw field value: comma decimals included. */
@@ -253,6 +371,39 @@ function validateStepShape(step: TransformStep, label: string, currentFields: re
     // Parsed here so a bad formula or a missing field reference fails while
     // the pipeline is being validated, not partway through the records.
     parseExpression(currentFields.map((field) => ({ key: field.name, label: field.name })), step.formula);
+  } else if (step.kind === 'cast-type') {
+    requireKnownField(step.field, currentFields, label);
+    if (!['number', 'text', 'date'].includes(step.to)) throw new TransformPipelineError(`${label} target type is invalid`);
+    if (step.onFailure !== 'missing' && step.onFailure !== 'keep') {
+      throw new TransformPipelineError(`${label} onFailure policy is invalid`);
+    }
+  } else if (step.kind === 'date-part') {
+    requireKnownField(step.field, currentFields, label);
+    if (typeof step.target !== 'string' || !step.target.trim()) throw new TransformPipelineError(`${label} has no target field name`);
+    if (currentFields.some((candidate) => candidate.name === step.target)) {
+      throw new TransformPipelineError(`${label}: field ${step.target} already exists at this point in the pipeline`);
+    }
+    const parts: DatePart[] = ['year', 'month', 'day', 'quarter', 'epidemiological-week', 'epidemiological-year'];
+    if (!parts.includes(step.part)) throw new TransformPipelineError(`${label} date part is invalid`);
+  } else if (step.kind === 'text-normalize') {
+    requireKnownField(step.field, currentFields, label);
+    if (!Array.isArray(step.operations) || step.operations.length === 0) {
+      throw new TransformPipelineError(`${label} has no operations`);
+    }
+    for (const [index, operation] of step.operations.entries()) {
+      const position = `${label} operation ${index + 1}`;
+      if (operation.kind === 'pad-start') {
+        if (!Number.isInteger(operation.length) || operation.length < 1) throw new TransformPipelineError(`${position} length must be a positive whole number`);
+        if (typeof operation.fill !== 'string' || operation.fill.length !== 1) throw new TransformPipelineError(`${position} fill must be a single character`);
+      } else if (operation.kind === 'substring') {
+        if (!Number.isInteger(operation.start) || operation.start < 1) throw new TransformPipelineError(`${position} start must be a positive whole number`);
+        if (operation.length !== undefined && (!Number.isInteger(operation.length) || operation.length < 1)) {
+          throw new TransformPipelineError(`${position} length must be a positive whole number`);
+        }
+      } else if (!['trim', 'upper', 'lower', 'ibge-municipality'].includes(operation.kind)) {
+        throw new TransformPipelineError(`${position} kind is invalid`);
+      }
+    }
   } else {
     throw new TransformPipelineError(`${label} has an unknown kind`);
   }
@@ -347,6 +498,124 @@ function runDedupe(
   return { records: kept, detail: { registrosRemovidos: records.length - kept.length, chavesDistintas: seen.size } };
 }
 
+function runCastType(
+  records: readonly DataRecord[],
+  step: CastTypeStep,
+): { records: DataRecord[]; detail: Record<string, number> } {
+  let converted = 0;
+  let failed = 0;
+  let alreadyMissing = 0;
+  const transformed = records.map((record) => {
+    const raw = record[step.field];
+    if (raw === null || raw === undefined || String(raw).trim() === '') {
+      alreadyMissing++;
+      return record;
+    }
+    let next: unknown;
+    if (step.to === 'number') {
+      const value = numericValue(raw);
+      next = Number.isFinite(value) ? value : undefined;
+    } else if (step.to === 'text') {
+      next = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw).trim();
+    } else {
+      next = parseDateValue(raw);
+    }
+    if (next === undefined) {
+      failed++;
+      // `keep` leaves the unconvertible value exactly as it was, so nothing
+      // is lost; `missing` marks it, which is a decision the author made.
+      return step.onFailure === 'keep' ? record : { ...record, [step.field]: null };
+    }
+    converted++;
+    return { ...record, [step.field]: next };
+  });
+  return { records: transformed, detail: { convertidos: converted, falhas: failed, jaAusentes: alreadyMissing } };
+}
+
+function runDatePart(
+  records: readonly DataRecord[],
+  step: DatePartStep,
+  currentFields: readonly TransformedField[],
+): { records: DataRecord[]; fields: TransformedField[]; detail: Record<string, number> } {
+  let extracted = 0;
+  let unparsed = 0;
+  const transformed = records.map((record) => {
+    const date = parseDateValue(record[step.field]);
+    if (!date) {
+      unparsed++;
+      // No date means no part of one. Null says "absent", which is true;
+      // a zero would be a value the record does not have.
+      return { ...record, [step.target]: null };
+    }
+    extracted++;
+    let value: number;
+    switch (step.part) {
+      case 'year': value = date.getUTCFullYear(); break;
+      case 'month': value = date.getUTCMonth() + 1; break;
+      case 'day': value = date.getUTCDate(); break;
+      case 'quarter': value = Math.floor(date.getUTCMonth() / 3) + 1; break;
+      case 'epidemiological-week': value = epidemiologicalWeek(date).week; break;
+      case 'epidemiological-year': value = epidemiologicalWeek(date).year; break;
+    }
+    return { ...record, [step.target]: value };
+  });
+  return {
+    records: transformed,
+    fields: [...currentFields, { name: step.target }],
+    detail: { extraidos: extracted, semDataValida: unparsed },
+  };
+}
+
+function applyTextOperation(text: string, operation: TextOperation): string | undefined {
+  switch (operation.kind) {
+    case 'trim': return text.trim();
+    case 'upper': return text.toLocaleUpperCase('pt-BR');
+    case 'lower': return text.toLocaleLowerCase('pt-BR');
+    case 'pad-start': return text.padStart(operation.length, operation.fill);
+    case 'substring': return operation.length === undefined
+      ? text.slice(operation.start - 1)
+      : text.slice(operation.start - 1, operation.start - 1 + operation.length);
+    case 'ibge-municipality': {
+      const digits = text.trim();
+      if (!/^\d+$/.test(digits)) return undefined;
+      // 7 digits carry the check digit that TabWin's own tables omit; 6 is
+      // the form every DATASUS municipality table keys on. Shorter codes are
+      // left-padded, which is exactly the leading zero a spreadsheet ate.
+      if (digits.length === 7) return digits.slice(0, 6);
+      if (digits.length === 6) return digits;
+      if (digits.length < 6) return digits.padStart(6, '0');
+      return undefined;
+    }
+  }
+}
+
+function runTextNormalize(
+  records: readonly DataRecord[],
+  step: TextNormalizeStep,
+): { records: DataRecord[]; detail: Record<string, number> } {
+  let changed = 0;
+  let failed = 0;
+  const transformed = records.map((record) => {
+    const raw = record[step.field];
+    if (raw === null || raw === undefined) return record;
+    let text: string | undefined = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw);
+    for (const operation of step.operations) {
+      if (text === undefined) break;
+      text = applyTextOperation(text, operation);
+    }
+    if (text === undefined) {
+      // A value an operation could not make sense of is left untouched and
+      // counted, never quietly blanked.
+      failed++;
+      return record;
+    }
+    if (text === raw) return record;
+    changed++;
+    return { ...record, [step.field]: text };
+  });
+  return { records: transformed, detail: { registrosAlterados: changed, naoReconhecidos: failed } };
+}
+
 function runDeriveColumn(
   records: readonly DataRecord[],
   step: DeriveColumnStep,
@@ -434,6 +703,19 @@ export function applyTransformPipeline(
         const outcome = runDeriveColumn(currentRecords, step, currentFields);
         currentRecords = outcome.records;
         currentFields = outcome.fields;
+        detail = outcome.detail;
+      } else if (step.kind === 'cast-type') {
+        const outcome = runCastType(currentRecords, step);
+        currentRecords = outcome.records;
+        detail = outcome.detail;
+      } else if (step.kind === 'date-part') {
+        const outcome = runDatePart(currentRecords, step, currentFields);
+        currentRecords = outcome.records;
+        currentFields = outcome.fields;
+        detail = outcome.detail;
+      } else if (step.kind === 'text-normalize') {
+        const outcome = runTextNormalize(currentRecords, step);
+        currentRecords = outcome.records;
         detail = outcome.detail;
       }
     }

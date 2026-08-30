@@ -1,15 +1,15 @@
 {
-  "revision": "r11-5b-formula-engine-wired-into-transform-pipeline",
+  "revision": "r11-4-2-cast-date-part-and-text-normalize-cleaning-steps",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 354,
-    "passed": 354,
+    "total": 363,
+    "passed": 363,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 19,
-    "e2e_passed": 19
+    "e2e_total": 20,
+    "e2e_passed": 20
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -258,7 +258,10 @@
     "shared-axis-bounds-validation-across-recipe-and-editor",
     "table-comparison-ui-compare-view-ab-diagnostics-csv-export",
     "r11-5b-derive-column-transform-step-mutate-on-the-shared-formula-engine",
-    "r11-5b-transform-pipeline-moved-to-analysis-package-keeping-core-free-of-analysis-imports"
+    "r11-5b-transform-pipeline-moved-to-analysis-package-keeping-core-free-of-analysis-imports",
+    "r11-4-2-cast-type-with-explicit-keep-or-missing-failure-policy",
+    "r11-4-2-date-part-including-mmwr-ms-epidemiological-week-and-year",
+    "r11-4-2-text-normalize-with-ibge-municipality-6-digit-standardization"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -337,7 +340,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-2-transform-pipeline-remaining-step-kinds-cast-join-bind-groupby-and-column-rename-ui",
+    "r11-4-3-transform-pipeline-join-bind-rows-groupby-and-equivalent-r-python-code",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

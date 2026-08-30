@@ -213,6 +213,9 @@
               <option value="missing-value-policy">Marcar ausentes</option>
               <option value="dedupe">Remover duplicatas</option>
               <option value="derive-column">Criar coluna por fórmula</option>
+              <option value="cast-type">Converter tipo</option>
+              <option value="date-part">Extrair parte de data</option>
+              <option value="text-normalize">Normalizar texto/código</option>
             </select></label>
 
             <div class="transform-step-config" id="transform-config-select-columns">
@@ -270,6 +273,49 @@
                 <option value="zero">Usar zero</option>
               </select></label>
               <p class="quality-note">Mesma linguagem de fórmulas da coluna calculada, sobre os campos do registro. Um resultado não finito interrompe o pipeline; use <code>IFERROR(…; valor)</code> para dizer o que aquele registro deve mostrar.</p>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-cast-type" hidden>
+              <label><span>Campo</span><select id="transform-cast-field" disabled></select></label>
+              <div class="filter-rule-row">
+                <label><span>Converter para</span><select id="transform-cast-to" disabled>
+                  <option value="number">Número</option>
+                  <option value="text">Texto</option>
+                  <option value="date">Data</option>
+                </select></label>
+                <label><span>Se não converter</span><select id="transform-cast-failure" disabled>
+                  <option value="keep">Manter valor original</option>
+                  <option value="missing">Marcar como ausente</option>
+                </select></label>
+              </div>
+              <p class="quality-note">Datas aceitas: <code>AAAAMMDD</code>, <code>AAAA-MM-DD</code>, <code>DD/MM/AAAA</code> e o campo de data do próprio DBF. Uma data impossível (31/02) não vira março em silêncio — conta como falha.</p>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-date-part" hidden>
+              <label><span>Campo de data</span><select id="transform-datepart-field" disabled></select></label>
+              <div class="filter-rule-row">
+                <label><span>Parte</span><select id="transform-datepart-part" disabled>
+                  <option value="year">Ano</option>
+                  <option value="month">Mês</option>
+                  <option value="day">Dia</option>
+                  <option value="quarter">Trimestre</option>
+                  <option value="epidemiological-week">Semana epidemiológica</option>
+                  <option value="epidemiological-year">Ano epidemiológico</option>
+                </select></label>
+                <label><span>Nome da nova coluna</span><input id="transform-datepart-target" type="text" maxlength="60" placeholder="ANO_NOTIF" disabled></label>
+              </div>
+              <p class="quality-note">Semana epidemiológica pela regra MMWR/MS: a semana vai de domingo a sábado, e a SE 1 é a que tem pelo menos quatro dias em janeiro. Por isso o <strong>ano epidemiológico</strong> é uma coluna à parte — o começo de janeiro pode pertencer à última semana do ano anterior.</p>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-text-normalize" hidden>
+              <label><span>Campo</span><select id="transform-text-field" disabled></select></label>
+              <label><span>Operações <small>(aplicadas nesta ordem)</small></span><select id="transform-text-operations" multiple size="6" disabled>
+                <option value="trim">Remover espaços nas pontas</option>
+                <option value="upper">Maiúsculas</option>
+                <option value="lower">Minúsculas</option>
+                <option value="ibge-municipality">Padronizar código IBGE de município (6 dígitos)</option>
+              </select></label>
+              <p class="quality-note">O código IBGE de 7 dígitos perde o dígito verificador; o de 5 ou menos ganha o zero à esquerda de volta. Um valor que não é código fica intacto e é contado — nunca apagado.</p>
             </div>
 
             <div class="quality-actions">

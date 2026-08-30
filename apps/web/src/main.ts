@@ -146,7 +146,9 @@ import {
   type TableExpressionFunctionEntry,
 } from '../../../packages/analysis/src/table-expression.ts';
 import type {
+  DatePart,
   RecodeOtherwise,
+  TextOperation,
   TransformStep,
   TransformStepResult,
 } from '../../../packages/analysis/src/transform-pipeline.ts';
@@ -282,6 +284,9 @@ const transformConfigByKind: Record<TransformStep['kind'], HTMLElement> = {
   'missing-value-policy': element<HTMLElement>('#transform-config-missing-value-policy'),
   dedupe: element<HTMLElement>('#transform-config-dedupe'),
   'derive-column': element<HTMLElement>('#transform-config-derive-column'),
+  'cast-type': element<HTMLElement>('#transform-config-cast-type'),
+  'date-part': element<HTMLElement>('#transform-config-date-part'),
+  'text-normalize': element<HTMLElement>('#transform-config-text-normalize'),
 };
 const transformSelectFields = element<HTMLSelectElement>('#transform-select-fields');
 const transformFilterField = element<HTMLSelectElement>('#transform-filter-field');
@@ -304,6 +309,14 @@ const transformDedupeFields = element<HTMLSelectElement>('#transform-dedupe-fiel
 const transformDeriveField = element<HTMLInputElement>('#transform-derive-field');
 const transformDeriveFormula = element<HTMLInputElement>('#transform-derive-formula');
 const transformDeriveZero = element<HTMLSelectElement>('#transform-derive-zero');
+const transformCastField = element<HTMLSelectElement>('#transform-cast-field');
+const transformCastTo = element<HTMLSelectElement>('#transform-cast-to');
+const transformCastFailure = element<HTMLSelectElement>('#transform-cast-failure');
+const transformDatePartField = element<HTMLSelectElement>('#transform-datepart-field');
+const transformDatePartPart = element<HTMLSelectElement>('#transform-datepart-part');
+const transformDatePartTarget = element<HTMLInputElement>('#transform-datepart-target');
+const transformTextField = element<HTMLSelectElement>('#transform-text-field');
+const transformTextOperations = element<HTMLSelectElement>('#transform-text-operations');
 const transformAddStep = element<HTMLButtonElement>('#transform-add-step');
 const transformStepList = element<HTMLElement>('#transform-step-list');
 const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
@@ -1255,6 +1268,12 @@ function populateTransformFields(): void {
   transformMissingField.replaceChildren(...options());
   transformMissingField.value = names.includes(previousMissingField) ? previousMissingField : (names[0] ?? '');
 
+  for (const control of [transformCastField, transformDatePartField, transformTextField]) {
+    const previous = control.value;
+    control.replaceChildren(...options());
+    control.value = names.includes(previous) ? previous : (names[0] ?? '');
+  }
+
   const previousDedupe = new Set(selectedCatalogValues(transformDedupeFields));
   transformDedupeFields.replaceChildren(...options());
   for (const option of transformDedupeFields.options) option.selected = previousDedupe.has(option.value);
@@ -1265,6 +1284,9 @@ function populateTransformFields(): void {
     transformRecodeAddRow, transformRecodeOtherwise, transformRecodeOtherwiseLabel, transformMissingField,
     transformMissingValues, transformDedupeFields, transformAddStep,
     transformDeriveField, transformDeriveFormula, transformDeriveZero,
+    transformCastField, transformCastTo, transformCastFailure,
+    transformDatePartField, transformDatePartPart, transformDatePartTarget,
+    transformTextField, transformTextOperations,
   ]) control.disabled = false;
 
   renderTransformRecodeRows();
@@ -1349,6 +1371,12 @@ function transformStepSummary(step: TransformStep): string {
       return `Deduplicar por ${step.keyFields.map(selectionLabel).join(', ')}`;
     case 'derive-column':
       return `Criar ${step.field} = ${step.formula}`;
+    case 'cast-type':
+      return `Converter ${selectionLabel(step.field)} para ${step.to}`;
+    case 'date-part':
+      return `${step.target} = ${step.part} de ${selectionLabel(step.field)}`;
+    case 'text-normalize':
+      return `Normalizar ${selectionLabel(step.field)}: ${step.operations.map((operation) => operation.kind).join(', ')}`;
   }
 }
 
@@ -1434,6 +1462,27 @@ function addTransformStep(): void {
     const keyFields = selectedCatalogValues(transformDedupeFields);
     if (!keyFields.length) throw new Error('Escolha ao menos um campo-chave');
     step = { id, kind, keyFields };
+  } else if (kind === 'cast-type') {
+    const field = transformCastField.value;
+    if (!field) throw new Error('Escolha um campo');
+    step = {
+      id, kind, field,
+      to: transformCastTo.value as 'number' | 'text' | 'date',
+      onFailure: transformCastFailure.value === 'missing' ? 'missing' : 'keep',
+    };
+  } else if (kind === 'date-part') {
+    const field = transformDatePartField.value;
+    if (!field) throw new Error('Escolha um campo de data');
+    const target = transformDatePartTarget.value.trim();
+    if (!target) throw new Error('Informe o nome da nova coluna');
+    step = { id, kind, field, target, part: transformDatePartPart.value as DatePart };
+  } else if (kind === 'text-normalize') {
+    const field = transformTextField.value;
+    if (!field) throw new Error('Escolha um campo');
+    const operations = selectedCatalogValues(transformTextOperations)
+      .map((value) => ({ kind: value }) as TextOperation);
+    if (!operations.length) throw new Error('Escolha ao menos uma operação');
+    step = { id, kind, field, operations };
   } else {
     const field = transformDeriveField.value.trim();
     if (!field) throw new Error('Informe o nome da nova coluna');
