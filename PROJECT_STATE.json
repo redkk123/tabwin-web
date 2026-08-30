@@ -3,13 +3,13 @@
   "date": "2026-08-30",
   "phase": "faixa-4-closed-r11-decided-not-yet-implemented",
   "tests": {
-    "total": 291,
-    "passed": 291,
+    "total": 304,
+    "passed": 304,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 11,
-    "e2e_passed": 11
+    "e2e_total": 12,
+    "e2e_passed": 12
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -250,7 +250,10 @@
     "columnar-dictionary-projection-and-l2-cache-measured-9x-on-a-real-dbc",
     "microdatasus-filtered-csv-export-exact-tabulation-subset-with-readable-labels",
     "national-catalog-collection-explains-why-uf-selector-is-hidden",
-    "three-track-architecture-decided-tabwin-compat-microdata-exploration-epidemiology"
+    "three-track-architecture-decided-tabwin-compat-microdata-exploration-epidemiology",
+    "statistical-anomaly-core-robust-outliers-hampel-jsd-tvd-hhi-wilson-rr-or-benjamini-hochberg",
+    "table-comparison-core-inner-left-right-full-explicit-row-mapping-coverage-diagnostics",
+    "gaussian-fit-density-and-histogram-overlay-descriptive-not-a-normality-test"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -315,8 +318,8 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-integrate-preimplemented-statistical-anomaly-and-table-comparison-core",
-    "r11-gaussian-fit-and-overlay-for-numeric-distributions",
+    "r11-1-anomaly-orchestrator-and-audit-scan-plan",
+    "r11-1-table-comparison-ui-selector-diagnostics-side-by-side",
     "r11-transform-pipeline-select-filter-mutate-recode-dedupe-bind-join-groupby",
     "r11-excel-style-formula-functions-registry",
     "r11-statistical-audit-ui-scope-detectors-signal-queue-drilldown",

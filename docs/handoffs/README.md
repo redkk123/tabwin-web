@@ -6,8 +6,11 @@ ou cada defeito corrigido tem um relatório aqui que explica a evidência.
 
 ## `current/`
 
-Os cinco handoffs mais recentes — a Faixa 4.3 até a 4.9/Microdatasus,
-2026-08-30. Refletem o estado do código hoje.
+Os handoffs mais recentes — a Faixa 4.3 até o núcleo de auditoria estatística
+(R11.0), 2026-08-30. Refletem o estado do código hoje. Quando este diretório
+crescer demais, os mais antigos migram para `archive/r10/` ou uma nova pasta
+por época — a régua é "ainda descreve o que o código faz agora", não uma
+contagem fixa de arquivos.
 
 ## `archive/`
 

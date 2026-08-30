@@ -272,3 +272,40 @@ test('um filtro na tabulação chega ao CSV do Microdatasus', async ({ page }) =
   expect(lines).toHaveLength(3);
   expect(text).not.toContain('AM');
 });
+
+test('o histograma sobrepõe uma gaussiana ajustada, e sabe quando não pode ajustar uma', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/gaussian-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('VALOR');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('histogram');
+  await page.locator('#statistics-x').selectOption({ index: 0 });
+  await expect(page.locator('#histogram-gaussian-label')).toBeVisible();
+
+  // Five rows (frequencies 1,2,3,2,1) is a real, non-constant series: the fit
+  // succeeds and draws one mark per histogram bar.
+  await page.locator('#histogram-gaussian').check();
+  const marks = page.locator('.histogram-gaussian-mark');
+  await expect(marks.first()).toBeVisible();
+  const markCount = await marks.count();
+  expect(markCount).toBeGreaterThan(0);
+
+  await page.locator('#histogram-gaussian').uncheck();
+  await expect(marks).toHaveCount(0);
+
+  // Re-tabulating by GRUPO leaves a single row (frequency 9): a fit needs at
+  // least two distinct values, so the panel must say so instead of drawing
+  // nothing silently.
+  await page.locator('[data-view="table"]').click();
+  await page.locator('#row-field').selectOption('GRUPO');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('histogram');
+  await page.locator('#histogram-gaussian').check();
+  await expect(page.locator('#statistics-result')).toContainText('A gaussiana não pôde ser ajustada');
+  await expect(marks).toHaveCount(0);
+});

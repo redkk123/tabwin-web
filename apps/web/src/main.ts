@@ -108,6 +108,8 @@ import {
 import { computeTableWindow } from '../../../packages/visualization/src/table-window.ts';
 import {
   descriptiveStatistics,
+  fitGaussian,
+  gaussianOverlay,
   histogram,
   pearsonCorrelation,
   simpleLinearRegression,
@@ -425,6 +427,8 @@ const statisticsY = element<HTMLSelectElement>('#statistics-y');
 const statisticsYLabel = element<HTMLElement>('#statistics-y-label');
 const histogramBinsLabel = element<HTMLElement>('#histogram-bins-label');
 const histogramBins = element<HTMLInputElement>('#histogram-bins');
+const histogramGaussianLabel = element<HTMLElement>('#histogram-gaussian-label');
+const histogramGaussian = element<HTMLInputElement>('#histogram-gaussian');
 const statisticsResult = element<HTMLElement>('#statistics-result');
 const toast = element<HTMLElement>('#toast');
 const aboutDialog = element<HTMLDialogElement>('#about-dialog');
@@ -3304,6 +3308,7 @@ function renderStatistics(): void {
   const pairedOperation = operation === 'correlation' || operation === 'regression';
   statisticsYLabel.hidden = !pairedOperation;
   histogramBinsLabel.hidden = operation !== 'histogram';
+  histogramGaussianLabel.hidden = operation !== 'histogram';
   statisticsResult.replaceChildren();
   if (!currentResult?.columns.length) {
     const message = document.createElement('p');
@@ -3348,10 +3353,20 @@ function renderStatistics(): void {
       const requestedBins = Math.min(50, Math.max(1, Math.round(Number(histogramBins.value) || 8)));
       histogramBins.value = String(requestedBins);
       const bins = histogram(x, requestedBins);
-      const max = Math.max(...bins.map((item) => item.count), 1);
+      // The overlay is a descriptive reference curve ("what would normal look
+      // like at this mean and spread"), never a claim that the data is or
+      // isn't normal - the checkbox stays off by default and the fit simply
+      // does not draw when it is undefined (fewer than two values, or every
+      // value identical).
+      let overlay: ReturnType<typeof gaussianOverlay> | undefined;
+      if (histogramGaussian.checked) {
+        try { overlay = gaussianOverlay(bins, fitGaussian(x)); }
+        catch { overlay = undefined; }
+      }
+      const max = Math.max(...bins.map((item) => item.count), ...(overlay?.map((item) => item.expectedCount) ?? []), 1);
       const rows = document.createElement('div');
       rows.className = 'histogram-bars';
-      for (const item of bins) {
+      bins.forEach((item, index) => {
         const row = document.createElement('div');
         row.className = 'histogram-row';
         const label = document.createElement('span');
@@ -3362,12 +3377,26 @@ function renderStatistics(): void {
         fill.className = 'histogram-fill';
         fill.style.width = `${item.count / max * 100}%`;
         track.append(fill);
+        const expected = overlay?.[index];
+        if (expected) {
+          const gaussianMark = document.createElement('div');
+          gaussianMark.className = 'histogram-gaussian-mark';
+          gaussianMark.style.left = `${Math.min(100, expected.expectedCount / max * 100)}%`;
+          gaussianMark.title = `Gaussiana ajustada: ${numberFormat.format(expected.expectedCount)} esperado(s)`;
+          track.append(gaussianMark);
+        }
         const count = document.createElement('strong');
         count.textContent = integerFormat.format(item.count);
         row.append(label, track, count);
         rows.append(row);
-      }
+      });
       statisticsResult.append(rows);
+      if (histogramGaussian.checked && !overlay) {
+        const note = document.createElement('p');
+        note.className = 'compatibility-note';
+        note.textContent = 'A gaussiana não pôde ser ajustada: são necessários ao menos dois valores distintos.';
+        statisticsResult.append(note);
+      }
     }
   } catch (error) {
     const message = document.createElement('p');
@@ -5671,7 +5700,7 @@ chart.addEventListener('keydown', (event) => {
 chartPrintButton.addEventListener('click', printChart);
 updateChartBindingControls();
 applyChartZoom();
-for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins]) {
+for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins, histogramGaussian]) {
   control.addEventListener('change', renderStatistics);
 }
 chartSvgButton.addEventListener('click', exportChartSvg);

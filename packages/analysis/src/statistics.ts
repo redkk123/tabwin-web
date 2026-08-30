@@ -98,6 +98,61 @@ export function simpleLinearRegression(xSource: Iterable<number>, ySource: Itera
   return { count: pairs.length, slope, intercept, rSquared: correlation ** 2 };
 }
 
+export interface GaussianFit {
+  count: number;
+  mean: number;
+  standardDeviation: number;
+}
+
+export interface GaussianOverlayPoint {
+  lower: number;
+  upper: number;
+  expectedCount: number;
+}
+
+/**
+ * Fits a normal distribution to the sample mean and sample standard
+ * deviation. This is a descriptive reference curve, not a test of normality:
+ * it answers "what would a normal curve with this mean and spread look
+ * like", not "is this distribution normal". Nothing here classifies the data
+ * or flags a mismatch - that judgment stays with the reader.
+ */
+export function fitGaussian(source: Iterable<number>): GaussianFit {
+  const values = finite(source);
+  if (values.length < 2) throw new Error('gaussian fit requires at least two finite values');
+  const count = values.length;
+  const mean = values.reduce((sum, value) => sum + value, 0) / count;
+  const variance = values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (count - 1);
+  const standardDeviation = Math.sqrt(variance);
+  if (!(standardDeviation > 0)) throw new Error('gaussian fit is undefined for a constant series');
+  return { count, mean, standardDeviation };
+}
+
+/** Standard normal probability density, evaluated at a fitted mean/spread. */
+export function gaussianDensity(x: number, fit: Pick<GaussianFit, 'mean' | 'standardDeviation'>): number {
+  const z = (x - fit.mean) / fit.standardDeviation;
+  return Math.exp(-0.5 * z * z) / (fit.standardDeviation * Math.sqrt(2 * Math.PI));
+}
+
+/**
+ * Expected count per histogram bin under the fitted curve, so a caller can
+ * draw it as a line or a second bar alongside the observed one. Approximates
+ * the bin's integral by the density at its midpoint times its width - exact
+ * enough to compare by eye against real bins, and it does not claim to be a
+ * fitted goodness-of-fit statistic.
+ */
+export function gaussianOverlay(bins: readonly HistogramBin[], fit: GaussianFit): GaussianOverlayPoint[] {
+  return bins.map((bin) => {
+    const width = bin.upper - bin.lower;
+    const midpoint = (bin.lower + bin.upper) / 2;
+    return {
+      lower: bin.lower,
+      upper: bin.upper,
+      expectedCount: width > 0 ? gaussianDensity(midpoint, fit) * width * fit.count : 0,
+    };
+  });
+}
+
 export function histogram(source: Iterable<number>, requestedBins?: number): HistogramBin[] {
   const values = finite(source);
   if (!values.length) return [];

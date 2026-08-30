@@ -283,8 +283,9 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .stat-card strong { display: block; margin-top: 5px; color: var(--ink); font-size: 17px; font-variant-numeric: tabular-nums; }
 .histogram-bars { display: grid; gap: 7px; }
 .histogram-row { display: grid; grid-template-columns: minmax(145px,auto) 1fr 55px; gap: 10px; align-items: center; color: #536b6c; font-size: 10px; }
-.histogram-track { height: 13px; overflow: hidden; border-radius: 4px; background: #e8f0ed; }
+.histogram-track { position: relative; height: 13px; overflow: visible; border-radius: 4px; background: #e8f0ed; }
 .histogram-fill { height: 100%; border-radius: 4px; background: #178b71; }
+.histogram-gaussian-mark { position: absolute; top: -3px; width: 2px; height: 19px; background: #8656a7; transform: translateX(-1px); pointer-events: none; }
 .compatibility-note { margin: 10px 2px 0; color: #788986; font-size: 9px; }
 .tabulation-log { margin-bottom: 14px; padding: 12px 14px; border: 1px solid #cfe2dc; border-radius: 12px; background: #f4faf8; color: #385860; }
 .tabulation-log-header { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }

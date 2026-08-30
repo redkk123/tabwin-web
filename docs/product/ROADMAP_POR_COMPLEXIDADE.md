@@ -146,6 +146,53 @@ Isso entra na receita. **Antes de congelar qual padrão brasileiro**, é
 preciso uma rodada própria de evidência e documentação: isso vira parte da
 metodologia científica da ferramenta, não uma constante no código.
 
+## 4.13 Auditoria estatística e comparação de tabelas
+
+**Estado em 2026-08-30: NÚCLEO INTEGRADO (R11.0); ORQUESTRADOR, PIPELINE DE**
+**TRANSFORMAÇÃO, FÓRMULAS E UI DE AUDITORIA AINDA NÃO EXISTEM.** Especificação
+completa em `docs/product/TABWIN_WEB_MASTER_PRE_UI_R11_2.md` (recebida do
+ChatGPT como spec de engenharia + pré-implementação de núcleo). Esse
+documento tem 3.656 linhas e cobre seis frentes — aquisição, limpeza,
+fórmulas, comparação, auditoria estatística e faxina — que, pelo próprio
+roteiro dele (R11.0 até R11.6, mais UI final), são semanas de trabalho.
+**Isso não foi implementado inteiro nesta passada**, e dizer o contrário
+seria falso. O que foi feito:
+
+- `packages/analysis/src/statistical-anomaly.ts` — cercas de Tukey e
+  z-modificado por MAD, scanner temporal Hampel, JSD/TVD entre distribuições,
+  perfil de concentração (HHI/entropia), IC de Wilson, RR/OR, triagem de duas
+  proporções e ajuste Benjamini-Hochberg. Todo detector devolve evidência de
+  efeito, nunca uma declaração de erro — `automaticAction: 'none'` está no
+  próprio tipo.
+- `packages/analysis/src/table-comparison.ts` — `inner`/`left`/`right`/`full`,
+  casamento por chave exata (padrão), rótulo normalizado ou mapa explícito,
+  chave duplicada como erro, denominador zero como `null` explícito nunca
+  como zero inventado, e diagnóstico obrigatório de cobertura antes de
+  qualquer métrica.
+- Revisão encontrou um defeito real: `wilsonInterval95(0, total)` devolvia
+  `3,47e-18` em vez de `0` exato — resíduo de ponto flutuante que apareceria
+  como "erro de matemática" num relatório. Corrigido com o mesmo padrão de
+  `tidy()` que `resolveAxis` já usa em `chart-model.ts`.
+- Ambos compilam limpo em `strict` + `exactOptionalPropertyTypes` +
+  `noUncheckedIndexedAccess` e têm 9 testes (8 do ChatGPT + 1 da borda do
+  Wilson) passando.
+- **Gaussiana sobre histograma**, pedido à parte: `fitGaussian`,
+  `gaussianDensity` e `gaussianOverlay` em `statistics.ts`. É referência
+  descritiva — "como seria uma normal com esta média e este desvio" — nunca
+  um teste de normalidade; não classifica nem sinaliza a distribuição. Um
+  ajuste indefinido (menos de dois valores, ou todos iguais) não desenha nada
+  e o painel diz por quê, em vez de falhar em silêncio. Ligado à UI de
+  Estatística: um checkbox "Sobrepor gaussiana" desenha um traço por classe do
+  histograma, com o valor esperado no `title`.
+
+**Deliberadamente fora desta passada, e por quê:** o orquestrador de
+detecção (`anomaly-orchestrator.ts`), a UI de auditoria inteira (tela de
+escopo, fila de sinais, drill-down), o pipeline de transformação
+(`select`/`filter`/`mutate`/`recode`/`dedupe`/`bind`/`join`/`group by`), o
+registro de funções estilo Excel e a UI de comparação de tabelas. Cada um é,
+pelo cronograma do próprio spec, uma faixa própria (R11.1 a R11.6). Fazer
+qualquer um deles rápido e mal seria pior do que não fazer.
+
 ---
 
 ## Limpeza de dados: o que entra e o que não entra
