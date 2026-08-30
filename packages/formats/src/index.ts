@@ -12,3 +12,4 @@ export * from './geojson-map.js';
 export * from './tabwin-biff.js';
 export * from './delimited.js';
 export * from './legacy-tab.js';
+export * from './datasus-field-labels.js';

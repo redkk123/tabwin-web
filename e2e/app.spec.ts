@@ -928,3 +928,41 @@ test('the indirect method reports observed against expected as an SMR, and reads
   await expect(result).toContainText('1,2');
   await expect(result).toContainText('intervalo contém 1');
 });
+
+test('a raw DATASUS file reads as prose, without hiding the technical field name', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/rotulos-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  // No DEF is loaded here: the labels come from the published DATASUS
+  // dictionary, and the technical name stays beside each one.
+  const rows = page.locator('#row-field');
+  await expect(rows).toContainText('Tipo de notificação · TP_NOT');
+  await expect(rows).toContainText('Agravo/doença (CID) · ID_AGRAVO');
+  await expect(rows).toContainText('Gestante · CS_GESTANT');
+  // A label that is only the field name in prettier case is not shown twice.
+  await expect(rows).not.toContainText('Sexo · SEXO');
+
+  // The label is presentation only: tabulating by the field still keys on the
+  // raw values, and the row header is the technical name.
+  await page.locator('#row-field').selectOption('CS_SEXO');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  const body = page.locator('#result-table tbody');
+  await expect(body).toContainText('F');
+  await expect(body).toContainText('M');
+
+  // "Ano 1º Sintoma", which TabNet offers as a row, is derived here rather
+  // than shipped: extracting the year from the date makes it a real field.
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+  await page.locator('#transform-step-kind').selectOption('date-part');
+  await page.locator('#transform-datepart-field').selectOption('DT_SIN_PRI');
+  await page.locator('#transform-datepart-part').selectOption('year');
+  await page.locator('#transform-datepart-target').fill('ANO_SIN_PRI');
+  await page.locator('#transform-add-step').click();
+  await page.locator('#transform-apply-button').click();
+  await expect(rows).toContainText('ANO_SIN_PRI');
+
+  await page.locator('#row-field').selectOption('ANO_SIN_PRI');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(body).toContainText('2024');
+});

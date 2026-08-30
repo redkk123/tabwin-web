@@ -37,6 +37,7 @@ import {
   parseCnv,
   parseDelimited,
   parseDef,
+  datasusFieldLabel,
   parseTabwinMap,
   serializeCnv,
   validateCnvDefinition,
@@ -776,8 +777,28 @@ function setControlsEnabled(enabled: boolean): void {
   for (const button of activeCrossFieldList.querySelectorAll<HTMLButtonElement>('button')) button.disabled = !enabled;
 }
 
+/**
+ * How a field is named on screen. A loaded DEF is authoritative - it declares
+ * the official label for that exact file. Failing that, the published DATASUS
+ * dictionary gives a readable name for the well-known layouts, so a raw DBC
+ * is not a wall of `TP_NOT`. Failing both, the technical name stands alone.
+ *
+ * The technical name is always kept alongside the label: a label is
+ * presentation and never changes a number, and anyone checking against the
+ * official layout still needs to see the real name.
+ */
+function labelledFieldName(fieldName: string, defLabel?: string): string {
+  const label = defLabel ?? datasusFieldLabel(fieldName);
+  if (!label) return fieldName;
+  // A label that is the field name in prettier case ("Sexo" for SEXO) adds
+  // nothing, and "Sexo · SEXO" reads as noise. Collapse to the technical name
+  // alone, which is exactly as informative and keeps the token intact.
+  const strip = (value: string): string => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase();
+  return strip(label) === strip(fieldName) ? fieldName : `${label} · ${fieldName}`;
+}
+
 function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
-  if (!activeDef) return fieldName;
+  if (!activeDef) return labelledFieldName(fieldName);
   const selectedResource = role === 'row' ? rowConversion.value : columnConversion.value;
   const candidates = activeDef.options.filter((option) =>
     option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes(role));
@@ -788,7 +809,7 @@ function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
         ? baseName(option.lookupFile) === baseName(selectedResource)
         : false
   )) ?? candidates[0];
-  return match ? `${match.label} · ${fieldName}` : fieldName;
+  return labelledFieldName(fieldName, match?.label);
 }
 
 function activeRowLabel(): string {
@@ -797,13 +818,13 @@ function activeRowLabel(): string {
 
 function incrementLabel(fieldName: string): string {
   const increment = activeDef?.increments.find((item) => item.field.toUpperCase() === fieldName.toUpperCase());
-  return increment ? `${increment.label} · ${fieldName}` : fieldName;
+  return labelledFieldName(fieldName, increment?.label);
 }
 
 function selectionLabel(fieldName: string): string {
   const option = activeDef?.options.find((item) =>
     item.field.toUpperCase() === fieldName.toUpperCase() && item.roles.includes('selection'));
-  return option ? `${option.label} · ${fieldName}` : fieldName;
+  return labelledFieldName(fieldName, option?.label);
 }
 
 function chooseDefaultField(fields: DbfHeader['fields']): string {
