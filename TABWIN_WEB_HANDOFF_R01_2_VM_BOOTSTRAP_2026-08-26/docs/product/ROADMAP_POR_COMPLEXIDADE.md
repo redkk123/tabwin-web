@@ -445,11 +445,29 @@ estáveis e necessários.
 
 ### 4.6 SQL local via DuckDB
 
-**Esforço:** semanas · **Risco:** alto se mal colocado
+**Estado em 2026-08-30: COMPILADOR PROVADO; EMBARQUE NO NAVEGADOR EM ABERTO.**
+Handoff em `docs/handoffs/R10_12_DUCKDB_PARIDADE.md`.
 
-Restrição arquitetural que não pode ser violada: DuckDB **executa** planos, não
-define semântica. Qualquer resultado precisa bater com o executor de referência
-antes de substituí-lo.
+- `packages/core/src/duckdb-plan.ts` aceita só o subconjunto raw cujo
+  significado em SQL pode ser afirmado sem reimplementar CNV, lookup DBF,
+  `startPosition`, unclassified discriminado, cross-field ou múltiplas
+  medidas. Tudo o mais vira **blocker nomeado**, nunca tradução aproximada.
+- Filtros usam parâmetros posicionais; nenhuma categoria entra no texto do
+  SQL.
+- **`tests/duckdb-parity.test.mjs` roda o SQL gerado num DuckDB de verdade** e
+  exige os mesmos números do executor de referência: contagem 1D e 2D, soma
+  decimal, frequência ponderada, filtros de categoria e de faixa numérica com
+  limites inclusivos e exclusivos, e uma categoria com aspas e `DROP TABLE`
+  dentro. Um caso a mais prova que o portão **falha** quando os números
+  divergem — portão que nunca falhou não é evidência de nada.
+- O DuckDB é dependência **só de desenvolvimento**. Nada disso vai para o
+  navegador.
+
+**Decisão pendente do usuário:** o `@duckdb/duckdb-wasm` desempacota em
+**149 MB**. Ligar o adapter a ele muda o caráter de um aplicativo que hoje
+entrega 234 KB de bundle. A afirmação que a faixa precisava — "o SQL que
+geramos concorda com o executor" — já está provada e não depende de onde o
+DuckDB roda.
 
 ### 4.7 Armazenamento colunar e cache L2
 
