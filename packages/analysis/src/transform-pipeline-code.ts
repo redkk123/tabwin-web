@@ -211,6 +211,14 @@ function stepToR(step: TransformStep): RVerb[] {
         { code: `dplyr::group_by(${step.groupFields.join(', ')})` },
         { code: `dplyr::summarise(${step.aggregations.map(aggregationR).join(', ')}, .groups = "drop")` },
       ];
+    case 'bind-rows':
+      return [{
+        code: `dplyr::bind_rows(${rString(step.source.label)} = .x)`,
+        notes: [
+          `empilha a segunda base (${step.source.label}); colunas só de um lado ficam NA`,
+          ...(step.originField ? [`coluna de origem: ${step.originField}`] : []),
+        ],
+      }];
   }
 }
 
@@ -273,6 +281,14 @@ function stepToPython(step: TransformStep): string[] {
         return aggregationPython(aggregation);
       }).join(', ');
       return [line(`df = df.groupby(${pyList(step.groupFields)}, as_index=False).agg(${named})`)];
+    }
+    case 'bind-rows': {
+      const lines = [
+        `# empilha a segunda base (${step.source.label}); colunas só de um lado ficam NaN`,
+        line(`df = pd.concat([df, ${step.source.label.replace(/[^a-zA-Z0-9_]/g, '_')}], ignore_index=True)`),
+      ];
+      if (step.originField) lines.splice(1, 0, `# coluna de origem: ${step.originField}`);
+      return lines;
     }
   }
 }

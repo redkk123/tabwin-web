@@ -564,3 +564,72 @@ test('the region-by-year example the spec ends on runs end to end', () => {
   assert.equal(byKey.size, 2, 'the 2023 record was CLASSI=2 and got filtered out before grouping');
   assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'ANO', 'CASOS']);
 });
+
+// --- bind-rows: bind_rows() over a second embedded source ------------------
+
+test('bind-rows appends the second set below, unioning columns', () => {
+  const current = [{ UF: 'AC', N: 1 }, { UF: 'AM', N: 2 }];
+  const source = { label: '2024', fields: ['UF', 'N'], records: [{ UF: 'SP', N: 3 }] };
+  const result = applyTransformPipeline(current, ['UF', 'N'], [
+    { id: 'b1', kind: 'bind-rows', source },
+  ]);
+  assert.equal(result.records.length, 3);
+  assert.deepEqual(result.records.map((record) => record.UF), ['AC', 'AM', 'SP']);
+  assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'N']);
+  assert.equal(result.steps[0].detail.registrosAdicionados, 1);
+});
+
+test('a column present on only one side becomes null on the other, never invented', () => {
+  const current = [{ UF: 'AC', SIH: 10 }];
+  const source = { label: 'SIM', fields: ['UF', 'OBITOS'], records: [{ UF: 'SP', OBITOS: 5 }] };
+  const result = applyTransformPipeline(current, ['UF', 'SIH'], [
+    { id: 'b1', kind: 'bind-rows', source },
+  ]);
+  // Union: UF, SIH (current-only), OBITOS (source-only).
+  assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'SIH', 'OBITOS']);
+  assert.deepEqual(result.records, [
+    { UF: 'AC', SIH: 10, OBITOS: null },
+    { UF: 'SP', SIH: null, OBITOS: 5 },
+  ]);
+  assert.equal(result.steps[0].detail.colunasSoAtual, 1);
+  assert.equal(result.steps[0].detail.colunasSoFonte, 1);
+});
+
+test('an origin column marks which base each record came from', () => {
+  const current = [{ UF: 'AC' }];
+  const source = { label: 'den24', fields: ['UF'], records: [{ UF: 'SP' }] };
+  const result = applyTransformPipeline(current, ['UF'], [
+    { id: 'b1', kind: 'bind-rows', source, originField: 'FONTE', currentLabel: 'den23' },
+  ]);
+  assert.deepEqual(result.records.map((record) => record.FONTE), ['den23', 'den24']);
+  assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'FONTE']);
+});
+
+test('stacking several years is just repeated bind-rows, the GPT example', () => {
+  const den22 = [{ UF: 'AC', ANO: 2022 }];
+  const result = applyTransformPipeline(den22, ['UF', 'ANO'], [
+    { id: 'b1', kind: 'bind-rows', source: { label: 'den23', fields: ['UF', 'ANO'], records: [{ UF: 'AC', ANO: 2023 }] } },
+    { id: 'b2', kind: 'bind-rows', source: { label: 'den24', fields: ['UF', 'ANO'], records: [{ UF: 'AC', ANO: 2024 }] } },
+  ]);
+  assert.deepEqual(result.records.map((record) => record.ANO), [2022, 2023, 2024]);
+});
+
+test('a later step sees the unioned schema, including source-only columns', () => {
+  const current = [{ UF: 'AC', A: 1 }];
+  const source = { label: 'B', fields: ['UF', 'B'], records: [{ UF: 'SP', B: 9 }] };
+  const result = applyTransformPipeline(current, ['UF', 'A'], [
+    { id: 'b1', kind: 'bind-rows', source },
+    { id: 'd1', kind: 'derive-column', field: 'SOMA', formula: 'IFERROR([A]; 0) + IFERROR([B]; 0)', divisionByZero: 'error' },
+  ]);
+  assert.deepEqual(result.records.map((record) => record.SOMA), [1, 9]);
+});
+
+test('bind-rows validates its own shape', () => {
+  const current = [{ UF: 'AC' }];
+  const run = (step) => applyTransformPipeline(current, ['UF'], [{ id: 'b1', kind: 'bind-rows', ...step }]);
+  assert.throws(() => run({ source: { label: '', fields: ['UF'], records: [] } }), /source has no label/);
+  assert.throws(() => run({ source: { label: 'X', fields: [], records: [] } }), /source has no fields/);
+  assert.throws(() => run({ source: { label: 'X', fields: ['A', 'A'], records: [] } }), /source repeats a field/);
+  assert.throws(() => run({ source: { label: 'X', fields: ['UF'], records: [] }, originField: 'UF' }), /field UF already exists/);
+  assert.throws(() => run({ source: { label: 'X', fields: ['UF', 'FONTE'], records: [] }, originField: 'FONTE' }), /source already has a field named FONTE/);
+});

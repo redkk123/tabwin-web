@@ -364,6 +364,20 @@ seria falso. O que foi feito:
   sempre no último verbo habilitado, para nunca deixar um `|>` pendurado.
   `npm run check`: **378/378**. `npm run e2e`: **22/22**.
 
+- **R11.4.5 — Empilhar bases (`bind_rows`).** A primeira operação do pipeline
+  que combina duas fontes: o "Juntar bases" que o ChatGPT destacou
+  (`den22 + den23 + den24`). Diferente do "Combinar DBC/DBF" (mesmo esquema,
+  pelo Worker), `bind-rows` une esquemas **diferentes** — coluna que só um
+  lado tem vira ausente ("—") do outro, nunca valor inventado, nunca
+  conversão de tipo silenciosa; coluna de origem opcional. A segunda base
+  vem embutida no passo (`PipelineSource`), carregada de um CSV/TSV pela UI
+  (DBC/DBF como segunda fonte precisa do Worker, fica para depois). Como
+  prerequisito, o Worker passou a **inferir o tipo** de um campo criado pelo
+  pipeline inspecionando os valores (numérico quando todos parseiam, texto
+  caso contrário) em vez de assumir numérico fixo — o que também conserta
+  campos derivados de texto.
+  `npm run check`: **384/384**. `npm run e2e`: **23/23**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

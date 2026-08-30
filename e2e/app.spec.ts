@@ -779,3 +779,38 @@ test('"Ver código equivalente" renders the pipeline as dplyr and pandas, withou
   await page.locator('#transform-code-toggle').click();
   await expect(page.locator('#transform-code')).toBeHidden();
 });
+
+test('bind-rows stacks a second base, unions columns, and marks each record\'s origin', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/bind-a-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  await page.locator('#transform-step-kind').selectOption('bind-rows');
+  // The second base is loaded through its own file input, not the main one.
+  await page.locator('#transform-bind-file-input').setInputFiles('e2e/fixtures/bind-b-e2e.csv');
+  await expect(page.locator('#transform-bind-status')).toContainText('bind-b');
+  await page.locator('#transform-bind-origin-check').check();
+  await page.locator('#transform-bind-current-label').fill('base_a');
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-apply-button').click();
+  const report = page.locator('#transform-result');
+  await expect(report).toContainText('registrosAdicionados: 2');
+  await expect(report).toContainText('colunasSoFonte: 1');
+
+  // The union carries both bases' columns plus the origin marker.
+  const rowField = page.locator('#row-field');
+  await expect(rowField).toContainText('INTERNACOES');
+  await expect(rowField).toContainText('FONTE_ORIGEM');
+
+  // OBITOS exists only in base A, so summing it by origin gives 30 for base_a
+  // and nothing for the other base - a null, never a fabricated zero row.
+  await page.locator('#row-field').selectOption('FONTE_ORIGEM');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('OBITOS');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  const body = page.locator('#result-table tbody');
+  await expect(body.locator('tr', { hasText: 'base_a' })).toContainText('30');
+  await expect(body.locator('tr')).toHaveCount(1);
+});

@@ -1,15 +1,15 @@
 {
-  "revision": "r11-4-4-equivalent-r-python-code-view",
+  "revision": "r11-4-5-bind-rows-second-source-union",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 378,
-    "passed": 378,
+    "total": 384,
+    "passed": 384,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 22,
-    "e2e_passed": 22
+    "e2e_total": 23,
+    "e2e_passed": 23
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -263,7 +263,9 @@
     "r11-4-2-date-part-including-mmwr-ms-epidemiological-week-and-year",
     "r11-4-2-text-normalize-with-ibge-municipality-6-digit-standardization",
     "r11-4-3-group-summarize-count-sum-mean-median-min-max-distinct-one-row-per-key",
-    "r11-4-4-ver-codigo-equivalente-dplyr-pandas-read-only-derived-from-plan"
+    "r11-4-4-ver-codigo-equivalente-dplyr-pandas-read-only-derived-from-plan",
+    "r11-4-5-bind-rows-stack-second-csv-tsv-source-union-columns-origin-marker",
+    "r11-4-5-worker-synthesizes-pipeline-field-type-by-value-inspection-not-fixed-numeric"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -342,7 +344,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-5-transform-pipeline-microdata-join-and-bind-rows-need-a-second-source",
+    "r11-4-6-transform-pipeline-microdata-join-inner-left-right-full-with-cardinality-diagnostic",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

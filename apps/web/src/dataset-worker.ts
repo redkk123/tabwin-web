@@ -323,6 +323,33 @@ function schemaSignature(value: DbfHeader): string {
   return value.fields.map((field) => `${field.name}:${field.type}:${field.length}:${field.decimalCount}`).join('|');
 }
 
+/**
+ * A DbfField for a pipeline-created field, inferred from its actual values.
+ * Numeric when every present value parses as a number (so it is offered as a
+ * measure and profiled as numeric); character otherwise, wide enough for the
+ * longest value seen, so a text field never gets mislabeled numeric.
+ */
+function synthesizeFieldShape(name: string, records: readonly DataRecord[]): DbfField {
+  let allNumeric = true;
+  let sawValue = false;
+  let maxLength = 1;
+  for (const record of records) {
+    const raw = record[name];
+    if (raw === null || raw === undefined) continue;
+    sawValue = true;
+    const text = raw instanceof Date ? raw.toISOString().slice(0, 10) : String(raw);
+    maxLength = Math.max(maxLength, text.length);
+    if (allNumeric && typeof raw !== 'number') {
+      const value = Number(String(raw).replace(',', '.'));
+      if (!Number.isFinite(value)) allNumeric = false;
+    }
+  }
+  if (sawValue && allNumeric) return { name, type: 'N', length: 20, decimalCount: 6 };
+  // Character width is bounded so a stray very long value cannot blow the
+  // record size out; 254 is the DBF character-field maximum.
+  return { name, type: 'C', length: Math.min(254, Math.max(1, maxLength)), decimalCount: 0 };
+}
+
 function handle(request: DatasetRequest): void {
   switch (request.type) {
     case 'open': {
@@ -488,11 +515,13 @@ function handle(request: DatasetRequest): void {
       const originalFieldByName = new Map(originalHeader.fields.map((field) => [field.name, field]));
       const fields: DbfField[] = outcome.fields.map((field) => {
         if (field.originalName === undefined) {
-          // A field the pipeline created (derive-column) has no original to
-          // inherit a shape from, and its values are always numeric. The
-          // width is what a DBF numeric column needs to hold a computed
-          // value without truncating it, not a measurement of this data.
-          return { name: field.name, type: 'N', length: 20, decimalCount: 6 };
+          // A field the pipeline created (derive-column, a date part, an
+          // aggregation) or brought in from a second source has no original to
+          // inherit a shape from. Inspect its actual values instead of
+          // assuming: a numeric column so it is offered as a measure, a
+          // character column wide enough for its longest value otherwise, so a
+          // text field a bind-rows source contributed is never mislabeled N.
+          return synthesizeFieldShape(field.name, outcome.records);
         }
         const original = originalFieldByName.get(field.originalName);
         // Cannot actually be missing: applyTransformPipeline only ever

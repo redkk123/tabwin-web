@@ -159,6 +159,33 @@ export interface GroupSummarizeStep extends TransformStepBase {
   aggregations: SummaryAggregation[];
 }
 
+/**
+ * A second record set embedded in a step, for the verbs that combine two
+ * datasets ({@link BindRowsStep} for now). Carried inline rather than
+ * referenced, so a pipeline stays self-contained; `label` names its origin in
+ * diagnostics and in the optional origin column.
+ */
+export interface PipelineSource {
+  label: string;
+  fields: string[];
+  records: DataRecord[];
+}
+
+/**
+ * `bind_rows()`: appends a second record set below the current one, unioning
+ * the columns. A column present on only one side becomes absent (`null`) on
+ * the other - never a silent type coercion, and never a fabricated value. An
+ * optional origin column marks which set each record came from.
+ */
+export interface BindRowsStep extends TransformStepBase {
+  kind: 'bind-rows';
+  source: PipelineSource;
+  /** Value written into `originField` for the records already in the pipeline. */
+  currentLabel?: string;
+  /** When set, adds a field of this name holding each record's origin label. */
+  originField?: string;
+}
+
 export type TransformStep =
   | SelectColumnsStep
   | FilterRowsStep
@@ -169,7 +196,8 @@ export type TransformStep =
   | CastTypeStep
   | DatePartStep
   | TextNormalizeStep
-  | GroupSummarizeStep;
+  | GroupSummarizeStep
+  | BindRowsStep;
 
 export interface TransformStepResult {
   id: string;
@@ -215,6 +243,7 @@ function defaultLabel(step: TransformStep): string {
     case 'date-part': return `Extrair ${step.part} de ${step.field}`;
     case 'text-normalize': return `Normalizar ${step.field} (${step.operations.length} operação(ões))`;
     case 'group-summarize': return `Agrupar por ${step.groupFields.join(', ')} (${step.aggregations.length} resumo(s))`;
+    case 'bind-rows': return `Empilhar ${step.source.label} (${step.source.records.length} registro(s))`;
   }
 }
 
@@ -459,6 +488,22 @@ function validateStepShape(step: TransformStep, label: string, currentFields: re
         requireKnownField(aggregation.field, currentFields, label);
       }
     }
+  } else if (step.kind === 'bind-rows') {
+    const source = step.source;
+    if (!source || typeof source !== 'object') throw new TransformPipelineError(`${label} has no source`);
+    if (typeof source.label !== 'string' || !source.label.trim()) throw new TransformPipelineError(`${label} source has no label`);
+    if (!Array.isArray(source.fields) || source.fields.length === 0) throw new TransformPipelineError(`${label} source has no fields`);
+    if (new Set(source.fields).size !== source.fields.length) throw new TransformPipelineError(`${label} source repeats a field`);
+    if (!Array.isArray(source.records)) throw new TransformPipelineError(`${label} source has no records`);
+    if (step.originField !== undefined) {
+      if (typeof step.originField !== 'string' || !step.originField.trim()) throw new TransformPipelineError(`${label} origin field name is empty`);
+      // The origin column is created by this step, so it must not already
+      // exist on either side or the union would carry two of it.
+      if (currentFields.some((candidate) => candidate.name === step.originField)) {
+        throw new TransformPipelineError(`${label}: field ${step.originField} already exists at this point in the pipeline`);
+      }
+      if (source.fields.includes(step.originField)) throw new TransformPipelineError(`${label}: the source already has a field named ${step.originField}`);
+    }
   } else {
     throw new TransformPipelineError(`${label} has an unknown kind`);
   }
@@ -641,6 +686,56 @@ function runGroupSummarize(
     records: summarized,
     fields: keptFields,
     detail: { gruposFormados: groups.size, colunasResumo: step.aggregations.length },
+  };
+}
+
+function runBindRows(
+  records: readonly DataRecord[],
+  step: BindRowsStep,
+  currentFields: readonly TransformedField[],
+): { records: DataRecord[]; fields: TransformedField[]; detail: Record<string, number> } {
+  const currentNames = currentFields.map((field) => field.name);
+  const currentNameSet = new Set(currentNames);
+  const sourceNameSet = new Set(step.source.fields);
+
+  // Column order: current fields first, then source-only fields, then the
+  // origin column if requested. Nothing is dropped from either side.
+  const sourceOnly = step.source.fields.filter((name) => !currentNameSet.has(name));
+  const fields: TransformedField[] = [
+    ...currentFields,
+    // A source column has no original in *this* pipeline's primary dataset,
+    // so it carries no originalName; the Worker infers its shape from values.
+    ...sourceOnly.map((name) => ({ name })),
+  ];
+  if (step.originField) fields.push({ name: step.originField });
+
+  const currentLabel = step.currentLabel?.trim() || 'atual';
+  const withCurrent = records.map((record) => {
+    const next: DataRecord = { ...record };
+    // A column only the source has is absent here - null, never invented.
+    for (const name of sourceOnly) next[name] = null;
+    if (step.originField) next[step.originField] = currentLabel;
+    return next;
+  });
+  const currentOnly = currentNames.filter((name) => !sourceNameSet.has(name));
+  const withSource = step.source.records.map((record) => {
+    const next: DataRecord = {};
+    for (const name of step.source.fields) next[name] = record[name] ?? null;
+    // A column only the current dataset has is absent for source records.
+    for (const name of currentOnly) next[name] = null;
+    if (step.originField) next[step.originField] = step.source.label;
+    return next;
+  });
+
+  return {
+    records: [...withCurrent, ...withSource],
+    fields,
+    detail: {
+      registrosAtuais: records.length,
+      registrosAdicionados: step.source.records.length,
+      colunasSoAtual: currentOnly.length,
+      colunasSoFonte: sourceOnly.length,
+    },
   };
 }
 
@@ -865,6 +960,11 @@ export function applyTransformPipeline(
         detail = outcome.detail;
       } else if (step.kind === 'group-summarize') {
         const outcome = runGroupSummarize(currentRecords, step, currentFields);
+        currentRecords = outcome.records;
+        currentFields = outcome.fields;
+        detail = outcome.detail;
+      } else if (step.kind === 'bind-rows') {
+        const outcome = runBindRows(currentRecords, step, currentFields);
         currentRecords = outcome.records;
         currentFields = outcome.fields;
         detail = outcome.detail;

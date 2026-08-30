@@ -157,6 +157,7 @@ import {
   transformPipelineToCode,
   type PipelineCodeTarget,
 } from '../../../packages/analysis/src/transform-pipeline-code.ts';
+import type { PipelineSource } from '../../../packages/analysis/src/transform-pipeline.ts';
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
@@ -293,6 +294,7 @@ const transformConfigByKind: Record<TransformStep['kind'], HTMLElement> = {
   'date-part': element<HTMLElement>('#transform-config-date-part'),
   'text-normalize': element<HTMLElement>('#transform-config-text-normalize'),
   'group-summarize': element<HTMLElement>('#transform-config-group-summarize'),
+  'bind-rows': element<HTMLElement>('#transform-config-bind-rows'),
 };
 const transformSelectFields = element<HTMLSelectElement>('#transform-select-fields');
 const transformFilterField = element<HTMLSelectElement>('#transform-filter-field');
@@ -326,6 +328,13 @@ const transformTextOperations = element<HTMLSelectElement>('#transform-text-oper
 const transformGroupFields = element<HTMLSelectElement>('#transform-group-fields');
 const transformGroupAggregationsContainer = element<HTMLElement>('#transform-group-aggregations');
 const transformGroupAddAgg = element<HTMLButtonElement>('#transform-group-add-agg');
+const transformBindStatus = element<HTMLElement>('#transform-bind-status');
+const transformBindFileButton = element<HTMLButtonElement>('#transform-bind-file-button');
+const transformBindFileInput = element<HTMLInputElement>('#transform-bind-file-input');
+const transformBindOriginCheck = element<HTMLInputElement>('#transform-bind-origin-check');
+const transformBindOriginRow = element<HTMLElement>('#transform-bind-origin-row');
+const transformBindOriginField = element<HTMLInputElement>('#transform-bind-origin-field');
+const transformBindCurrentLabel = element<HTMLInputElement>('#transform-bind-current-label');
 const transformAddStep = element<HTMLButtonElement>('#transform-add-step');
 const transformStepList = element<HTMLElement>('#transform-step-list');
 const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
@@ -622,6 +631,8 @@ let transformRecodeRows: Array<{ from: string; to: string }> = [{ from: '', to: 
 let transformGroupAggRows: Array<{ kind: SummaryAggregation['kind']; field: string; as: string }> = [
   { kind: 'count', field: '', as: 'N' },
 ];
+/** The second base staged for a bind-rows step, parsed but not yet committed. */
+let transformBindSource: PipelineSource | null = null;
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -1308,7 +1319,7 @@ function populateTransformFields(): void {
     transformCastField, transformCastTo, transformCastFailure,
     transformDatePartField, transformDatePartPart, transformDatePartTarget,
     transformTextField, transformTextOperations,
-    transformGroupFields, transformGroupAddAgg,
+    transformGroupFields, transformGroupAddAgg, transformBindFileButton,
   ]) control.disabled = false;
   renderTransformGroupAggregations();
 
@@ -1464,6 +1475,8 @@ function transformStepSummary(step: TransformStep): string {
       return `Normalizar ${selectionLabel(step.field)}: ${step.operations.map((operation) => operation.kind).join(', ')}`;
     case 'group-summarize':
       return `Agrupar por ${step.groupFields.map(selectionLabel).join(', ')} → ${step.aggregations.map((aggregation) => aggregation.as).join(', ')}`;
+    case 'bind-rows':
+      return `Empilhar ${step.source.label} (${integerFormat.format(step.source.records.length)} registro(s))`;
   }
 }
 
@@ -1505,6 +1518,20 @@ function renderTransformCode(): void {
     transformCodeTarget.value as PipelineCodeTarget,
     'dados',
   );
+}
+
+async function loadTransformBindSource(file: File): Promise<void> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let text: string;
+  try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { text = textDecoder.decode(bytes); }
+  const parsed = parseDelimited(text, extensionOf(file.name) === 'TSV' ? { delimiter: '\t' } : {});
+  transformBindSource = {
+    label: file.name.replace(/\.[^.]+$/, ''),
+    fields: parsed.fields.map((field) => field.name),
+    records: parsed.records as PipelineSource['records'],
+  };
+  transformBindStatus.textContent = `${transformBindSource.label}: ${integerFormat.format(transformBindSource.records.length)} registro(s), ${transformBindSource.fields.length} coluna(s)`;
 }
 
 function addTransformStep(): void {
@@ -1586,6 +1613,14 @@ function addTransformStep(): void {
       .map((value) => ({ kind: value }) as TextOperation);
     if (!operations.length) throw new Error('Escolha ao menos uma operação');
     step = { id, kind, field, operations };
+  } else if (kind === 'bind-rows') {
+    if (!transformBindSource) throw new Error('Carregue uma segunda base (CSV/TSV) para empilhar');
+    const originField = transformBindOriginCheck.checked ? transformBindOriginField.value.trim() : undefined;
+    if (transformBindOriginCheck.checked && !originField) throw new Error('Informe o nome da coluna de origem');
+    step = {
+      id, kind, source: transformBindSource,
+      ...(originField ? { originField, currentLabel: transformBindCurrentLabel.value.trim() || 'atual' } : {}),
+    };
   } else if (kind === 'group-summarize') {
     const groupFields = selectedCatalogValues(transformGroupFields);
     if (!groupFields.length) throw new Error('Escolha ao menos um campo para agrupar');
@@ -2222,6 +2257,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   transformSteps = [];
   transformRecodeRows = [{ from: '', to: '' }];
   transformGroupAggRows = [{ kind: 'count', field: '', as: 'N' }];
+  transformBindSource = null;
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -6703,6 +6739,17 @@ transformRecodeAddRow.addEventListener('click', () => {
 transformGroupAddAgg.addEventListener('click', () => {
   transformGroupAggRows.push({ kind: 'count', field: '', as: '' });
   renderTransformGroupAggregations();
+});
+transformBindOriginCheck.addEventListener('change', () => {
+  transformBindOriginRow.hidden = !transformBindOriginCheck.checked;
+});
+transformBindFileButton.addEventListener('click', () => transformBindFileInput.click());
+transformBindFileInput.addEventListener('change', () => {
+  const file = transformBindFileInput.files?.[0];
+  transformBindFileInput.value = '';
+  if (!file) return;
+  void loadTransformBindSource(file).catch((error) =>
+    showToast(error instanceof Error ? error.message : String(error), true));
 });
 transformAddStep.addEventListener('click', () => {
   try { addTransformStep(); }

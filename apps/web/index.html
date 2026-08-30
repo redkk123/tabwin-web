@@ -217,6 +217,7 @@
               <option value="date-part">Extrair parte de data</option>
               <option value="text-normalize">Normalizar texto/código</option>
               <option value="group-summarize">Agrupar e resumir</option>
+              <option value="bind-rows">Empilhar outra base</option>
             </select></label>
 
             <div class="transform-step-config" id="transform-config-select-columns">
@@ -324,6 +325,20 @@
               <div id="transform-group-aggregations"></div>
               <button class="text-button" id="transform-group-add-agg" type="button" disabled>+ Resumo</button>
               <p class="quality-note">Uma linha por combinação dos campos escolhidos. Um grupo sem valor numérico para um campo resume como "—", nunca como zero inventado. Depois de agrupar, só as chaves e os resumos continuam existindo.</p>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-bind-rows" hidden>
+              <div class="quality-actions">
+                <span id="transform-bind-status" class="filter-info">Nenhuma segunda base carregada.</span>
+                <button class="secondary-button" id="transform-bind-file-button" type="button" disabled>Escolher CSV/TSV</button>
+              </div>
+              <input id="transform-bind-file-input" type="file" accept=".csv,.tsv" hidden />
+              <label class="check-label"><input id="transform-bind-origin-check" type="checkbox"><span>Adicionar coluna de origem</span></label>
+              <div class="filter-rule-row" id="transform-bind-origin-row" hidden>
+                <label><span>Nome da coluna</span><input id="transform-bind-origin-field" type="text" maxlength="60" value="FONTE_ORIGEM"></label>
+                <label><span>Rótulo da base atual</span><input id="transform-bind-current-label" type="text" maxlength="60" value="atual"></label>
+              </div>
+              <p class="quality-note">Empilha uma segunda base (CSV/TSV) abaixo da atual, unindo as colunas. Coluna que só existe de um lado fica ausente ("—") do outro — nunca um valor inventado, nunca conversão de tipo silenciosa. Para empilhar DBC/DBF do mesmo esquema, use "Combinar" ao abrir o arquivo.</p>
             </div>
 
             <div class="quality-actions">
