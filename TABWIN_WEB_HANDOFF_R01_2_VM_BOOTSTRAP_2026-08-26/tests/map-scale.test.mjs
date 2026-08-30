@@ -26,3 +26,20 @@ test('continuous scale gives equal values a stable color', () => {
   assert.equal(scale.max, 7);
   assert.equal(scale.colorFor(7), scale.classes.at(-1).color);
 });
+
+test('manual map scale uses explicit interior breaks without inventing class count', () => {
+  const scale = createMapScale([0, 10, 20, 30, 40], 'manual', 9, 'orange', { manualBreaks: [5, 25] });
+  assert.deepEqual(scale.classes.map(({ lower, upper }) => [lower, upper]), [
+    [0, 5], [5, 25], [25, 40],
+  ]);
+  assert.equal(scale.colorFor(5), scale.classes[0].color);
+  assert.equal(scale.colorFor(6), scale.classes[1].color);
+});
+
+test('manual map scale rejects ambiguous or out-of-range breaks', () => {
+  assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green'), /requires at least one break/);
+  assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [50, 50] }), /strictly increasing/);
+  assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [0] }), /strictly inside observed range/);
+  assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [100] }), /strictly inside observed range/);
+  assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [101] }), /strictly inside observed range/);
+});

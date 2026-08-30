@@ -144,6 +144,19 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
   assert.equal(parseRecipe(a).sourceHints[0].modality, 'Dados - Preliminares');
 });
 
+test('manual map recipe requires finite strictly increasing breaks', () => {
+  const base = {
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [],
+  };
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { mapClassification: 'manual' } })), /requires breaks/);
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { mapClassification: 'manual', mapManualBreaks: [2, 1] } })), /strictly increasing/);
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { mapClassification: 'manual', mapManualBreaks: [1, Number.POSITIVE_INFINITY] } })), /invalid manual map breaks/);
+  const parsed = parseRecipe(JSON.stringify({ ...base, view: { mapClassification: 'manual', mapManualBreaks: [1, 2] } }));
+  assert.deepEqual(parsed.view.mapManualBreaks, [1, 2]);
+});
+
 test('multiple filters are intersected deterministically', () => {
   const plan = compileQueryPlan({
     compatibilityProfile: 'tabwin-4.15',

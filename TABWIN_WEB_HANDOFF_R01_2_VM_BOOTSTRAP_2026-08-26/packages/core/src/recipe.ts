@@ -51,7 +51,8 @@ export interface AnalysisRecipeV1 {
     chartAxisYMax?: number;
     chartAxisTickCount?: number;
     chartShowGrid?: boolean;
-    mapClassification?: 'continuous' | 'equal-interval' | 'quantile';
+    mapClassification?: 'continuous' | 'equal-interval' | 'quantile' | 'manual';
+    mapManualBreaks?: number[];
     mapClassCount?: number;
     mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
     statisticsOperation?: 'descriptive' | 'correlation' | 'regression' | 'histogram';
@@ -229,13 +230,28 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   if (parsed.view?.chartShowGrid !== undefined && typeof parsed.view.chartShowGrid !== 'boolean') {
     throw new Error('invalid chart grid visibility in TabWin Web recipe');
   }
-  const allowedMapClassifications = new Set(['continuous', 'equal-interval', 'quantile']);
+  const allowedMapClassifications = new Set(['continuous', 'equal-interval', 'quantile', 'manual']);
   if (parsed.view?.mapClassification && !allowedMapClassifications.has(parsed.view.mapClassification)) {
     throw new Error('invalid map classification in TabWin Web recipe');
   }
   if (parsed.view?.mapClassCount !== undefined
     && (!Number.isInteger(parsed.view.mapClassCount) || parsed.view.mapClassCount < 2 || parsed.view.mapClassCount > 9)) {
     throw new Error('invalid map class count in TabWin Web recipe');
+  }
+  if (parsed.view?.mapClassification === 'manual'
+    && (!parsed.view.mapManualBreaks || parsed.view.mapManualBreaks.length === 0)) {
+    throw new Error('manual map classification requires breaks in TabWin Web recipe');
+  }
+  if (parsed.view?.mapManualBreaks !== undefined) {
+    if (!Array.isArray(parsed.view.mapManualBreaks) || parsed.view.mapManualBreaks.length > 8
+      || parsed.view.mapManualBreaks.some((value) => typeof value !== 'number' || !Number.isFinite(value))) {
+      throw new Error('invalid manual map breaks in TabWin Web recipe');
+    }
+    for (let index = 1; index < parsed.view.mapManualBreaks.length; index++) {
+      if (parsed.view.mapManualBreaks[index]! <= parsed.view.mapManualBreaks[index - 1]!) {
+        throw new Error('manual map breaks must be strictly increasing in TabWin Web recipe');
+      }
+    }
   }
   const allowedMapPalettes = new Set(['green', 'blue', 'orange', 'purple']);
   if (parsed.view?.mapPalette && !allowedMapPalettes.has(parsed.view.mapPalette)) {

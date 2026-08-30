@@ -237,6 +237,16 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 @keyframes grow { from { transform: scaleX(0); } }
 .map-stage { position: relative; min-height: 390px; overflow: hidden; border-radius: 14px; background: linear-gradient(145deg, #eaf4f0, #dcebe6); }
 .map-toolbar { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin-bottom: 10px; }
+.map-selection { display: flex; flex-wrap: wrap; align-items: end; gap: 9px; width: 100%; padding: 10px 12px; border: 1px solid #cfe0da; border-radius: 11px; background: #f2f8f6; }
+.map-selection strong { align-self: center; color: #204b43; font-size: 12px; }
+.map-selection label { display: grid; gap: 4px; min-width: 180px; color: #60757b; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.map-selection select { min-height: 34px; padding: 6px 8px; border: 1px solid #d5e0dd; border-radius: 8px; background: #fff; color: var(--ink); text-transform: none; letter-spacing: 0; }
+.map-layers { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; margin: 0 0 8px; }
+.map-layer { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid #d5e0dd; border-radius: 999px; background: #fff; color: #38524d; font-size: 11px; }
+.map-layer input { width: 15px; height: 15px; accent-color: #17866e; }
+.map-layer-remove { border: 0; background: none; color: #7c8f8a; cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.map-toggle { align-self: center; }
+.map-breaks-note { margin: 0 0 8px; padding: 8px 11px; border: 1px dashed #e2c9a6; border-radius: 10px; color: #6c4f22; background: #fdf7ec; font-size: 11px; line-height: 1.45; }
 .map-toolbar label { display: grid; gap: 5px; color: #60757b; font-size: 10px; font-weight: 700; }
 .map-toolbar select { min-width: 110px; padding: 7px 9px; border: 1px solid #d5e0dd; border-radius: 8px; color: var(--ink); background: #fff; }
 .map-zoom-actions { margin-left: auto; }

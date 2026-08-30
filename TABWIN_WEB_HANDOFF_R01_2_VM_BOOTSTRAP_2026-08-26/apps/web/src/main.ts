@@ -93,7 +93,10 @@ import {
   createMapScale,
   type MapClassification,
   type MapPalette,
+  type MapScale,
 } from '../../../packages/visualization/src/map-scale.ts';
+import { mapObjectAtPoint } from '../../../packages/visualization/src/map-hit-test.ts';
+import { spatialSelectionFilter } from '../../../packages/core/src/spatial-selection.ts';
 import { computeTableWindow } from '../../../packages/visualization/src/table-window.ts';
 import {
   descriptiveStatistics,
@@ -289,6 +292,18 @@ const chartPrintButton = element<HTMLButtonElement>('#chart-print-button');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
 const mapClassCount = element<HTMLSelectElement>('#map-class-count');
+const mapManualBreaksLabel = element<HTMLElement>('#map-manual-breaks-label');
+const mapManualBreaks = element<HTMLInputElement>('#map-manual-breaks');
+const mapManualBreaksNote = element<HTMLElement>('#map-manual-breaks-note');
+const mapShowSeats = element<HTMLInputElement>('#map-show-seats');
+const mapLayerButton = element<HTMLButtonElement>('#map-layer-button');
+const mapLayerInput = element<HTMLInputElement>('#map-layer-input');
+const mapLayers = element<HTMLElement>('#map-layers');
+const mapSelectionPanel = element<HTMLElement>('#map-selection');
+const mapSelectionCount = element<HTMLElement>('#map-selection-count');
+const mapSelectionField = element<HTMLSelectElement>('#map-selection-field');
+const mapSelectionApply = element<HTMLButtonElement>('#map-selection-apply');
+const mapSelectionClear = element<HTMLButtonElement>('#map-selection-clear');
 const mapPalette = element<HTMLSelectElement>('#map-palette');
 const mapZoomOut = element<HTMLButtonElement>('#map-zoom-out');
 const mapZoomReset = element<HTMLButtonElement>('#map-zoom-reset');
@@ -3471,34 +3486,173 @@ function valueForMapObject(object: TabwinMapObject, values: Map<string, number>)
   return values.get(object.geocode.trim().toLowerCase()) ?? values.get(normalizeLabel(object.name));
 }
 
-function pointInRing(point: MapCoordinate, ring: MapCoordinate[]): boolean {
-  let inside = false;
-  for (let index = 0, previous = ring.length - 1; index < ring.length; previous = index++) {
-    const currentPoint = ring[index];
-    const previousPoint = ring[previous];
-    if (!currentPoint || !previousPoint) continue;
-    const intersects = (currentPoint.y > point.y) !== (previousPoint.y > point.y)
-      && point.x < (previousPoint.x - currentPoint.x) * (point.y - currentPoint.y)
-        / (previousPoint.y - currentPoint.y) + currentPoint.x;
-    if (intersects) inside = !inside;
-  }
-  return inside;
-}
-
+// Hit testing lives in packages/visualization so spatial selection and the
+// canvas cannot drift apart: both now answer "which area is under this point"
+// with the same even-odd parity the fill uses.
 function objectAtCanvasPoint(canvasX: number, canvasY: number): TabwinMapObject | undefined {
   if (!activeMap || !mapProjection) return undefined;
   const point = {
     x: (canvasX - mapProjection.offsetX) / mapProjection.fit + mapProjection.west,
     y: mapProjection.north - (canvasY - mapProjection.offsetY) / mapProjection.fit,
   };
-  for (let index = activeMap.objects.length - 1; index >= 0; index--) {
-    const object = activeMap.objects[index];
-    if (!object || (object.type !== 'polygon' && object.type !== 'polygon-with-seat')) continue;
-    let inside = false;
-    for (const part of object.parts) if (pointInRing(point, part)) inside = !inside;
-    if (inside) return object;
+  return mapObjectAtPoint(activeMap.objects, point);
+}
+
+let mapPointerOrigin: { x: number; y: number } | null = null;
+
+/**
+ * Extra maps drawn as outlines over the choropleth - state borders over
+ * municipalities, health regions over states. They carry no data binding on
+ * purpose: a layer is context for reading the map, and letting a second map
+ * colour itself from the same result would silently claim its geocodes mean
+ * the same thing as the first one.
+ */
+interface MapReferenceLayer {
+  name: string;
+  definition: TabwinMapDefinition;
+  visible: boolean;
+}
+
+let mapReferenceLayers: MapReferenceLayer[] = [];
+
+/** Geocodes the user clicked, in click order. Presentation state, never a plan. */
+let mapSelection: string[] = [];
+
+function parsedManualMapBreaks(): number[] {
+  const text = mapManualBreaks.value.trim();
+  if (!text) throw new Error('Informe ao menos uma quebra manual, por exemplo 10; 25; 50');
+  const values = text.split(/[;\s]+/).filter(Boolean).map((value) => Number(value.replace(',', '.')));
+  if (values.some((value) => !Number.isFinite(value))) throw new Error('Quebras manuais do mapa devem ser números finitos');
+  for (let index = 1; index < values.length; index++) {
+    if (values[index]! <= values[index - 1]!) throw new Error('Quebras manuais do mapa devem estar em ordem crescente');
   }
-  return undefined;
+  return values;
+}
+
+function updateManualMapControls(): void {
+  const manual = mapClassification.value === 'manual';
+  mapManualBreaksLabel.hidden = !manual;
+  // Manual breaks decide the class count themselves; a separate count would
+  // be a second, contradictory answer to the same question.
+  mapClassCount.disabled = mapClassification.value === 'continuous' || manual;
+}
+
+/**
+ * The geographic field is never inferred. It defaults to the row dimension
+ * because that is the field whose values the map matched against in the first
+ * place - if the areas coloured in, that field carries the geocodes - but the
+ * user can name a different one, and nothing is filtered until they say so.
+ */
+function populateMapSelectionField(): void {
+  const previous = mapSelectionField.value;
+  mapSelectionField.replaceChildren();
+  for (const option of rowField.options) mapSelectionField.append(new Option(option.text, option.value));
+  const wanted = [...mapSelectionField.options].some((option) => option.value === previous)
+    ? previous
+    : rowField.value;
+  if ([...mapSelectionField.options].some((option) => option.value === wanted)) mapSelectionField.value = wanted;
+}
+
+function updateMapSelectionPanel(): void {
+  mapSelectionPanel.hidden = !mapSelection.length;
+  mapSelectionCount.textContent = mapSelection.length === 1
+    ? '1 área selecionada'
+    : `${integerFormat.format(mapSelection.length)} áreas selecionadas`;
+  mapSelectionApply.disabled = !mapSelection.length;
+}
+
+function toggleMapSelection(object: TabwinMapObject): void {
+  const geocode = object.geocode.trim();
+  if (!geocode) {
+    showToast('Esta área não tem geocódigo, então não dá para filtrar por ela.', true);
+    return;
+  }
+  const at = mapSelection.indexOf(geocode);
+  if (at >= 0) mapSelection.splice(at, 1);
+  else mapSelection.push(geocode);
+  populateMapSelectionField();
+  updateMapSelectionPanel();
+  if (activeMap && currentResult) renderMap();
+}
+
+function renderMapLayers(): void {
+  mapLayers.hidden = !mapReferenceLayers.length;
+  mapLayers.replaceChildren();
+  mapReferenceLayers.forEach((layer, index) => {
+    const row = document.createElement('label');
+    row.className = 'map-layer';
+    const toggle = document.createElement('input');
+    toggle.type = 'checkbox';
+    toggle.checked = layer.visible;
+    toggle.addEventListener('change', () => {
+      layer.visible = toggle.checked;
+      if (activeMap && currentResult) renderMap();
+    });
+    const name = document.createElement('span');
+    name.textContent = `${layer.name} · ${integerFormat.format(layer.definition.objects.length)} áreas`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'map-layer-remove';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remover camada ${layer.name}`);
+    remove.addEventListener('click', () => {
+      mapReferenceLayers.splice(index, 1);
+      renderMapLayers();
+      if (activeMap && currentResult) renderMap();
+    });
+    row.append(toggle, name, remove);
+    mapLayers.append(row);
+  });
+}
+
+async function loadMapReferenceLayer(file: File): Promise<void> {
+  if (file.size > MAX_LOCAL_INPUT_BYTES) {
+    throw new Error(`${file.name}: excede o limite local de ${formatBytes(MAX_LOCAL_INPUT_BYTES)}`);
+  }
+  const extension = file.name.split('.').pop()?.toUpperCase() ?? '';
+  let definition: TabwinMapDefinition;
+  if (extension === 'MAP') {
+    definition = parseTabwinMap(new Uint8Array(await file.arrayBuffer()));
+  } else {
+    // A reference layer is drawn, never matched, so it needs no geocode
+    // property - the first available one keeps the converter happy without
+    // asserting anything about identity.
+    const source = JSON.parse(await file.text());
+    const properties = listGeoJsonFeatureProperties(source);
+    const first = properties[0];
+    if (!first) throw new Error(`${file.name}: nenhuma feature com "properties" encontrada`);
+    definition = convertGeoJsonToTabwinMap(source, { geocodeProperty: first, nameProperty: first });
+  }
+  mapReferenceLayers.push({ name: file.name, definition, visible: true });
+  renderMapLayers();
+  if (activeMap && currentResult) renderMap();
+  showToast(`${file.name}: camada de referência com ${integerFormat.format(definition.objects.length)} áreas`);
+}
+
+function clearMapSelection(): void {
+  if (!mapSelection.length) return;
+  mapSelection = [];
+  updateMapSelectionPanel();
+  if (activeMap && currentResult) renderMap();
+}
+
+/**
+ * Turns the selection into an ordinary include filter and re-runs. Nothing
+ * about the plan is special-cased for maps: once applied it is the same kind
+ * of filter the sidebar builds, it shows in the same chip list, and it comes
+ * back the same way from a recipe.
+ */
+function applyMapSelectionAsFilter(): void {
+  try {
+    const filter = spatialSelectionFilter(mapSelectionField.value, mapSelection);
+    configuredFilters.push(filter);
+    renderConfiguredFilters();
+    updateFilterCount();
+    clearMapSelection();
+    void runAnalysis();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
 }
 
 function renderMap(): void {
@@ -3537,12 +3691,32 @@ function renderMap(): void {
     values.set(row.key.trim().toLowerCase(), value);
     values.set(normalizeLabel(row.label), value);
   });
-  const scaleModel = createMapScale(
-    values.values(),
-    mapClassification.value as MapClassification,
-    Number(mapClassCount.value),
-    mapPalette.value as MapPalette,
-  );
+  const classification = mapClassification.value as MapClassification;
+  // Breaks the data cannot support - a recipe saved against a bigger range,
+  // say - must not blank the map. Quantiles draw it, and the message below
+  // the toolbar says why the manual breaks were not used, so the fallback
+  // never passes for the thing that was asked for.
+  let manualBreaks: number[] | undefined;
+  let manualBreakProblem = '';
+  if (classification === 'manual') {
+    try { manualBreaks = parsedManualMapBreaks(); }
+    catch (error) { manualBreakProblem = error instanceof Error ? error.message : String(error); }
+  }
+  let scaleModel: MapScale;
+  try {
+    scaleModel = createMapScale(
+      values.values(),
+      manualBreakProblem ? 'quantile' : classification,
+      Number(mapClassCount.value),
+      mapPalette.value as MapPalette,
+      manualBreaks ? { manualBreaks } : {},
+    );
+  } catch (error) {
+    manualBreakProblem = error instanceof Error ? error.message : String(error);
+    scaleModel = createMapScale(values.values(), 'quantile', Number(mapClassCount.value), mapPalette.value as MapPalette);
+  }
+  mapManualBreaksNote.hidden = !manualBreakProblem;
+  mapManualBreaksNote.textContent = manualBreakProblem ? `${manualBreakProblem}. Mapa desenhado por quantis.` : '';
   let matched = 0;
   lastMapValues = new Map();
 
@@ -3569,7 +3743,13 @@ function renderMap(): void {
     if (object.type === 'polygon' || object.type === 'polygon-with-seat') {
       context.fillStyle = scaleModel.colorFor(value);
       context.fill('evenodd');
-      context.stroke();
+      if (mapSelection.includes(object.geocode)) {
+        context.save();
+        context.strokeStyle = '#123f36';
+        context.lineWidth = Math.max(1.1, 1.8 / scale);
+        context.stroke();
+        context.restore();
+      } else context.stroke();
     } else if (object.type === 'line') {
       context.strokeStyle = scaleModel.colorFor(value);
       context.lineWidth = 1.4;
@@ -3581,6 +3761,49 @@ function renderMap(): void {
       context.arc(point.x, point.y, 3.5, 0, Math.PI * 2);
       context.fill();
     }
+  }
+
+  for (const layer of mapReferenceLayers) {
+    if (!layer.visible) continue;
+    context.save();
+    context.strokeStyle = 'rgba(20, 52, 46, .58)';
+    context.lineWidth = Math.max(.55, 1.15 / scale);
+    for (const object of layer.definition.objects) {
+      context.beginPath();
+      for (const part of object.parts) {
+        const first = part[0];
+        if (!first) continue;
+        const start = project(first.x, first.y);
+        context.moveTo(start.x, start.y);
+        for (let index = 1; index < part.length; index++) {
+          const point = part[index]!;
+          const next = project(point.x, point.y);
+          context.lineTo(next.x, next.y);
+        }
+        if (object.type === 'polygon' || object.type === 'polygon-with-seat') context.closePath();
+      }
+      context.stroke();
+    }
+    context.restore();
+  }
+
+  // A seat is the labelPoint of an object the source marked as carrying one.
+  // Nothing is placed for the other object types: inventing a centroid and
+  // calling it a seat would be making up a fact about the territory.
+  if (mapShowSeats.checked) {
+    context.save();
+    context.fillStyle = '#123f36';
+    context.strokeStyle = 'rgba(255,255,255,.9)';
+    context.lineWidth = Math.max(.5, 1 / scale);
+    for (const object of activeMap.objects) {
+      if (object.type !== 'polygon-with-seat') continue;
+      const point = project(object.labelPoint.x, object.labelPoint.y);
+      context.beginPath();
+      context.arc(point.x, point.y, Math.max(1.6, 3 / scale), 0, Math.PI * 2);
+      context.fill();
+      context.stroke();
+    }
+    context.restore();
   }
 
   mapMessage.hidden = matched > 0;
@@ -4411,6 +4634,9 @@ function saveRecipe(): void {
       ...(chartSizeBinding.value ? { chartSizeColumnKey: chartSizeBinding.value } : {}),
       mapClassification: mapClassification.value as MapClassification,
       mapClassCount: Number(mapClassCount.value),
+      ...(mapClassification.value === 'manual' && mapManualBreaks.value.trim()
+        ? { mapManualBreaks: parsedManualMapBreaks() }
+        : {}),
       mapPalette: mapPalette.value as MapPalette,
       statisticsOperation: statisticsOperation.value as 'descriptive' | 'correlation' | 'regression' | 'histogram',
       ...(currentResult?.columns[Number(statisticsX.value)]?.key
@@ -4619,6 +4845,7 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.view?.chartShowGrid !== undefined) chartShowGrid.checked = recipe.view.chartShowGrid;
   if (recipe.view?.mapClassification) mapClassification.value = recipe.view.mapClassification;
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
+  mapManualBreaks.value = recipe.view?.mapManualBreaks?.join('; ') ?? '';
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
   if (recipe.view?.statisticsOperation) statisticsOperation.value = recipe.view.statisticsOperation;
   if (recipe.view?.histogramBins) histogramBins.value = String(recipe.view.histogramBins);
@@ -5142,11 +5369,26 @@ chartPngButton.addEventListener('click', () => void exportChartPng().catch((erro
 mapPngButton.addEventListener('click', exportMapPng);
 for (const control of [mapClassification, mapClassCount, mapPalette]) {
   control.addEventListener('change', () => {
-    mapClassCount.disabled = mapClassification.value === 'continuous';
+    updateManualMapControls();
     if (activeMap && currentResult) renderMap();
   });
 }
-mapClassCount.disabled = mapClassification.value === 'continuous';
+mapManualBreaks.addEventListener('input', () => {
+  if (activeMap && currentResult && mapClassification.value === 'manual') renderMap();
+});
+mapShowSeats.addEventListener('change', () => { if (activeMap && currentResult) renderMap(); });
+mapLayerButton.addEventListener('click', () => mapLayerInput.click());
+mapLayerInput.addEventListener('change', () => {
+  const file = mapLayerInput.files?.[0];
+  mapLayerInput.value = '';
+  if (!file) return;
+  void loadMapReferenceLayer(file).catch((error) =>
+    showToast(error instanceof Error ? error.message : String(error), true));
+});
+mapSelectionApply.addEventListener('click', applyMapSelectionAsFilter);
+mapSelectionClear.addEventListener('click', clearMapSelection);
+updateManualMapControls();
+updateMapSelectionPanel();
 mapZoomOut.addEventListener('click', () => updateMapZoom(mapZoom / 1.5));
 mapZoomReset.addEventListener('click', () => updateMapZoom(1));
 mapZoomIn.addEventListener('click', () => updateMapZoom(mapZoom * 1.5));
@@ -5157,6 +5399,7 @@ mapCanvas.addEventListener('wheel', (event) => {
 mapCanvas.addEventListener('pointerdown', (event) => {
   const point = canvasPointer(event);
   mapDrag = { pointerId: event.pointerId, x: point.x, y: point.y };
+  mapPointerOrigin = { x: point.x, y: point.y };
   mapCanvas.setPointerCapture(event.pointerId);
   mapTooltip.hidden = true;
 });
@@ -5174,9 +5417,20 @@ mapCanvas.addEventListener('pointermove', (event) => {
 mapCanvas.addEventListener('pointerup', (event) => {
   if (mapDrag?.pointerId === event.pointerId) mapDrag = null;
   mapCanvas.releasePointerCapture(event.pointerId);
+  const point = canvasPointer(event);
+  // A pan and a click arrive through the same events. Anything that moved
+  // more than a few pixels was the user dragging the map, not picking an area.
+  const travelled = mapPointerOrigin
+    ? Math.hypot(point.x - mapPointerOrigin.x, point.y - mapPointerOrigin.y)
+    : Number.POSITIVE_INFINITY;
+  mapPointerOrigin = null;
+  if (travelled <= 4) {
+    const object = objectAtCanvasPoint(point.x, point.y);
+    if (object) toggleMapSelection(object);
+  }
   showMapTooltip(event);
 });
-mapCanvas.addEventListener('pointercancel', () => { mapDrag = null; });
+mapCanvas.addEventListener('pointercancel', () => { mapDrag = null; mapPointerOrigin = null; });
 mapCanvas.addEventListener('pointerleave', () => { if (!mapDrag) mapTooltip.hidden = true; });
 element<HTMLButtonElement>('#about-button').addEventListener('click', () => aboutDialog.showModal());
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());

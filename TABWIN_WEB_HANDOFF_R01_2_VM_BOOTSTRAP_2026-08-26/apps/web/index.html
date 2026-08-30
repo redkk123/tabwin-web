@@ -427,11 +427,22 @@
 
           <div class="view-panel map-panel" id="map-view" data-panel="map" hidden>
             <div class="map-toolbar">
+              <div class="map-selection" id="map-selection" hidden>
+                <strong id="map-selection-count">0 áreas selecionadas</strong>
+                <label>Campo do geocódigo<select id="map-selection-field"></select></label>
+                <button class="secondary-button" id="map-selection-apply" type="button">Filtrar por seleção</button>
+                <button class="secondary-button" id="map-selection-clear" type="button">Limpar</button>
+              </div>
               <label>Método<select id="map-classification">
                 <option value="continuous">Contínuo</option>
                 <option value="equal-interval">Intervalos iguais</option>
                 <option value="quantile">Quantis</option>
+                <option value="manual">Quebras manuais</option>
               </select></label>
+              <label id="map-manual-breaks-label" hidden>Quebras<input id="map-manual-breaks" type="text" inputmode="decimal" placeholder="10; 25; 50" /></label>
+              <label class="check-label map-toggle"><input id="map-show-seats" type="checkbox" /><span>Sedes</span></label>
+              <button class="secondary-button" id="map-layer-button" type="button">Camada de referência</button>
+              <input id="map-layer-input" type="file" accept=".map,.MAP,.json,.geojson" hidden />
               <label>Classes<select id="map-class-count">
                 <option>3</option><option>4</option><option selected>5</option><option>6</option><option>7</option>
               </select></label>
@@ -450,6 +461,8 @@
             </div>
             <div class="map-stage">
               <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
+              <div class="map-layers" id="map-layers" hidden></div>
+              <p class="map-breaks-note" id="map-manual-breaks-note" hidden></p>
               <div class="map-message" id="map-message">Escolha uma variável geográfica para criar o mapa.</div>
               <div class="map-legend" id="map-legend" hidden></div>
               <output class="map-tooltip" id="map-tooltip" hidden></output>

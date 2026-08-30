@@ -370,10 +370,32 @@ eixos, limites, zoom, impressão por família.
 
 ### 4.3 Mapas: quebras manuais, camadas, legendas, sedes e seleção espacial
 
+**Estado em 2026-08-30: CONCLUÍDA.** Handoff em
+`docs/handoffs/R10_10_MAPAS_AVANCADOS.md`.
+
+- **Quebras manuais:** `manual` em `MapClassification`, com quebras interiores
+  finitas e estritamente crescentes, persistidas no `.twrecipe` e validadas na
+  leitura. Quebras que os dados não sustentam não apagam o mapa: ele é
+  desenhado por quantis e uma nota abaixo da barra diz por quê.
+- **Legendas:** já eram discretas fora do modo contínuo, então as quebras
+  manuais aparecem como classes com seus intervalos, sem código novo.
+- **Sedes:** marcador no `labelPoint` dos objetos que a fonte marcou como
+  `polygon-with-seat`. Nada é desenhado para os outros tipos — inventar um
+  centróide e chamá-lo de sede seria afirmar um fato sobre o território.
+- **Camadas:** mapas extras desenhados como contorno sobre o coroplético.
+  Sem ligação com dados, de propósito: deixar uma segunda camada se colorir
+  do mesmo resultado afirmaria em silêncio que os geocódigos dela significam
+  a mesma coisa que os da primeira.
+- **Seleção espacial:** clique alterna a área, o contorno grosso mostra a
+  seleção, e "Filtrar por seleção" vira um `FilterSpec` comum via
+  `spatialSelectionFilter`. O campo do geocódigo **nunca é inferido**: ele
+  aparece explícito, com o padrão sendo a dimensão de linha, que é o campo
+  contra o qual o mapa casou os valores em primeiro lugar.
+
 **Esforço:** semanas · **Risco:** médio
 
-A seleção espacial ligada de volta aos filtros é a peça de maior valor
-analítico do conjunto.
+A seleção espacial ligada de volta aos filtros era a peça de maior valor
+analítico do conjunto, e é a que fecha a faixa.
 
 ### 4.4 Distâncias e fluxos origem–destino
 
