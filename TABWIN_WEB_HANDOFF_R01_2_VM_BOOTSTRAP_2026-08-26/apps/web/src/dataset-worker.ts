@@ -27,6 +27,10 @@ import {
 } from '../../../packages/acquisition/src/dbf-record-stream.ts';
 import { createTabulationAccumulator, type ConversionRegistry } from '../../../packages/core/src/execute.ts';
 import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
+import {
+  createFlowAccumulator,
+  type FlowBuildResult,
+} from '../../../packages/analysis/src/spatial-flows.ts';
 import { createTabulationResultCache } from '../../../packages/core/src/tabulation-cache.ts';
 import type { QueryPlan, TabulationResult } from '../../../packages/core/src/model.ts';
 import {
@@ -90,6 +94,20 @@ interface CombinationProfileRequest {
   limit?: number;
 }
 
+/**
+ * Origin-destination aggregation runs here for the same reason tabulation
+ * does: the main thread never holds records, and only three fields are read.
+ */
+interface FlowRequest {
+  type: 'flows';
+  requestId: number;
+  originField: string;
+  destinationField: string;
+  weightField?: string;
+  knownGeocodes?: string[];
+  unknownPolicy?: 'exclude' | 'include';
+}
+
 interface SelectedDbfRequest {
   type: 'selected-dbf';
   requestId: number;
@@ -106,7 +124,7 @@ interface AppendRequest {
 
 type DatasetRequest =
   | OpenRequest | AppendRequest | TabulateRequest
-  | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest;
+  | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest | FlowRequest;
 
 const workerScope: Worker = self as unknown as Worker;
 const BATCH_RECORDS = 5_000;
@@ -299,6 +317,21 @@ function handle(request: DatasetRequest): void {
       streamAll(request.requestId, [request.field], (batch) => collector.push(batch.records));
       const collected = collector.finish();
       post({ type: 'distinct-values', requestId: request.requestId, ...collected });
+      return;
+    }
+    case 'flows': {
+      const fields = [request.originField, request.destinationField];
+      if (request.weightField) fields.push(request.weightField);
+      const accumulator = createFlowAccumulator({
+        originField: request.originField,
+        destinationField: request.destinationField,
+        ...(request.weightField ? { weightField: request.weightField } : {}),
+        ...(request.knownGeocodes ? { knownGeocodes: new Set(request.knownGeocodes) } : {}),
+        ...(request.unknownPolicy ? { unknownPolicy: request.unknownPolicy } : {}),
+      });
+      streamAll(request.requestId, fields, (batch) => accumulator.push(batch.records));
+      const result: FlowBuildResult = accumulator.finish();
+      post({ type: 'flows-ready', requestId: request.requestId, result });
       return;
     }
     case 'selected-dbf': {

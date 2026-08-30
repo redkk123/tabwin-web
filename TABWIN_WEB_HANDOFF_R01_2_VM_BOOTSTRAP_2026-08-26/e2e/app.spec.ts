@@ -181,3 +181,49 @@ test('a receita leva o estilo do gráfico e o traz de volta', async ({ page }) =
   await expect(page.locator('#chart-show-legend')).toHaveValue('on');
   await expect(page.locator('#chart svg .chart-title')).toHaveText('Título salvo');
 });
+
+test('fluxos origem-destino agregam pelos registros e prestam contas do descarte', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/fluxos-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('ORIGEM');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  await page.locator('[data-view="map"]').click();
+  await page.locator('#flow-origin').selectOption('ORIGEM');
+  await page.locator('#flow-destination').selectOption('DESTINO');
+  await page.locator('#flow-weight').selectOption('PESO');
+  await page.locator('#flow-run').click();
+
+  const report = page.locator('#flow-report');
+  await expect(report).toBeVisible();
+  // Three pairs survive; the fifth record has no destination and is reported,
+  // never quietly folded into a total.
+  await expect(report.locator('.flow-summary')).toContainText('3 par(es)');
+  await expect(report.locator('.flow-summary')).toContainText('4 de 5 registros');
+  await expect(report.locator('.flow-diagnostics')).toContainText('destino ausente 1');
+  // 12 + 8 on the heaviest edge, ranked first.
+  const first = report.locator('.flow-table tbody tr').first();
+  await expect(first).toContainText('3550308');
+  await expect(first).toContainText('20');
+});
+
+test('a distância só aparece depois de escolher o modelo', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/fluxos-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('ORIGEM');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await page.locator('[data-view="map"]').click();
+  await page.locator('#flow-origin').selectOption('ORIGEM');
+  await page.locator('#flow-destination').selectOption('DESTINO');
+  await page.locator('#flow-run').click();
+  await expect(page.locator('#flow-report')).toBeVisible();
+
+  // Without a map there are no coordinates, so no distance column can exist -
+  // and the default is "não calcular" anyway. Nothing invents a number here.
+  const headers = await page.locator('#flow-report .flow-table th').allTextContents();
+  expect(headers.some((text) => text.startsWith('Distância'))).toBe(false);
+  await expect(page.locator('#flow-distance')).toHaveValue('');
+});

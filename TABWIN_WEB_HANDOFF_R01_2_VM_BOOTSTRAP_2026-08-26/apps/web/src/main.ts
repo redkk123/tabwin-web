@@ -97,6 +97,13 @@ import {
 } from '../../../packages/visualization/src/map-scale.ts';
 import { mapObjectAtPoint } from '../../../packages/visualization/src/map-hit-test.ts';
 import { spatialSelectionFilter } from '../../../packages/core/src/spatial-selection.ts';
+import {
+  addFlowDistances,
+  mapGeocodePoints,
+  type DistanceModel,
+  type FlowBuildResult,
+  type FlowWithDistance,
+} from '../../../packages/analysis/src/spatial-flows.ts';
 import { computeTableWindow } from '../../../packages/visualization/src/table-window.ts';
 import {
   descriptiveStatistics,
@@ -299,6 +306,14 @@ const mapShowSeats = element<HTMLInputElement>('#map-show-seats');
 const mapLayerButton = element<HTMLButtonElement>('#map-layer-button');
 const mapLayerInput = element<HTMLInputElement>('#map-layer-input');
 const mapLayers = element<HTMLElement>('#map-layers');
+const flowOrigin = element<HTMLSelectElement>('#flow-origin');
+const flowDestination = element<HTMLSelectElement>('#flow-destination');
+const flowWeight = element<HTMLSelectElement>('#flow-weight');
+const flowUnknown = element<HTMLSelectElement>('#flow-unknown');
+const flowDistance = element<HTMLSelectElement>('#flow-distance');
+const flowArcLimit = element<HTMLSelectElement>('#flow-arc-limit');
+const flowRun = element<HTMLButtonElement>('#flow-run');
+const flowReport = element<HTMLElement>('#flow-report');
 const mapSelectionPanel = element<HTMLElement>('#map-selection');
 const mapSelectionCount = element<HTMLElement>('#map-selection-count');
 const mapSelectionField = element<HTMLSelectElement>('#map-selection-field');
@@ -637,6 +652,7 @@ function chooseDefaultField(fields: DbfHeader['fields']): string {
 }
 
 function populateControls(preferredField?: string): void {
+  populateFlowFields();
   if (!dbfHeader) return;
   fieldSearch.value = '';
   const previousRow = preferredField ?? rowField.value;
@@ -3515,6 +3531,9 @@ interface MapReferenceLayer {
 
 let mapReferenceLayers: MapReferenceLayer[] = [];
 
+/** Last computed OD flows, with distance already attached when a model was chosen. */
+let flowEdges: FlowWithDistance[] = [];
+
 /** Geocodes the user clicked, in click order. Presentation state, never a plan. */
 let mapSelection: string[] = [];
 
@@ -3627,6 +3646,128 @@ async function loadMapReferenceLayer(file: File): Promise<void> {
   renderMapLayers();
   if (activeMap && currentResult) renderMap();
   showToast(`${file.name}: camada de referência com ${integerFormat.format(definition.objects.length)} áreas`);
+}
+
+/**
+ * Representative points, or an empty map when the loaded map cannot supply
+ * them unambiguously. A conflicting duplicate geocode is a real problem and
+ * `mapGeocodePoints` is right to throw, but it must not take the whole render
+ * down: the arcs simply do not appear and the report says why.
+ */
+function mapGeocodePointsSafe(): Map<string, MapCoordinate> {
+  if (!activeMap) return new Map();
+  try { return mapGeocodePoints(activeMap); }
+  catch { return new Map(); }
+}
+
+function populateFlowFields(): void {
+  const fields = dbfHeader?.fields.map((field) => field.name) ?? [];
+  for (const [select, includeBlank] of [
+    [flowOrigin, false] as const,
+    [flowDestination, false] as const,
+    [flowWeight, true] as const,
+  ]) {
+    const previous = select.value;
+    select.replaceChildren(...(includeBlank ? [new Option('Contagem de registros', '')] : []));
+    for (const name of fields) select.append(new Option(name, name));
+    if ([...select.options].some((option) => option.value === previous)) select.value = previous;
+  }
+  flowRun.disabled = !fields.length;
+}
+
+function distanceModelFromControl(): DistanceModel | undefined {
+  if (flowDistance.value === 'geographic-haversine') return { kind: 'geographic-haversine' };
+  if (flowDistance.value === 'planar') return { kind: 'planar', unitLabel: 'unidades do mapa' };
+  return undefined;
+}
+
+async function computeFlows(): Promise<void> {
+  if (!dbfHeader) throw new Error('Abra um conjunto de dados antes de calcular fluxos');
+  if (flowOrigin.value === flowDestination.value) {
+    throw new Error('Origem e destino precisam ser campos diferentes');
+  }
+  const known = activeMap
+    ? [...new Set(activeMap.objects.map((object) => object.geocode.trim()).filter(Boolean))]
+    : undefined;
+  const reply = await askDataset<{ result: FlowBuildResult }>(
+    {
+      type: 'flows',
+      originField: flowOrigin.value,
+      destinationField: flowDestination.value,
+      ...(flowWeight.value ? { weightField: flowWeight.value } : {}),
+      ...(known ? { knownGeocodes: known } : {}),
+      unknownPolicy: flowUnknown.value as 'exclude' | 'include',
+    },
+    { label: 'Fluxos origem-destino', progress: datasetProgress('Lendo registros') },
+  );
+  const model = distanceModelFromControl();
+  flowEdges = model
+    ? addFlowDistances(reply.result.flows, mapGeocodePointsSafe(), model)
+    : reply.result.flows.map((flow) => ({ ...flow, distance: undefined, distanceUnit: '' }));
+  renderFlowReport(reply.result);
+  if (activeMap && currentResult) renderMap();
+}
+
+function renderFlowReport(result: FlowBuildResult): void {
+  flowReport.hidden = false;
+  flowReport.replaceChildren();
+  const summary = document.createElement('p');
+  summary.className = 'flow-summary';
+  const discarded = result.recordsSeen - result.recordsAccepted;
+  summary.textContent = `${integerFormat.format(result.flows.length)} par(es) origem-destino a partir de ${integerFormat.format(result.recordsAccepted)} de ${integerFormat.format(result.recordsSeen)} registros`;
+  flowReport.append(summary);
+  if (discarded > 0) {
+    const reasons = document.createElement('p');
+    reasons.className = 'flow-diagnostics';
+    // Every discarded record is accounted for by name. A silent gap between
+    // seen and accepted is exactly the kind of thing that makes a flow map
+    // look authoritative while quietly dropping a third of the data.
+    reasons.textContent = [
+      `${integerFormat.format(discarded)} registro(s) fora dos fluxos:`,
+      `origem ausente ${integerFormat.format(result.missingOrigin)}`,
+      `destino ausente ${integerFormat.format(result.missingDestination)}`,
+      `origem fora do mapa ${integerFormat.format(result.unknownOrigin)}`,
+      `destino fora do mapa ${integerFormat.format(result.unknownDestination)}`,
+      `peso inválido ${integerFormat.format(result.invalidWeight)}`,
+    ].join(' · ');
+    flowReport.append(reasons);
+  }
+  const table = document.createElement('table');
+  table.className = 'flow-table';
+  const head = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  const hasDistance = flowEdges.some((flow) => flow.distance !== undefined);
+  const columns = ['Origem', 'Destino', flowWeight.value ? `Soma de ${flowWeight.value}` : 'Registros'];
+  if (hasDistance) columns.push(`Distância (${flowEdges[0]?.distanceUnit ?? ''})`);
+  for (const label of columns) {
+    const cell = document.createElement('th');
+    cell.textContent = label;
+    headRow.append(cell);
+  }
+  head.append(headRow);
+  const body = document.createElement('tbody');
+  for (const flow of flowEdges.slice(0, 50)) {
+    const row = document.createElement('tr');
+    const cells = [
+      mapNameForGeocode(flow.origin),
+      mapNameForGeocode(flow.destination),
+      numberFormat.format(flow.value),
+    ];
+    if (hasDistance) cells.push(flow.distance === undefined ? 'sem coordenada' : numberFormat.format(flow.distance));
+    for (const text of cells) {
+      const cell = document.createElement('td');
+      cell.textContent = text;
+      row.append(cell);
+    }
+    body.append(row);
+  }
+  table.append(head, body);
+  flowReport.append(table);
+}
+
+function mapNameForGeocode(geocode: string): string {
+  const object = activeMap?.objects.find((item) => item.geocode.trim() === geocode);
+  return object?.name ? `${geocode} · ${object.name}` : geocode;
 }
 
 function clearMapSelection(): void {
@@ -3783,6 +3924,39 @@ function renderMap(): void {
         if (object.type === 'polygon' || object.type === 'polygon-with-seat') context.closePath();
       }
       context.stroke();
+    }
+    context.restore();
+  }
+
+  const arcLimit = Number(flowArcLimit.value);
+  if (arcLimit > 0 && flowEdges.length) {
+    const points = mapGeocodePointsSafe();
+    const drawn = flowEdges.slice(0, arcLimit);
+    const heaviest = Math.max(...drawn.map((flow) => Math.abs(flow.value)), 1);
+    context.save();
+    context.lineCap = 'round';
+    for (const flow of drawn) {
+      const from = points.get(flow.origin);
+      const to = points.get(flow.destination);
+      if (!from || !to) continue;
+      const a = project(from.x, from.y);
+      const b = project(to.x, to.y);
+      // A quadratic bulge perpendicular to the chord, so opposite directions
+      // between the same pair stay visible as two arcs instead of one line.
+      const midX = (a.x + b.x) / 2;
+      const midY = (a.y + b.y) / 2;
+      const controlX = midX + (b.y - a.y) * .18;
+      const controlY = midY - (b.x - a.x) * .18;
+      context.beginPath();
+      context.moveTo(a.x, a.y);
+      context.quadraticCurveTo(controlX, controlY, b.x, b.y);
+      context.lineWidth = Math.max(.6, (0.6 + 3.4 * Math.sqrt(Math.abs(flow.value) / heaviest)) / scale);
+      context.strokeStyle = 'rgba(198, 84, 66, .72)';
+      context.stroke();
+      context.beginPath();
+      context.arc(b.x, b.y, Math.max(1.2, 2.4 / scale), 0, Math.PI * 2);
+      context.fillStyle = 'rgba(140, 44, 30, .85)';
+      context.fill();
     }
     context.restore();
   }
@@ -5377,6 +5551,13 @@ mapManualBreaks.addEventListener('input', () => {
   if (activeMap && currentResult && mapClassification.value === 'manual') renderMap();
 });
 mapShowSeats.addEventListener('change', () => { if (activeMap && currentResult) renderMap(); });
+flowRun.addEventListener('click', () => {
+  flowRun.disabled = true;
+  void computeFlows()
+    .catch((error) => showToast(error instanceof Error ? error.message : String(error), true))
+    .finally(() => { flowRun.disabled = !dbfHeader; });
+});
+flowArcLimit.addEventListener('change', () => { if (activeMap && currentResult) renderMap(); });
 mapLayerButton.addEventListener('click', () => mapLayerInput.click());
 mapLayerInput.addEventListener('change', () => {
   const file = mapLayerInput.files?.[0];

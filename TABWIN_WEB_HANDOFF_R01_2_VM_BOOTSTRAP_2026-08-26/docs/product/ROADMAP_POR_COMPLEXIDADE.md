@@ -399,10 +399,26 @@ analítico do conjunto, e é a que fecha a faixa.
 
 ### 4.4 Distâncias e fluxos origem–destino
 
+**Estado em 2026-08-30: CONCLUÍDA.** Handoff em
+`docs/handoffs/R10_11_FLUXOS_OD.md`.
+
+- `packages/analysis/src/spatial-flows.ts` agrega origem→destino com peso
+  opcional e presta contas de **todo** registro descartado por nome: origem
+  ausente, destino ausente, origem fora do mapa, destino fora do mapa e peso
+  inválido.
+- Distância planar e Haversine são contratos distintos e a UI **exige a
+  escolha**: o padrão é "não calcular". Nada adivinha se um `.MAP` está em
+  graus ou em unidades projetadas, porque o projeto não tem metadado que
+  sustente essa afirmação.
+- `createFlowAccumulator` agrega em lotes, então o Worker faz o arquivo
+  nacional de 63 MiB passar sem nunca segurar os registros.
+- Arcos desenhados sobre o mapa, com curvatura perpendicular à corda para que
+  ida e volta entre o mesmo par não virem uma linha só.
+
 **Esforço:** semanas · **Risco:** médio
 
-Depende de projeção e de contrato de tabela de fluxo. Casos de borda de
-geocódigo ausente ou desconhecido precisam de teste dedicado.
+Dependia de projeção e de contrato de tabela de fluxo. A projeção continua
+sendo escolha explícita do usuário — é a resposta certa, não uma pendência.
 
 ### 4.5 `.TAB` archaeology e replay
 

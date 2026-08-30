@@ -241,6 +241,18 @@ tfoot { position: sticky; bottom: 0; color: var(--ink); background: #eaf5f1; fon
 .map-selection strong { align-self: center; color: #204b43; font-size: 12px; }
 .map-selection label { display: grid; gap: 4px; min-width: 180px; color: #60757b; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
 .map-selection select { min-height: 34px; padding: 6px 8px; border: 1px solid #d5e0dd; border-radius: 8px; background: #fff; color: var(--ink); text-transform: none; letter-spacing: 0; }
+.flow-panel { width: 100%; margin: 0 0 10px; padding: 12px; border: 1px solid #dce8e4; border-radius: 12px; background: #f8fbfa; }
+.flow-grid { display: grid; grid-template-columns: repeat(4,minmax(140px,1fr)); gap: 8px; align-items: end; }
+.flow-grid label { display: grid; gap: 4px; min-width: 0; color: #60757b; font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; }
+.flow-grid select { min-width: 0; min-height: 34px; padding: 6px 8px; border: 1px solid #d5e0dd; border-radius: 8px; background: #fff; color: var(--ink); text-transform: none; letter-spacing: 0; }
+.flow-grid button { align-self: end; min-height: 34px; }
+.flow-report { margin: 10px 0 0; max-height: 260px; overflow: auto; }
+.flow-summary { margin: 0 0 4px; color: #204b43; font-size: 12px; font-weight: 700; }
+.flow-diagnostics { margin: 0 0 8px; color: #7a5a2a; font-size: 11px; line-height: 1.5; }
+.flow-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.flow-table th { position: sticky; top: 0; padding: 6px 8px; border-bottom: 1px solid #d5e0dd; background: #f8fbfa; color: #60757b; font-size: 9px; text-align: left; text-transform: uppercase; letter-spacing: .08em; }
+.flow-table td { padding: 5px 8px; border-bottom: 1px solid #edf2f0; color: #2b3f3b; }
+@media (max-width: 900px) { .flow-grid { grid-template-columns: 1fr 1fr; } }
 .map-layers { display: flex; flex-wrap: wrap; gap: 7px; width: 100%; margin: 0 0 8px; }
 .map-layer { display: inline-flex; align-items: center; gap: 7px; padding: 5px 9px; border: 1px solid #d5e0dd; border-radius: 999px; background: #fff; color: #38524d; font-size: 11px; }
 .map-layer input { width: 15px; height: 15px; accent-color: #17866e; }

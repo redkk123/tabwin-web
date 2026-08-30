@@ -461,12 +461,34 @@
             </div>
             <div class="map-stage">
               <canvas id="map-canvas" aria-label="Mapa temático do resultado"></canvas>
-              <div class="map-layers" id="map-layers" hidden></div>
-              <p class="map-breaks-note" id="map-manual-breaks-note" hidden></p>
               <div class="map-message" id="map-message">Escolha uma variável geográfica para criar o mapa.</div>
               <div class="map-legend" id="map-legend" hidden></div>
               <output class="map-tooltip" id="map-tooltip" hidden></output>
             </div>
+            <p class="map-breaks-note" id="map-manual-breaks-note" hidden></p>
+            <div class="map-layers" id="map-layers" hidden></div>
+            <section class="flow-panel" id="flow-panel" aria-label="Fluxos origem-destino">
+              <div class="flow-grid">
+                <label>Origem<select id="flow-origin"></select></label>
+                <label>Destino<select id="flow-destination"></select></label>
+                <label>Peso<select id="flow-weight"><option value="">Contagem de registros</option></select></label>
+                <label>Geocódigos fora do mapa<select id="flow-unknown">
+                  <option value="exclude">Excluir</option><option value="include">Incluir mesmo assim</option>
+                </select></label>
+                <label>Distância<select id="flow-distance">
+                  <option value="">Não calcular</option>
+                  <option value="geographic-haversine">Geográfica (graus, Haversine)</option>
+                  <option value="planar">Planar (unidades do mapa)</option>
+                </select></label>
+                <label>Arcos no mapa<select id="flow-arc-limit">
+                  <option value="0">Nenhum</option><option value="10">10 maiores</option>
+                  <option value="25" selected>25 maiores</option><option value="50">50 maiores</option>
+                </select></label>
+                <button class="secondary-button" id="flow-run" type="button" disabled>Calcular fluxos</button>
+              </div>
+              <p class="compatibility-note">A distância só é calculada quando você diz em que modelo o mapa está: nada aqui adivinha se as coordenadas são graus ou unidades projetadas. Os fluxos são lidos dos registros brutos, sem passar pela tabulação.</p>
+              <div class="flow-report" id="flow-report" hidden></div>
+            </section>
           </div>
 
           <div class="view-panel" id="statistics-view" data-panel="statistics" hidden>
