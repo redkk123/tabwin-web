@@ -1,15 +1,15 @@
 {
-  "revision": "r11-4-6-microdata-join-completes-transform-pipeline",
+  "revision": "r11-6-epidemiology-rates-and-direct-standardization",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 392,
-    "passed": 392,
+    "total": 403,
+    "passed": 403,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 24,
-    "e2e_passed": 24
+    "e2e_total": 25,
+    "e2e_passed": 25
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -267,7 +267,10 @@
     "r11-4-5-bind-rows-stack-second-csv-tsv-source-union-columns-origin-marker",
     "r11-4-5-worker-synthesizes-pipeline-field-type-by-value-inspection-not-fixed-numeric",
     "r11-4-6-microdata-join-inner-left-right-full-explicit-key-nn-blocked-cardinality-diagnostic",
-    "transform-pipeline-complete-11-verbs-plus-equivalent-r-python-code-view"
+    "transform-pipeline-complete-11-verbs-plus-equivalent-r-python-code-view",
+    "r11-6-crude-rate-byar-poisson-confidence-interval-null-on-zero-denominator",
+    "r11-6-direct-age-standardization-user-supplied-standard-population-no-hardcoded-reference-numbers",
+    "r11-6-epidemiology-statistics-panel-operation-crude-and-standardized-rates-with-ci"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -346,9 +349,8 @@
     "golden_modified_to_pass": false
   },
   "next": [
+    "r11-6-2-standardized-rate-ratio-and-indirect-standardization-smr",
     "transform-pipeline-persist-to-recipe-then-schema-drift-aware-re-execution-and-dbf-second-source",
-    "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
-    "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",
     "continue-cataloged-tabwin-415-feature-families",

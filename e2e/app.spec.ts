@@ -847,3 +847,43 @@ test('join brings a second base\'s column onto the records by key, keeping the l
   await expect(body.locator('tr', { hasText: 'AM' })).toContainText('4.200');
   await expect(body.locator('tr', { hasText: 'SP' })).toHaveCount(0);
 });
+
+test('the epidemiology panel gives crude and age-standardized rates with confidence intervals', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/epi-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  // Build a table with age-group rows and events/population/standard columns.
+  await page.locator('#row-field').selectOption('FAIXA');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('OBITOS');
+  await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
+  await page.locator('#extra-measure-field').selectOption('POP');
+  await page.locator('#extra-measure-add').click();
+  await page.locator('#extra-measure-field').selectOption('PADRAO');
+  await page.locator('#extra-measure-add').click();
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('epidemiology');
+  await page.locator('#statistics-x').selectOption('0'); // events (OBITOS)
+  await page.locator('#statistics-y').selectOption('1'); // population (POP)
+  await page.locator('#epi-standard').selectOption('2'); // standard weight (PADRAO)
+  await page.locator('#epi-per').selectOption('1000');
+
+  const result = page.locator('#statistics-result');
+  // Crude 25/1500 = 16.67 per 1000; standardized (equal weights) = 22.5.
+  await expect(result).toContainText('Taxa bruta');
+  await expect(result).toContainText('16,67');
+  await expect(result).toContainText('Taxa padronizada');
+  await expect(result).toContainText('22,5');
+  // The old stratum's crude rate is 40 per 1000 with a Byar interval.
+  await expect(result.locator('tr', { hasText: '60+' })).toContainText('40');
+  await expect(result).toContainText('Byar');
+
+  // Dropping the standard leaves only the crude rate - no standardized row.
+  await page.locator('#epi-standard').selectOption('');
+  await expect(result).toContainText('Taxa bruta');
+  await expect(result).not.toContainText('Taxa padronizada');
+});

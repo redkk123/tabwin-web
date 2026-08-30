@@ -390,6 +390,19 @@ seria falso. O que foi feito:
   dedupe, group_by+summarise, bind_rows, join) mais "ver código
   equivalente". `npm run check`: **392/392**. `npm run e2e`: **24/24**.
 
+- **R11.6 — Taxas epidemiológicas e padronização por idade (primeiro corte).**
+  IC de taxa bruta (Byar/Poisson) e padronização direta, com a matemática
+  verificável e testada. **Nenhuma população-padrão embutida**: reproduzir os
+  pesos exatos da OMS/IBGE de memória arriscaria fabricar dado de referência,
+  o que o projeto proíbe — a população-padrão é entrada, trazida pelo usuário
+  como coluna (juntando a tabela oficial com o `join` de R11.4.6). Denominador
+  zero → "—", nunca taxa inventada; estrato sem população/padrão é pulado e
+  contado, nunca zerado. Propriedade ancorada em teste: padronizar pela
+  própria população reproduz a taxa bruta. Nova operação "Taxas e
+  padronização" no painel Estatística: eventos + população (+ padrão
+  opcional) → taxa bruta e padronizada com IC 95%, e tabela por estrato.
+  `npm run check`: **403/403**. `npm run e2e`: **25/25**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

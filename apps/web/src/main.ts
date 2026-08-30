@@ -116,6 +116,11 @@ import {
   simpleLinearRegression,
 } from '../../../packages/analysis/src/statistics.ts';
 import {
+  crudeRateInterval,
+  directlyStandardizedRate,
+  type StandardizationStratum,
+} from '../../../packages/analysis/src/epidemiology.ts';
+import {
   compareTables,
   type RowMatchMode,
   type TableComparisonResult,
@@ -532,8 +537,13 @@ const mapLegend = element<HTMLElement>('#map-legend');
 const mapTooltip = element<HTMLOutputElement>('#map-tooltip');
 const statisticsOperation = element<HTMLSelectElement>('#statistics-operation');
 const statisticsX = element<HTMLSelectElement>('#statistics-x');
+const statisticsXLabel = element<HTMLElement>('#statistics-x-label');
 const statisticsY = element<HTMLSelectElement>('#statistics-y');
 const statisticsYLabel = element<HTMLElement>('#statistics-y-label');
+const epiStandard = element<HTMLSelectElement>('#epi-standard');
+const epiStandardLabel = element<HTMLElement>('#epi-standard-label');
+const epiPer = element<HTMLSelectElement>('#epi-per');
+const epiPerLabel = element<HTMLElement>('#epi-per-label');
 const histogramBinsLabel = element<HTMLElement>('#histogram-bins-label');
 const histogramBins = element<HTMLInputElement>('#histogram-bins');
 const histogramGaussianLabel = element<HTMLElement>('#histogram-gaussian-label');
@@ -4285,9 +4295,17 @@ function statisticCard(label: string, value: string): HTMLElement {
 function renderStatistics(): void {
   const operation = statisticsOperation.value;
   const pairedOperation = operation === 'correlation' || operation === 'regression';
-  statisticsYLabel.hidden = !pairedOperation;
+  const epidemiology = operation === 'epidemiology';
+  // For epidemiology, X is the event count and Y the population; the labels
+  // say so instead of the generic X/Y.
+  statisticsXLabel.firstChild!.textContent = epidemiology ? 'Óbitos/eventos' : 'Coluna X';
+  statisticsYLabel.firstChild!.textContent = epidemiology ? 'População' : 'Coluna Y';
+  statisticsYLabel.hidden = !pairedOperation && !epidemiology;
+  epiStandardLabel.hidden = !epidemiology;
+  epiPerLabel.hidden = !epidemiology;
   histogramBinsLabel.hidden = operation !== 'histogram';
   histogramGaussianLabel.hidden = operation !== 'histogram';
+  if (epidemiology) populateEpiStandardColumn();
   statisticsResult.replaceChildren();
   if (!currentResult?.columns.length) {
     const message = document.createElement('p');
@@ -4314,6 +4332,8 @@ function renderStatistics(): void {
       ];
       for (const [label, value] of values) grid.append(statisticCard(label, numberFormat.format(value)));
       statisticsResult.append(grid);
+    } else if (operation === 'epidemiology') {
+      renderEpidemiology();
     } else if (operation === 'correlation') {
       const correlation = pearsonCorrelation(x, statisticsColumn(Number(statisticsY.value)));
       statisticsResult.append(statisticCard('Coeficiente de Pearson (r)', numberFormat.format(correlation)));
@@ -4382,6 +4402,109 @@ function renderStatistics(): void {
     message.textContent = error instanceof Error ? error.message : String(error);
     statisticsResult.append(message);
   }
+}
+
+function populateEpiStandardColumn(): void {
+  const previous = epiStandard.value;
+  epiStandard.replaceChildren(new Option('— só taxa bruta —', ''));
+  currentResult?.columns.forEach((column, index) => {
+    epiStandard.add(new Option(column.label, String(index)));
+  });
+  epiStandard.value = [...epiStandard.options].some((option) => option.value === previous) ? previous : '';
+}
+
+/** A rate and its interval, honest about a null (no denominator). */
+function epiRateText(rate: number | null, lower: number | null, upper: number | null): string {
+  if (rate === null) return '—';
+  return `${numberFormat.format(rate)} (${numberFormat.format(lower ?? 0)}–${numberFormat.format(upper ?? 0)})`;
+}
+
+function renderEpidemiology(): void {
+  if (!currentResult || currentResult.columns.length < 2) {
+    const message = document.createElement('p');
+    message.textContent = 'Taxas precisam de ao menos duas colunas: uma de eventos e uma de população.';
+    statisticsResult.append(message);
+    return;
+  }
+  const per = Number(epiPer.value) || 100_000;
+  const eventsCol = statisticsColumn(Number(statisticsX.value));
+  const populationCol = statisticsColumn(Number(statisticsY.value));
+  const standardIndex = epiStandard.value === '' ? -1 : Number(epiStandard.value);
+  const standardCol = standardIndex >= 0 ? statisticsColumn(standardIndex) : null;
+
+  let nonIntegerEvents = false;
+  const strata: StandardizationStratum[] = currentResult.rows.map((row, index) => {
+    const rawEvents = eventsCol[index] ?? 0;
+    const events = Math.round(rawEvents);
+    if (events !== rawEvents) nonIntegerEvents = true;
+    return {
+      label: row.label,
+      events,
+      population: populationCol[index] ?? 0,
+      standardWeight: standardCol ? (standardCol[index] ?? 0) : 0,
+    };
+  });
+
+  // Summary cards: crude rate over all strata, and the standardized rate if a
+  // standard was chosen.
+  const grid = document.createElement('div');
+  grid.className = 'statistics-grid';
+  const totalEvents = strata.reduce((sum, stratum) => sum + stratum.events, 0);
+  const totalPopulation = strata.reduce((sum, stratum) => sum + stratum.population, 0);
+  const overallCrude = crudeRateInterval(totalEvents, totalPopulation, per);
+  grid.append(statisticCard(`Taxa bruta (por ${integerFormat.format(per)})`, epiRateText(overallCrude.rate, overallCrude.lower, overallCrude.upper)));
+
+  if (standardCol) {
+    const standardization = directlyStandardizedRate(strata, per);
+    grid.append(statisticCard(`Taxa padronizada (por ${integerFormat.format(per)})`,
+      epiRateText(standardization.standardizedRate, standardization.lower, standardization.upper)));
+    if (standardization.strataSkipped > 0) {
+      grid.append(statisticCard('Estratos sem população/padrão', integerFormat.format(standardization.strataSkipped)));
+    }
+  }
+  statisticsResult.append(grid);
+
+  // Per-stratum table: label, events, population, rate with CI.
+  const scroll = document.createElement('div');
+  scroll.className = 'compare-table-scroll';
+  const table = document.createElement('table');
+  table.className = 'compare-table';
+  const head = document.createElement('tr');
+  for (const heading of ['Estrato', 'Eventos', 'População', `Taxa (IC95%, por ${integerFormat.format(per)})`]) {
+    const th = document.createElement('th');
+    th.textContent = heading;
+    head.append(th);
+  }
+  const thead = document.createElement('thead');
+  thead.append(head);
+  const body = document.createElement('tbody');
+  for (const stratum of strata) {
+    const interval = crudeRateInterval(stratum.events, stratum.population, per);
+    const tr = document.createElement('tr');
+    for (const value of [
+      stratum.label ?? '',
+      integerFormat.format(stratum.events),
+      numberFormat.format(stratum.population),
+      epiRateText(interval.rate, interval.lower, interval.upper),
+    ]) {
+      const td = document.createElement('td');
+      td.textContent = value;
+      tr.append(td);
+    }
+    body.append(tr);
+  }
+  table.append(thead, body);
+  scroll.append(table);
+  statisticsResult.append(scroll);
+
+  const note = document.createElement('p');
+  note.className = 'compatibility-note';
+  const parts = ['IC por Byar (Poisson); denominador zero mostra "—", nunca uma taxa inventada.'];
+  if (standardCol) parts.push('Padronização direta: a coluna de padrão é a população-padrão por estrato (junte a tabela oficial OMS/IBGE por "Juntar outra base").');
+  else parts.push('Escolha uma coluna de população-padrão para a taxa padronizada por idade.');
+  if (nonIntegerEvents) parts.push('Alguns valores de evento não eram inteiros e foram arredondados para o IC de contagem.');
+  note.textContent = parts.join(' ');
+  statisticsResult.append(note);
 }
 
 /**
@@ -7041,7 +7164,7 @@ chart.addEventListener('keydown', (event) => {
 chartPrintButton.addEventListener('click', printChart);
 updateChartBindingControls();
 applyChartZoom();
-for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins, histogramGaussian]) {
+for (const control of [statisticsOperation, statisticsX, statisticsY, histogramBins, histogramGaussian, epiStandard, epiPer]) {
   control.addEventListener('change', renderStatistics);
 }
 chartSvgButton.addEventListener('click', exportChartSvg);
