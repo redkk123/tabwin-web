@@ -39,6 +39,11 @@ import {
   createAuditScanAccumulator,
   type AuditScanResult,
 } from '../../../packages/analysis/src/anomaly-orchestrator.ts';
+import {
+  applyTransformPipeline,
+  type TransformStep,
+  type TransformStepResult,
+} from '../../../packages/core/src/transform-pipeline.ts';
 import { createTabulationResultCache } from '../../../packages/core/src/tabulation-cache.ts';
 import type {
   CrossFieldRuleSpec,
@@ -171,10 +176,26 @@ interface AppendRequest {
   source: DatasetSource;
 }
 
+/**
+ * Materializes every currently retained source into memory, runs the
+ * transform pipeline over it, and - on success - replaces the active dataset
+ * with the result, exactly like `open`/`append` do. There is no in-place
+ * variant: a binary (DBC/DBF) source is normally re-decoded from bytes on
+ * every request rather than held resident, but a pipeline step can drop or
+ * rewrite values in ways nothing downstream can undo, so its output has to
+ * become the new resident source of truth, not a view over the old one.
+ */
+interface TransformApplyRequest {
+  type: 'transform-apply';
+  requestId: number;
+  steps: TransformStep[];
+  conversions?: ConversionRegistry;
+}
+
 type DatasetRequest =
   | OpenRequest | AppendRequest | TabulateRequest
   | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest
-  | FlowRequest | MicrodatasusCsvRequest | AuditScanRequest;
+  | FlowRequest | MicrodatasusCsvRequest | AuditScanRequest | TransformApplyRequest;
 
 const workerScope: Worker = self as unknown as Worker;
 const BATCH_RECORDS = 5_000;
@@ -448,6 +469,44 @@ function handle(request: DatasetRequest): void {
       streamAll(request.requestId, projectedFields, (batch) => accumulator.push(batch.records));
       const result: AuditScanResult = accumulator.finish();
       post({ type: 'audit-scan-ready', requestId: request.requestId, result });
+      return;
+    }
+    case 'transform-apply': {
+      if (!header) throw new Error('Nenhum conjunto de dados aberto');
+      const originalHeader = header;
+      const originalFields = originalHeader.fields.map((field) => field.name);
+
+      // No projection: a step the user adds later can reference any field
+      // that survived so far, and the final field set is only known once the
+      // whole pipeline has run - the same reason "selected-dbf" also reads
+      // every declared field instead of guessing which ones matter.
+      const collected: DataRecord[] = [];
+      streamAll(request.requestId, undefined, (batch) => { for (const record of batch.records) collected.push(record); });
+
+      const outcome = applyTransformPipeline(collected, originalFields, request.steps, request.conversions ?? {});
+
+      const originalFieldByName = new Map(originalHeader.fields.map((field) => [field.name, field]));
+      const fields: DbfField[] = outcome.fields.map((field) => {
+        const original = originalFieldByName.get(field.originalName);
+        // Cannot actually be missing: applyTransformPipeline only ever
+        // carries a field's originalName forward from this exact map.
+        if (!original) throw new Error(`internal: campo original ${field.originalName} não encontrado`);
+        return { ...original, name: field.name };
+      });
+      const nextHeader: DbfHeader = {
+        version: 0x03,
+        dateOfLastUpdate: new Date(),
+        headerLength: 32 + fields.length * 32 + 1,
+        recordLength: 1 + fields.reduce((sum, field) => sum + field.length, 0),
+        fields,
+        recordCount: outcome.records.length,
+      };
+
+      sources = [{ kind: 'records', name: 'Dados transformados', records: outcome.records as DbfRecord[] }];
+      header = nextHeader;
+      resultCache.clear();
+      const steps: TransformStepResult[] = outcome.steps;
+      post({ type: 'transform-applied', requestId: request.requestId, header, recordCount: header.recordCount, steps });
       return;
     }
   }

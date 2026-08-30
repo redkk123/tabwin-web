@@ -146,11 +146,11 @@ Isso entra na receita. **Antes de congelar qual padrão brasileiro**, é
 preciso uma rodada própria de evidência e documentação: isso vira parte da
 metodologia científica da ferramenta, não uma constante no código.
 
-## 4.13 Auditoria estatística e comparação de tabelas
+## 4.13 Auditoria estatística, comparação de tabelas e transformação de dados
 
-**Estado em 2026-08-30: NÚCLEO, ORQUESTRADOR E UI DE INVESTIGAÇÃO INTEGRADOS**
-**(R11.0–R11.3); PIPELINE DE TRANSFORMAÇÃO E FÓRMULAS ESTILO EXCEL AINDA NÃO**
-**EXISTEM.** Especificação
+**Estado em 2026-08-30: NÚCLEO, ORQUESTRADOR, UI DE INVESTIGAÇÃO E UM PRIMEIRO**
+**PIPELINE DE TRANSFORMAÇÃO INTEGRADOS (R11.0–R11.4); FÓRMULAS ESTILO EXCEL**
+**AINDA NÃO EXISTEM.** Especificação
 completa em `docs/product/TABWIN_WEB_MASTER_PRE_UI_R11_2.md` (recebida do
 ChatGPT como spec de engenharia + pré-implementação de núcleo). Esse
 documento tem 3.656 linhas e cobre seis frentes — aquisição, limpeza,
@@ -240,13 +240,36 @@ seria falso. O que foi feito:
   "Marcar como esperado"/"Restaurar" funcionam mesmo depois de uma nova
   rodada de varredura.
 
-**Deliberadamente fora desta passada, e por quê:** o pipeline de
-transformação (`select`/`filter`/`mutate`/`recode`/`dedupe`/`bind`/`join`/
-`group by`, ao estilo do que o Wanderson ensina em R/dplyr — ver conversa com
-o ChatGPT em 2026-08-30) e o registro de funções estilo Excel (`=SOMA(...)`,
-`=SE(...)`, mais funções específicas de epidemiologia como `TAXA`/`ZSCORE`).
-Cada um é, pelo cronograma do próprio spec, uma faixa própria (R11.4 a
-R11.6). Fazer qualquer um deles rápido e mal seria pior do que não fazer.
+- **R11.4 — Pipeline de transformação, primeiro corte.**
+  `packages/core/src/transform-pipeline.ts`, cinco tipos de etapa
+  (`select-columns`/`filter-rows`/`recode`/`missing-value-policy`/`dedupe`),
+  ao estilo do que o Wanderson ensina em R/dplyr (ver conversa com o ChatGPT
+  em 2026-08-30). Cada etapa valida e roda contra o schema **como ele está
+  naquele ponto do pipeline** — um `select-columns` antes pode derrubar um
+  campo que uma etapa depois dependa, e isso falha com uma mensagem clara
+  em vez de operar sobre `undefined`. Aplicação é tudo-ou-nada: a primeira
+  etapa inválida cancela o pipeline inteiro, nenhum resultado parcial.
+  Aplicar **substitui o conjunto ativo da sessão**, como o "Combinar" já
+  faz — mesmo uma fonte binária normalmente decodificada por streaming vira
+  residente uma vez transformada, porque uma etapa pode reescrever valores
+  de um jeito que nada a jusante desfaz. "Restaurar dados originais" reabre
+  os arquivos sem aplicar nada; as etapas continuam na lista. Achado e
+  corrigido antes de qualquer teste existir: a primeira versão reaplicava
+  sobre o que já estivesse ativo, então um segundo clique em "Aplicar"
+  compunha sobre a própria saída anterior — corrigido para sempre recomeçar
+  do arquivo original a cada aplicação.
+  Fora desta rodada, com o motivo registrado no handoff: `mutate()` por
+  fórmula (o mesmo motor de expressões que R11.5 vai construir — não vale
+  fazer duas vezes), `join` de microdados, `bind_rows` (o "Combinar"
+  existente cobre o caso comum), `group_by()+summarise()` (a tabulação
+  comum já cobre isso), "ver código equivalente" em R/Python, e reexecução
+  com detecção de schema drift.
+  `npm run check`: **326/326**. `npm run e2e`: **17/17**.
+
+**Deliberadamente fora desta passada, e por quê:** o registro de funções
+estilo Excel (`=SOMA(...)`, `=SE(...)`, mais funções específicas de
+epidemiologia como `TAXA`/`ZSCORE`) — pelo cronograma do próprio spec, uma
+faixa própria (R11.5). Fazer rápido e mal seria pior do que não fazer.
 
 ---
 

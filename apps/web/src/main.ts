@@ -25,6 +25,9 @@ import {
   type TableOperation,
   type TabulationResult,
   type TotalPolicy,
+  type RecodeOtherwise,
+  type TransformStep,
+  type TransformStepResult,
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
@@ -265,6 +268,38 @@ const combinationCount = element<HTMLElement>('#combination-count');
 const combinationSummary = element<HTMLElement>('#combination-summary');
 const combinationProfileButton = element<HTMLButtonElement>('#combination-profile-button');
 const combinationList = element<HTMLElement>('#combination-list');
+const transformStepKind = element<HTMLSelectElement>('#transform-step-kind');
+const transformConfigByKind: Record<TransformStep['kind'], HTMLElement> = {
+  'select-columns': element<HTMLElement>('#transform-config-select-columns'),
+  'filter-rows': element<HTMLElement>('#transform-config-filter-rows'),
+  recode: element<HTMLElement>('#transform-config-recode'),
+  'missing-value-policy': element<HTMLElement>('#transform-config-missing-value-policy'),
+  dedupe: element<HTMLElement>('#transform-config-dedupe'),
+};
+const transformSelectFields = element<HTMLSelectElement>('#transform-select-fields');
+const transformFilterField = element<HTMLSelectElement>('#transform-filter-field');
+const transformFilterKind = element<HTMLSelectElement>('#transform-filter-kind');
+const transformFilterMode = element<HTMLSelectElement>('#transform-filter-mode');
+const transformFilterCategoriesWrap = element<HTMLElement>('#transform-filter-categories-wrap');
+const transformFilterCategories = element<HTMLInputElement>('#transform-filter-categories');
+const transformFilterRangeWrap = element<HTMLElement>('#transform-filter-range-wrap');
+const transformFilterMinimum = element<HTMLInputElement>('#transform-filter-minimum');
+const transformFilterMaximum = element<HTMLInputElement>('#transform-filter-maximum');
+const transformRecodeField = element<HTMLSelectElement>('#transform-recode-field');
+const transformRecodeRowsContainer = element<HTMLElement>('#transform-recode-rows');
+const transformRecodeAddRow = element<HTMLButtonElement>('#transform-recode-add-row');
+const transformRecodeOtherwise = element<HTMLSelectElement>('#transform-recode-otherwise');
+const transformRecodeOtherwiseLabelWrap = element<HTMLElement>('#transform-recode-otherwise-label-wrap');
+const transformRecodeOtherwiseLabel = element<HTMLInputElement>('#transform-recode-otherwise-label');
+const transformMissingField = element<HTMLSelectElement>('#transform-missing-field');
+const transformMissingValues = element<HTMLInputElement>('#transform-missing-values');
+const transformDedupeFields = element<HTMLSelectElement>('#transform-dedupe-fields');
+const transformAddStep = element<HTMLButtonElement>('#transform-add-step');
+const transformStepList = element<HTMLElement>('#transform-step-list');
+const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
+const transformApplyButton = element<HTMLButtonElement>('#transform-apply-button');
+const transformResult = element<HTMLElement>('#transform-result');
+const transformCount = element<HTMLElement>('#transform-count');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
 const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
 const recipeInput = element<HTMLInputElement>('#recipe-input');
@@ -539,6 +574,10 @@ let lastCombinationProfile: FieldCombinationProfile | null = null;
 let lastInvestigateResult: AuditScanResult | null = null;
 /** Session-local only: a dismissal never survives a reload, and a fresh dataset clears it. */
 const dismissedInvestigateSignalIds = new Set<string>();
+let transformSteps: TransformStep[] = [];
+let transformStepSequence = 0;
+/** Draft rows for the recode step currently being configured; committed into a step only on "Adicionar etapa". */
+let transformRecodeRows: Array<{ from: string; to: string }> = [{ from: '', to: '' }];
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -714,6 +753,7 @@ function populateControls(preferredField?: string): void {
   populateFilterFields();
   populateQualityFields();
   populateInvestigateFields();
+  populateTransformFields();
   populateCrossFieldFields();
   populateCombinationFields();
   populateConversions();
@@ -1177,6 +1217,299 @@ async function runInvestigation(): Promise<void> {
     showToast(message, true);
   } finally {
     updateInvestigateRunState();
+  }
+}
+
+function populateTransformFields(): void {
+  if (!dbfHeader) return;
+  const names = dbfHeader.fields.map((field) => field.name);
+  const options = () => dbfHeader!.fields.map((field) => new Option(selectionLabel(field.name), field.name));
+
+  const previousSelect = new Set(selectedCatalogValues(transformSelectFields));
+  transformSelectFields.replaceChildren(...options());
+  for (const option of transformSelectFields.options) option.selected = previousSelect.has(option.value);
+
+  const previousFilterField = transformFilterField.value;
+  transformFilterField.replaceChildren(...options());
+  transformFilterField.value = names.includes(previousFilterField) ? previousFilterField : (names[0] ?? '');
+
+  const previousRecodeField = transformRecodeField.value;
+  transformRecodeField.replaceChildren(...options());
+  transformRecodeField.value = names.includes(previousRecodeField) ? previousRecodeField : (names[0] ?? '');
+
+  const previousMissingField = transformMissingField.value;
+  transformMissingField.replaceChildren(...options());
+  transformMissingField.value = names.includes(previousMissingField) ? previousMissingField : (names[0] ?? '');
+
+  const previousDedupe = new Set(selectedCatalogValues(transformDedupeFields));
+  transformDedupeFields.replaceChildren(...options());
+  for (const option of transformDedupeFields.options) option.selected = previousDedupe.has(option.value);
+
+  for (const control of [
+    transformStepKind, transformSelectFields, transformFilterField, transformFilterKind, transformFilterMode,
+    transformFilterCategories, transformFilterMinimum, transformFilterMaximum, transformRecodeField,
+    transformRecodeAddRow, transformRecodeOtherwise, transformRecodeOtherwiseLabel, transformMissingField,
+    transformMissingValues, transformDedupeFields, transformAddStep,
+  ]) control.disabled = false;
+
+  renderTransformRecodeRows();
+  updateTransformStepKindVisibility();
+  updateTransformFilterKindVisibility();
+  updateTransformRecodeOtherwiseVisibility();
+  renderTransformSteps();
+}
+
+function updateTransformStepKindVisibility(): void {
+  const active = transformStepKind.value as TransformStep['kind'];
+  for (const [kind, panel] of Object.entries(transformConfigByKind)) panel.hidden = kind !== active;
+}
+
+function updateTransformFilterKindVisibility(): void {
+  const numeric = transformFilterKind.value === 'numeric-range';
+  transformFilterCategoriesWrap.hidden = numeric;
+  transformFilterRangeWrap.hidden = !numeric;
+}
+
+function updateTransformRecodeOtherwiseVisibility(): void {
+  transformRecodeOtherwiseLabelWrap.hidden = transformRecodeOtherwise.value !== 'category';
+}
+
+function renderTransformRecodeRows(): void {
+  transformRecodeRowsContainer.replaceChildren();
+  transformRecodeRows.forEach((row, index) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'filter-rule-row transform-recode-row';
+
+    const fromLabel = document.createElement('label');
+    fromLabel.innerHTML = '<span>De <small>(valores separados por vírgula)</small></span>';
+    const fromInput = document.createElement('input');
+    fromInput.type = 'text';
+    fromInput.placeholder = '1,2,3';
+    fromInput.value = row.from;
+    fromInput.addEventListener('input', () => { row.from = fromInput.value; });
+    fromLabel.append(fromInput);
+
+    const toLabel = document.createElement('label');
+    toLabel.innerHTML = '<span>Para</span>';
+    const toInput = document.createElement('input');
+    toInput.type = 'text';
+    toInput.value = row.to;
+    toInput.addEventListener('input', () => { row.to = toInput.value; });
+    toLabel.append(toInput);
+
+    wrap.append(fromLabel, toLabel);
+    if (transformRecodeRows.length > 1) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'compare-pair-remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remover regra ${index + 1}`);
+      remove.addEventListener('click', () => {
+        transformRecodeRows.splice(index, 1);
+        renderTransformRecodeRows();
+      });
+      wrap.append(remove);
+    }
+    transformRecodeRowsContainer.append(wrap);
+  });
+}
+
+function transformStepSummary(step: TransformStep): string {
+  switch (step.kind) {
+    case 'select-columns':
+      return `Manter colunas: ${step.keepFields.map(selectionLabel).join(', ')}`;
+    case 'filter-rows': {
+      const filter = step.filters[0];
+      if (!filter) return 'Filtrar linhas';
+      const verb = filter.mode === 'exclude' ? 'Excluir' : 'Manter';
+      return filter.kind === 'numeric-range'
+        ? `${verb} ${selectionLabel(filter.field)} entre ${filter.minimum ?? '−∞'} e ${filter.maximum ?? '+∞'}`
+        : `${verb} ${selectionLabel(filter.field)} em [${filter.acceptedCategories.join(', ')}]`;
+    }
+    case 'recode':
+      return `Recodificar ${selectionLabel(step.field)} (${step.mapping.length} regra(s))`;
+    case 'missing-value-policy':
+      return `Ausentes em ${selectionLabel(step.field)}: ${step.sentinelValues.join(', ')}`;
+    case 'dedupe':
+      return `Deduplicar por ${step.keyFields.map(selectionLabel).join(', ')}`;
+  }
+}
+
+function renderTransformSteps(): void {
+  transformStepList.replaceChildren();
+  transformSteps.forEach((step, index) => {
+    const item = document.createElement('div');
+    item.className = 'active-filter';
+    const label = document.createElement('span');
+    label.textContent = `${index + 1}. ${transformStepSummary(step)}`;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.textContent = '×';
+    remove.setAttribute('aria-label', `Remover etapa ${index + 1}`);
+    remove.addEventListener('click', () => {
+      transformSteps.splice(index, 1);
+      renderTransformSteps();
+    });
+    item.append(label, remove);
+    transformStepList.append(item);
+  });
+  transformCount.textContent = transformSteps.length
+    ? `${integerFormat.format(transformSteps.length)} etapa(s)`
+    : 'nenhuma etapa';
+  transformApplyButton.disabled = !dbfHeader || transformSteps.length === 0;
+}
+
+function addTransformStep(): void {
+  if (!dbfHeader) return;
+  const kind = transformStepKind.value as TransformStep['kind'];
+  const id = `transform-${++transformStepSequence}`;
+  let step: TransformStep;
+
+  if (kind === 'select-columns') {
+    const keepFields = selectedCatalogValues(transformSelectFields);
+    if (!keepFields.length) throw new Error('Escolha ao menos uma coluna para manter');
+    step = { id, kind, keepFields };
+  } else if (kind === 'filter-rows') {
+    const field = transformFilterField.value;
+    if (!field) throw new Error('Escolha um campo para o filtro');
+    const mode = transformFilterMode.value === 'exclude' ? 'exclude' as const : 'include' as const;
+    if (transformFilterKind.value === 'numeric-range') {
+      const minimumText = transformFilterMinimum.value.trim();
+      const maximumText = transformFilterMaximum.value.trim();
+      const minimum = minimumText === '' ? undefined : Number(minimumText);
+      const maximum = maximumText === '' ? undefined : Number(maximumText);
+      if (minimum === undefined && maximum === undefined) throw new Error('Informe um mínimo ou um máximo');
+      if ((minimum !== undefined && !Number.isFinite(minimum)) || (maximum !== undefined && !Number.isFinite(maximum))) {
+        throw new Error('Informe limites numéricos válidos');
+      }
+      step = {
+        id, kind, filters: [{
+          field, kind: 'numeric-range', mode,
+          ...(minimum !== undefined ? { minimum } : {}), ...(maximum !== undefined ? { maximum } : {}),
+        }],
+      };
+    } else {
+      const acceptedCategories = transformFilterCategories.value.split(',').map((value) => value.trim()).filter(Boolean);
+      if (!acceptedCategories.length) throw new Error('Informe ao menos um valor aceito');
+      step = { id, kind, filters: [{ field, mode, acceptedCategories }] };
+    }
+  } else if (kind === 'recode') {
+    const field = transformRecodeField.value;
+    if (!field) throw new Error('Escolha um campo para recodificar');
+    const mapping = transformRecodeRows
+      .map((row) => ({ from: row.from.split(',').map((value) => value.trim()).filter(Boolean), to: row.to.trim() }))
+      .filter((row) => row.from.length > 0 && row.to !== '');
+    if (!mapping.length) throw new Error('Adicione ao menos uma regra de/para válida');
+    const otherwiseKind = transformRecodeOtherwise.value;
+    const otherwiseLabel = transformRecodeOtherwiseLabel.value.trim();
+    if (otherwiseKind === 'category' && !otherwiseLabel) throw new Error('Informe o nome da categoria para valores sem correspondência');
+    const otherwise: RecodeOtherwise = otherwiseKind === 'missing' ? { policy: 'missing' }
+      : otherwiseKind === 'category' ? { policy: 'category', label: otherwiseLabel }
+      : { policy: 'keep' };
+    step = { id, kind, field, mapping, otherwise };
+  } else if (kind === 'missing-value-policy') {
+    const field = transformMissingField.value;
+    if (!field) throw new Error('Escolha um campo');
+    const sentinelValues = transformMissingValues.value.split(',').map((value) => value.trim()).filter(Boolean);
+    if (!sentinelValues.length) throw new Error('Informe ao menos um valor a tratar como ausente');
+    step = { id, kind, field, sentinelValues };
+  } else {
+    const keyFields = selectedCatalogValues(transformDedupeFields);
+    if (!keyFields.length) throw new Error('Escolha ao menos um campo-chave');
+    step = { id, kind, keyFields };
+  }
+
+  transformSteps.push(step);
+  renderTransformSteps();
+  showToast('Etapa adicionada ao pipeline; nada foi alterado até "Aplicar pipeline"');
+}
+
+function renderTransformApplyResult(steps: TransformStepResult[]): void {
+  transformResult.replaceChildren();
+  const list = document.createElement('div');
+  list.className = 'transform-history';
+  for (const step of steps) {
+    const item = document.createElement('div');
+    item.className = 'transform-history-step';
+    const title = document.createElement('strong');
+    title.textContent = step.label;
+    const counts = document.createElement('small');
+    counts.textContent = step.enabled
+      ? `${integerFormat.format(step.recordsBefore)} → ${integerFormat.format(step.recordsAfter)} registro(s)`
+      : 'desativada';
+    const detail = document.createElement('div');
+    detail.className = 'transform-history-detail';
+    detail.textContent = [...step.warnings, ...Object.entries(step.detail)
+      .map(([key, value]) => `${key}: ${integerFormat.format(value)}`)].join(' · ');
+    item.append(title, counts, detail);
+    list.append(item);
+  }
+  transformResult.append(list);
+}
+
+async function runTransformPipeline(): Promise<void> {
+  if (!dbfHeader || !transformSteps.length) return;
+  transformApplyButton.disabled = true;
+  transformResult.replaceChildren();
+  const status = document.createElement('p');
+  status.textContent = 'Aplicando pipeline…';
+  transformResult.append(status);
+  try {
+    // Re-running "Aplicar" must be idempotent: always start from the
+    // untransformed original, never compound onto whatever a previous
+    // apply left active. Without this, a second click after editing a step
+    // (or just clicking twice) would run the pipeline against its own
+    // already-transformed output - a field a later step drops would then
+    // look "missing" to an earlier step instead of failing predictably, or
+    // worse, a filter would silently mean something different the second
+    // time because the values it reads were already recoded once.
+    const { sources, fields } = await rebuildSourcesFromOriginalFiles();
+    dbfHeader = await openDataset(sources, 'Preparação do pipeline', fields);
+
+    const conversions = conversionsForFilters(
+      transformSteps.flatMap((step) => (step.kind === 'filter-rows' ? step.filters : [])),
+      transformSteps.flatMap((step) => (step.kind === 'filter-rows' ? (step.crossFieldRules ?? []) : [])),
+    );
+    const response = await askDataset<{ header: DbfHeader; recordCount: number; steps: TransformStepResult[] }>({
+      type: 'transform-apply',
+      steps: transformSteps,
+      conversions,
+    }, { label: 'Transformar dados' });
+    dbfHeader = response.header;
+    datasetRecordCount = response.recordCount;
+    populateControls();
+    updateDatasetStats();
+    clearCombinationProfile();
+    renderTransformApplyResult(response.steps);
+    transformResetButton.disabled = false;
+    showToast(`Pipeline aplicado: ${integerFormat.format(response.recordCount)} registro(s) ativo(s)`);
+    await runAnalysis();
+  } catch (error) {
+    transformResult.replaceChildren();
+    const message = error instanceof Error ? error.message : String(error);
+    const paragraph = document.createElement('p');
+    paragraph.textContent = message;
+    transformResult.append(paragraph);
+    showToast(message, true);
+  } finally {
+    transformApplyButton.disabled = transformSteps.length === 0;
+  }
+}
+
+async function resetTransformPipelineData(): Promise<void> {
+  transformResetButton.disabled = true;
+  try {
+    const { sources, fields } = await rebuildSourcesFromOriginalFiles();
+    dbfHeader = await openDataset(sources, 'Restauração dos dados originais', fields);
+    populateControls();
+    updateDatasetStats();
+    clearCombinationProfile();
+    transformResult.replaceChildren();
+    showToast('Dados originais restaurados; o pipeline continua na lista para revisar ou reaplicar');
+    await runAnalysis();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+    transformResetButton.disabled = false;
   }
 }
 
@@ -1697,6 +2030,8 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   extraMeasures = [];
   lastInvestigateResult = null;
   dismissedInvestigateSignalIds.clear();
+  transformSteps = [];
+  transformRecodeRows = [{ from: '', to: '' }];
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -1879,15 +2214,17 @@ function askDatasetWorker<T>(
   });
 }
 
-async function restoreDatasetWorker(): Promise<void> {
-  if (datasetWorker) return;
-  if (!dbfHeader || !activeDatasetFiles.length) {
-    throw new Error('Nenhum conjunto de dados aberto no trabalhador local');
-  }
-
+/**
+ * Re-reads every retained original File handle exactly as it was first
+ * opened - a CSV/TSV re-parsed, any combined DBC/DBF re-read as bytes - into
+ * the same `DatasetWorkerSource[]`/`fields` shape `openDataset` expects.
+ * Shared by crash recovery (which then demands the result match what was
+ * open before) and by discarding an applied transform pipeline (which wants
+ * exactly the opposite: the untransformed original, however different).
+ */
+async function rebuildSourcesFromOriginalFiles(): Promise<{ sources: DatasetWorkerSource[]; fields: DbfField[] | undefined }> {
+  if (!activeDatasetFiles.length) throw new Error('Nenhum conjunto de dados aberto no trabalhador local');
   const firstExtension = extensionOf(activeDatasetFiles[0]!.name);
-  let sources: DatasetWorkerSource[];
-  let fields: DbfField[] | undefined;
   if (firstExtension === 'CSV' || firstExtension === 'TSV') {
     const file = activeDatasetFiles[0]!;
     const bytes = new Uint8Array(await file.arrayBuffer());
@@ -1912,21 +2249,30 @@ async function restoreDatasetWorker(): Promise<void> {
         isDbc: extension === 'DBC',
       };
     }));
-    sources = [{ kind: 'records', name: file.name, records: parsed.records as DbfRecord[] }, ...appended];
-    fields = parsed.fields;
-  } else {
-    sources = await Promise.all(activeDatasetFiles.map(async (file) => {
-      const extension = extensionOf(file.name);
-      const bytes = new Uint8Array(await file.arrayBuffer());
-      return {
-        kind: 'binary' as const,
-        name: file.name,
-        bytes: transferableBytes(bytes),
-        isDbc: extension === 'DBC',
-      };
-    }));
+    return {
+      sources: [{ kind: 'records', name: file.name, records: parsed.records as DbfRecord[] }, ...appended],
+      fields: parsed.fields,
+    };
   }
+  const sources = await Promise.all(activeDatasetFiles.map(async (file) => {
+    const extension = extensionOf(file.name);
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return {
+      kind: 'binary' as const,
+      name: file.name,
+      bytes: transferableBytes(bytes),
+      isDbc: extension === 'DBC',
+    };
+  }));
+  return { sources, fields: undefined };
+}
 
+async function restoreDatasetWorker(): Promise<void> {
+  if (datasetWorker) return;
+  if (!dbfHeader || !activeDatasetFiles.length) {
+    throw new Error('Nenhum conjunto de dados aberto no trabalhador local');
+  }
+  const { sources, fields } = await rebuildSourcesFromOriginalFiles();
   const expectedSignature = schemaSignature(dbfHeader);
   const expectedRecords = datasetRecordCount;
   let restored: DbfHeader;
@@ -2041,6 +2387,8 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   extraMeasures = [];
   lastInvestigateResult = null;
   dismissedInvestigateSignalIds.clear();
+  transformSteps = [];
+  transformRecodeRows = [{ from: '', to: '' }];
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -5673,6 +6021,8 @@ async function openPortableTable(file: File): Promise<void> {
   extraMeasures = [];
   lastInvestigateResult = null;
   dismissedInvestigateSignalIds.clear();
+  transformSteps = [];
+  transformRecodeRows = [{ from: '', to: '' }];
   renderCrossFieldRules();
   renderExtraMeasures();
   clearCombinationProfile();
@@ -6114,6 +6464,19 @@ for (const field of combinationFields) field.addEventListener('change', () => {
   updateCombinationProfileState();
 });
 combinationProfileButton.addEventListener('click', () => void profileCombinations());
+transformStepKind.addEventListener('change', updateTransformStepKindVisibility);
+transformFilterKind.addEventListener('change', updateTransformFilterKindVisibility);
+transformRecodeOtherwise.addEventListener('change', updateTransformRecodeOtherwiseVisibility);
+transformRecodeAddRow.addEventListener('click', () => {
+  transformRecodeRows.push({ from: '', to: '' });
+  renderTransformRecodeRows();
+});
+transformAddStep.addEventListener('click', () => {
+  try { addTransformStep(); }
+  catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
+});
+transformApplyButton.addEventListener('click', () => void runTransformPipeline());
+transformResetButton.addEventListener('click', () => void resetTransformPipelineData());
 for (const control of [filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum]) {
   control.addEventListener('input', updateFilterCount);
   control.addEventListener('change', updateFilterCount);

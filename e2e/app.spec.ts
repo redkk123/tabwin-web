@@ -473,3 +473,86 @@ test('a auditoria estatística encontra um sinal real, nunca vaza o rótulo inte
   await restoreButton.click();
   await expect(page.locator('.investigate-signal', { hasText: 'Concentração incomum de MUNIC' })).toBeVisible();
 });
+
+test('the transform pipeline recodes, marks missing, filters, dedupes and drops columns - reproducibly, without touching the original file', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  // Step 1: recode SEXO M/F into full words.
+  await page.locator('#transform-step-kind').selectOption('recode');
+  await page.locator('#transform-recode-field').selectOption('SEXO');
+  const recodeInputs = page.locator('#transform-recode-rows input');
+  await recodeInputs.nth(0).fill('M');
+  await recodeInputs.nth(1).fill('Masculino');
+  await page.locator('#transform-recode-add-row').click();
+  await recodeInputs.nth(2).fill('F');
+  await recodeInputs.nth(3).fill('Feminino');
+  await page.locator('#transform-add-step').click();
+
+  // Step 2: EVOLUCAO="ignorado" becomes analytically missing.
+  await page.locator('#transform-step-kind').selectOption('missing-value-policy');
+  await page.locator('#transform-missing-field').selectOption('EVOLUCAO');
+  await page.locator('#transform-missing-values').fill('ignorado');
+  await page.locator('#transform-add-step').click();
+
+  // Step 3: keep only IDADE >= 10 - drops the 20 seeded group records.
+  await page.locator('#transform-step-kind').selectOption('filter-rows');
+  await page.locator('#transform-filter-field').selectOption('IDADE');
+  await page.locator('#transform-filter-kind').selectOption('numeric-range');
+  await page.locator('#transform-filter-minimum').fill('10');
+  await page.locator('#transform-add-step').click();
+
+  // Step 4: dedupe by the now-recoded SEXO + EVOLUCAO.
+  await page.locator('#transform-step-kind').selectOption('dedupe');
+  await page.locator('#transform-dedupe-fields').selectOption(['SEXO', 'EVOLUCAO']);
+  await page.locator('#transform-add-step').click();
+
+  // Step 5: drop every column except MUNIC/IDADE/SEXO.
+  await page.locator('#transform-step-kind').selectOption('select-columns');
+  await page.locator('#transform-select-fields').selectOption(['MUNIC', 'IDADE', 'SEXO']);
+  await page.locator('#transform-add-step').click();
+
+  await expect(page.locator('#transform-count')).toContainText('5 etapa');
+
+  await page.locator('#transform-apply-button').click();
+  const result = page.locator('#transform-result');
+  await expect(result).toContainText('60 → 40');
+  await expect(result).toContainText('registrosRemovidos: 20');
+  await expect(result).toContainText('40 → 3');
+  await expect(result).toContainText('3 → 3');
+
+  // The schema everywhere else in the app reflects the transformed dataset.
+  const rowFieldOptions = await page.locator('#row-field option').allTextContents();
+  expect(rowFieldOptions.some((text) => text.includes('EVOLUCAO'))).toBe(false);
+  expect(rowFieldOptions.some((text) => text.includes('UF'))).toBe(false);
+
+  await page.locator('#row-field').selectOption('SEXO');
+  await page.locator('#analysis-form').evaluate((form) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toContainText('Feminino');
+  await expect(page.locator('#result-table tbody')).toContainText('Masculino');
+  await expect(page.locator('#result-table')).toContainText('3');
+
+  // Re-running "Aplicar" is idempotent: it starts from the untransformed
+  // original every time, never compounding onto its own previous output.
+  await page.locator('#transform-apply-button').click();
+  await expect(result).toContainText('40 → 3');
+  const secondRunText = await result.textContent();
+  await page.locator('#transform-apply-button').click();
+  await expect(result).toContainText('40 → 3');
+  await expect(result).toHaveText(secondRunText ?? '');
+
+  // The original file itself was never touched: restoring brings every
+  // column and the raw M/F values straight back.
+  await page.locator('#transform-reset-button').click();
+  // resetTransformPipelineData() is async - wait for the row-field dropdown
+  // to actually reflect the restored schema instead of racing it.
+  await expect(page.locator('#row-field')).toContainText('EVOLUCAO');
+  await page.locator('#row-field').selectOption('SEXO');
+  await page.locator('#analysis-form').evaluate((form) => form.requestSubmit());
+  const restoredBody = page.locator('#result-table tbody');
+  await expect(restoredBody).toContainText('F');
+  await expect(restoredBody).not.toContainText('Feminino');
+  await expect(page.locator('#result-table')).toContainText('60');
+});

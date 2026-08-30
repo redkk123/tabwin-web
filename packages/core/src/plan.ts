@@ -1,4 +1,4 @@
-import type { FilterSpec, MeasureSpec, QueryPlan, TabulationSpec, TotalPolicy } from './model.js';
+import type { CrossFieldRuleSpec, FilterSpec, MeasureSpec, QueryPlan, TabulationSpec, TotalPolicy } from './model.js';
 
 export class QueryPlanError extends Error {
   constructor(message: string) {
@@ -8,10 +8,11 @@ export class QueryPlanError extends Error {
 }
 
 /**
- * Shared by ordinary filters and by cross-field rule conditions, so a rule can
- * never accept a predicate that a filter would reject.
+ * Shared by ordinary filters, cross-field rule conditions, and the
+ * transform-pipeline filter-rows step, so none of them can ever accept a
+ * predicate that another rejects. Exported for that reuse.
  */
-function validateFilter(filter: FilterSpec, label: string): void {
+export function validateFilter(filter: FilterSpec, label: string): void {
   if (typeof filter?.field !== 'string' || !filter.field.trim()) throw new QueryPlanError(`${label} has no field`);
   if (filter.origin !== undefined && filter.origin !== 'data-quality') {
     throw new QueryPlanError(`${label} origin is invalid`);
@@ -38,6 +39,30 @@ function validateFilter(filter: FilterSpec, label: string): void {
   } else if (filter.acceptedCategories.length === 0 && !filter.includeUnclassified) {
     throw new QueryPlanError(`${label} has no selected categories`);
   }
+}
+
+/**
+ * Structural shape shared by every cross-field rule, wherever it is
+ * declared - a QueryPlan's `crossFieldRules`, or a transform-pipeline
+ * filter-rows step. `id` uniqueness and any warnings are the caller's
+ * concern, since what a rule warns about differs by context (a plan warns
+ * about the tabulation; a pipeline step would warn about the dataset).
+ */
+export function validateCrossFieldRuleShape(rule: CrossFieldRuleSpec, label: string): void {
+  if (typeof rule.id !== 'string' || !rule.id.trim()) throw new QueryPlanError(`${label} has no id`);
+  if (typeof rule.label !== 'string' || !rule.label.trim()) throw new QueryPlanError(`${label} has no label`);
+  if (rule.action !== 'flag' && rule.action !== 'exclude') throw new QueryPlanError(`${label} action is invalid`);
+  if (!Array.isArray(rule.conditions) || rule.conditions.length < 2) {
+    // One condition is an ordinary filter; the point of this rule is the
+    // combination that no single-field filter can express.
+    throw new QueryPlanError(`${label} requires at least two conditions`);
+  }
+  const fields = new Set<string>();
+  for (const [position, condition] of rule.conditions.entries()) {
+    validateFilter(condition, `${label} condition ${position + 1}`);
+    fields.add(condition.field.trim());
+  }
+  if (fields.size < 2) throw new QueryPlanError(`${label} must span at least two distinct fields`);
 }
 
 const TOTAL_POLICIES = new Set<TotalPolicy>([
@@ -135,22 +160,9 @@ export function compileQueryPlan(spec: TabulationSpec): QueryPlan {
   const ruleIds = new Set<string>();
   for (const [index, rule] of (spec.crossFieldRules ?? []).entries()) {
     const label = `cross-field rule ${index + 1}`;
-    if (typeof rule.id !== 'string' || !rule.id.trim()) throw new QueryPlanError(`${label} has no id`);
+    validateCrossFieldRuleShape(rule, label);
     if (ruleIds.has(rule.id)) throw new QueryPlanError(`${label} repeats id ${rule.id}`);
     ruleIds.add(rule.id);
-    if (typeof rule.label !== 'string' || !rule.label.trim()) throw new QueryPlanError(`${label} has no label`);
-    if (rule.action !== 'flag' && rule.action !== 'exclude') throw new QueryPlanError(`${label} action is invalid`);
-    if (!Array.isArray(rule.conditions) || rule.conditions.length < 2) {
-      // One condition is an ordinary filter; the point of this rule is the
-      // combination that no single-field filter can express.
-      throw new QueryPlanError(`${label} requires at least two conditions`);
-    }
-    const fields = new Set<string>();
-    for (const [position, condition] of rule.conditions.entries()) {
-      validateFilter(condition, `${label} condition ${position + 1}`);
-      fields.add(condition.field.trim());
-    }
-    if (fields.size < 2) throw new QueryPlanError(`${label} must span at least two distinct fields`);
     warnings.push(`cross-field rule ${rule.id} is a modern user-authored implausibility policy with no TabWin 4.15 oracle`);
     if (rule.action === 'exclude') {
       warnings.push(`cross-field rule ${rule.id} removes matching records from the tabulation`);

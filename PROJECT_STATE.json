@@ -1,15 +1,15 @@
 {
-  "revision": "r11-3-anomaly-orchestrator-plus-investigate-ui",
+  "revision": "r11-4-transform-pipeline-first-cut",
   "date": "2026-08-30",
-  "phase": "faixa-4-r11-core-orchestrator-and-audit-ui-done-transform-and-formulas-pending",
+  "phase": "faixa-4-r11-core-orchestrator-audit-ui-and-transform-pipeline-done-excel-formulas-pending",
   "tests": {
-    "total": 311,
-    "passed": 311,
+    "total": 326,
+    "passed": 326,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 16,
-    "e2e_passed": 16
+    "e2e_total": 17,
+    "e2e_passed": 17
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -304,7 +304,9 @@
     "r11-3-anomaly-orchestrator-group-vs-reference-streaming-scan-five-signal-kinds",
     "r11-3-matches-filters-shared-acceptance-boundary-independent-of-plan-dimensions",
     "r11-3-investigate-ui-signal-cards-focus-field-and-session-local-dismissal",
-    "r11-analytics-track-remaining-transform-pipeline-formulas-and-epidemiology-stats-not-implemented"
+    "r11-4-transform-pipeline-select-columns-filter-rows-recode-missing-value-policy-dedupe",
+    "r11-4-transform-apply-idempotent-always-restarts-from-original-files",
+    "r11-analytics-track-remaining-formulas-and-epidemiology-stats-not-implemented"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -329,7 +331,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-transform-pipeline-select-filter-mutate-recode-dedupe-bind-join-groupby-with-per-step-history",
+    "r11-4-2-transform-pipeline-remaining-step-kinds-mutate-cast-join-bind-groupby-and-column-rename-ui",
     "r11-5-excel-style-formula-functions-registry-sum-average-if-plus-epidemiology-rate-zscore",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",

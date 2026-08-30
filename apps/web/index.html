@@ -203,6 +203,75 @@
             <div class="combination-list" id="combination-list"></div>
             <p class="quality-note">“Criar regra” apenas prepara uma sinalização explícita para a combinação observada. Revise o contexto antes de alternar para exclusão.</p>
           </details>
+          <details class="filter-builder transform-builder">
+            <summary>Transformar dados <span id="transform-count">nenhuma etapa</span></summary>
+            <p class="quality-note">Selecionar colunas, filtrar linhas, recodificar valores, marcar ausentes e remover duplicatas — como um pipeline reproduzível, pela interface. O arquivo original nunca é alterado; cada etapa fica no histórico abaixo até você aplicar.</p>
+            <label><span>Tipo de etapa</span><select id="transform-step-kind" disabled>
+              <option value="select-columns">Selecionar colunas</option>
+              <option value="filter-rows">Filtrar linhas</option>
+              <option value="recode">Recodificar valores</option>
+              <option value="missing-value-policy">Marcar ausentes</option>
+              <option value="dedupe">Remover duplicatas</option>
+            </select></label>
+
+            <div class="transform-step-config" id="transform-config-select-columns">
+              <label><span>Colunas a manter <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-select-fields" multiple size="6" disabled></select></label>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-filter-rows" hidden>
+              <label><span>Campo</span><select id="transform-filter-field" disabled></select></label>
+              <div class="filter-rule-row">
+                <label><span>Tipo</span><select id="transform-filter-kind" disabled>
+                  <option value="categories">Valores/categorias</option>
+                  <option value="numeric-range">Intervalo numérico</option>
+                </select></label>
+                <label><span>Modo</span><select id="transform-filter-mode" disabled>
+                  <option value="include">Manter correspondentes</option>
+                  <option value="exclude">Excluir correspondentes</option>
+                </select></label>
+              </div>
+              <label id="transform-filter-categories-wrap"><span>Valores aceitos <small>(separados por vírgula)</small></span><input id="transform-filter-categories" type="text" placeholder="1,2,3" disabled></label>
+              <div class="filter-rule-row" id="transform-filter-range-wrap" hidden>
+                <label><span>Mínimo</span><input id="transform-filter-minimum" type="number" step="any" disabled></label>
+                <label><span>Máximo</span><input id="transform-filter-maximum" type="number" step="any" disabled></label>
+              </div>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-recode" hidden>
+              <label><span>Campo</span><select id="transform-recode-field" disabled></select></label>
+              <div id="transform-recode-rows"></div>
+              <button class="text-button" id="transform-recode-add-row" type="button" disabled>+ Regra de/para</button>
+              <div class="filter-rule-row">
+                <label><span>Sem correspondência</span><select id="transform-recode-otherwise" disabled>
+                  <option value="keep">Manter valor original</option>
+                  <option value="missing">Virar ausente</option>
+                  <option value="category">Virar categoria…</option>
+                </select></label>
+                <label id="transform-recode-otherwise-label-wrap" hidden><span>Nome da categoria</span><input id="transform-recode-otherwise-label" type="text" disabled></label>
+              </div>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-missing-value-policy" hidden>
+              <label><span>Campo</span><select id="transform-missing-field" disabled></select></label>
+              <label><span>Valores a tratar como ausente <small>(separados por vírgula)</small></span><input id="transform-missing-values" type="text" placeholder="9,99,Ignorado" disabled></label>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-dedupe" hidden>
+              <label><span>Campos-chave <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-dedupe-fields" multiple size="6" disabled></select></label>
+              <p class="quality-note">Mantém a primeira ocorrência de cada combinação; a ordem é a do arquivo aberto.</p>
+            </div>
+
+            <div class="quality-actions">
+              <span></span>
+              <button class="secondary-button" id="transform-add-step" type="button" disabled>Adicionar etapa</button>
+            </div>
+            <div class="active-filter-list" id="transform-step-list"></div>
+            <div class="quality-actions">
+              <button class="secondary-button" id="transform-reset-button" type="button" disabled>Restaurar dados originais</button>
+              <button class="primary-button" id="transform-apply-button" type="button" disabled>Aplicar pipeline</button>
+            </div>
+            <div id="transform-result"></div>
+          </details>
           <div class="form-row">
             <label>
               <span>Posição inicial da linha</span>
