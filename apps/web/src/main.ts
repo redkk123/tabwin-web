@@ -25,9 +25,6 @@ import {
   type TableOperation,
   type TabulationResult,
   type TotalPolicy,
-  type RecodeOtherwise,
-  type TransformStep,
-  type TransformStepResult,
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
@@ -148,6 +145,11 @@ import {
   tableExpressionFunctionCatalog,
   type TableExpressionFunctionEntry,
 } from '../../../packages/analysis/src/table-expression.ts';
+import type {
+  RecodeOtherwise,
+  TransformStep,
+  TransformStepResult,
+} from '../../../packages/analysis/src/transform-pipeline.ts';
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
@@ -279,6 +281,7 @@ const transformConfigByKind: Record<TransformStep['kind'], HTMLElement> = {
   recode: element<HTMLElement>('#transform-config-recode'),
   'missing-value-policy': element<HTMLElement>('#transform-config-missing-value-policy'),
   dedupe: element<HTMLElement>('#transform-config-dedupe'),
+  'derive-column': element<HTMLElement>('#transform-config-derive-column'),
 };
 const transformSelectFields = element<HTMLSelectElement>('#transform-select-fields');
 const transformFilterField = element<HTMLSelectElement>('#transform-filter-field');
@@ -298,6 +301,9 @@ const transformRecodeOtherwiseLabel = element<HTMLInputElement>('#transform-reco
 const transformMissingField = element<HTMLSelectElement>('#transform-missing-field');
 const transformMissingValues = element<HTMLInputElement>('#transform-missing-values');
 const transformDedupeFields = element<HTMLSelectElement>('#transform-dedupe-fields');
+const transformDeriveField = element<HTMLInputElement>('#transform-derive-field');
+const transformDeriveFormula = element<HTMLInputElement>('#transform-derive-formula');
+const transformDeriveZero = element<HTMLSelectElement>('#transform-derive-zero');
 const transformAddStep = element<HTMLButtonElement>('#transform-add-step');
 const transformStepList = element<HTMLElement>('#transform-step-list');
 const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
@@ -1258,6 +1264,7 @@ function populateTransformFields(): void {
     transformFilterCategories, transformFilterMinimum, transformFilterMaximum, transformRecodeField,
     transformRecodeAddRow, transformRecodeOtherwise, transformRecodeOtherwiseLabel, transformMissingField,
     transformMissingValues, transformDedupeFields, transformAddStep,
+    transformDeriveField, transformDeriveFormula, transformDeriveZero,
   ]) control.disabled = false;
 
   renderTransformRecodeRows();
@@ -1340,6 +1347,8 @@ function transformStepSummary(step: TransformStep): string {
       return `Ausentes em ${selectionLabel(step.field)}: ${step.sentinelValues.join(', ')}`;
     case 'dedupe':
       return `Deduplicar por ${step.keyFields.map(selectionLabel).join(', ')}`;
+    case 'derive-column':
+      return `Criar ${step.field} = ${step.formula}`;
   }
 }
 
@@ -1421,10 +1430,19 @@ function addTransformStep(): void {
     const sentinelValues = transformMissingValues.value.split(',').map((value) => value.trim()).filter(Boolean);
     if (!sentinelValues.length) throw new Error('Informe ao menos um valor a tratar como ausente');
     step = { id, kind, field, sentinelValues };
-  } else {
+  } else if (kind === 'dedupe') {
     const keyFields = selectedCatalogValues(transformDedupeFields);
     if (!keyFields.length) throw new Error('Escolha ao menos um campo-chave');
     step = { id, kind, keyFields };
+  } else {
+    const field = transformDeriveField.value.trim();
+    if (!field) throw new Error('Informe o nome da nova coluna');
+    const formula = transformDeriveFormula.value.trim();
+    if (!formula) throw new Error('Informe a fórmula');
+    step = {
+      id, kind, field, formula,
+      divisionByZero: transformDeriveZero.value === 'zero' ? 'zero' : 'error',
+    };
   }
 
   transformSteps.push(step);

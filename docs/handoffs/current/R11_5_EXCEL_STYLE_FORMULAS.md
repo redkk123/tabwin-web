@@ -1,7 +1,8 @@
 # R11.5 — Fórmulas estilo Excel, sem virar Excel
 
 **Data:** 2026-08-30
-**Estado:** concluída. Gate **346/346**, E2E **18/18**.
+**Estado:** concluída, mais a costura R11.5b com o pipeline. Gate
+**354/354**, E2E **19/19**.
 
 ## O que existia e por que não bastava
 
@@ -129,6 +130,41 @@ parser está atribuído a exatamente uma função no catálogo.
 - Verificação manual no navegador antes do E2E: a mesma fórmula, mais
   `IFERROR(LAG(...); 0)` e `ARRED(ZSCORE(...); 2)`, conferidas contra os
   valores esperados linha a linha.
+
+## R11.5b — o mesmo motor virou o `mutate()` que faltava no pipeline
+
+O handoff do R11.4 registrou que `mutate()` por fórmula ficara de fora
+porque seria o mesmo motor de expressões desta faixa, e fazer duas vezes
+seria desperdício. Com o motor pronto, a costura foi feita na mesma rodada:
+o passo `derive-column` calcula um campo numérico novo por registro, com a
+mesma linguagem, endereçada aos **campos do registro** em vez das colunas
+de uma tabulação.
+
+Para isso o parser deixou de conhecer `TabulationResult` e passou a receber
+uma lista `{ key, label }` — as colunas de uma tabulação preenchem as duas
+metades; os campos de um dataset usam o nome nas duas. `parseTableExpression`
+continua existindo como a porta de entrada da tabulação, agora fina.
+
+Duas consequências que precisaram de decisão explícita:
+
+- **Layering.** `transform-pipeline.ts` vivia em `packages/core` e passaria a
+  importar de `packages/analysis` — seria a única aresta `core → analysis` do
+  repositório inteiro, invertendo a regra que todo o resto segue. O arquivo
+  foi movido para `packages/analysis`, onde suas dependências (`matchesFilters`,
+  `validateFilter`, os tipos de `model.js`) fluem na direção certa.
+- **Campo sem original.** Um campo criado pelo pipeline não tem
+  tipo/tamanho/decimais de origem para herdar, então `TransformedField.originalName`
+  virou opcional e o Worker sintetiza uma coluna numérica para esses casos —
+  em vez de fingir uma origem que não existe.
+
+`LAG`/`ZSCORE` funcionam sobre registros também: a projeção numérica completa
+só é construída quando a fórmula realmente lê a coluna inteira
+(`expressionReadsEveryRow`), então uma fórmula linha a linha não paga por uma
+segunda cópia do dataset. Um resultado não finito **interrompe** o pipeline com
+o número do registro e a sugestão de `IFERROR`, em vez de gravar `NaN` como se
+fosse número.
+
+Gate depois desta costura: `npm run check` **354/354**, `npm run e2e` **19/19**.
 
 ## O que não entrou
 

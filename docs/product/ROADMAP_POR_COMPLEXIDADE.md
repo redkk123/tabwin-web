@@ -306,7 +306,18 @@ seria falso. O que foi feito:
   critério, e fingir isso sobre uma linha só daria ao nome um significado que
   um usuário de Excel leria errado. Também fora: `PROCV`/`VLOOKUP`,
   referências `A1:B35`, macros, e editor de fórmula com destaque de sintaxe.
-  `npm run check`: **346/346**. `npm run e2e`: **18/18**.
+  **R11.5b, na mesma rodada:** com o motor pronto, o `mutate()` que o R11.4
+  tinha deixado de fora virou o passo `derive-column` do pipeline — mesma
+  linguagem, endereçada aos campos do registro em vez das colunas de uma
+  tabulação. O parser deixou de conhecer `TabulationResult` e passou a
+  receber uma lista `{ key, label }`, que as duas formas preenchem. Duas
+  decisões explícitas caíram junto: `transform-pipeline.ts` mudou de
+  `packages/core` para `packages/analysis` (senão seria a única aresta
+  `core → analysis` do repositório, invertendo a regra que todo o resto
+  segue), e um campo criado pelo pipeline passou a ter `originalName`
+  opcional, com o Worker sintetizando uma coluna numérica — em vez de
+  fingir uma origem que não existe.
+  `npm run check`: **354/354**. `npm run e2e`: **19/19**.
 
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { applyTransformPipeline, TransformPipelineError } from '../dist/packages/core/src/transform-pipeline.js';
+import { applyTransformPipeline, TransformPipelineError } from '../dist/packages/analysis/src/transform-pipeline.js';
 
 const FIELDS = ['UF', 'MUNIC', 'IDADE', 'SEXO'];
 const RECORDS = [
@@ -159,4 +159,119 @@ test('select-columns twice in a row still traces each field back to its true ori
     { id: 's2', kind: 'select-columns', keepFields: ['MUNICIPIO'], renameFields: { MUNICIPIO: 'CIDADE' } },
   ]);
   assert.deepEqual(result.fields, [{ name: 'CIDADE', originalName: 'MUNIC' }]);
+});
+
+// --- derive-column: the pipeline's mutate(), on the R11.5 formula engine ---
+
+const NUMERIC_FIELDS = ['UF', 'OBITOS', 'POPULACAO'];
+const NUMERIC_RECORDS = [
+  { UF: 'AC', OBITOS: 10, POPULACAO: 1000 },
+  { UF: 'AM', OBITOS: 20, POPULACAO: 2000 },
+  { UF: 'SP', OBITOS: 30, POPULACAO: 0 },
+];
+
+const derive = (overrides) => ({
+  id: 'd1', kind: 'derive-column', field: 'TAXA', divisionByZero: 'error', ...overrides,
+});
+
+test('derive-column computes a new numeric field from the record\'s own fields', () => {
+  const result = applyTransformPipeline(NUMERIC_RECORDS.slice(0, 2), NUMERIC_FIELDS, [
+    derive({ formula: '=TAXA([OBITOS]; [POPULACAO]; 1000)' }),
+  ]);
+  assert.deepEqual(result.records.map((record) => record.TAXA), [10, 10]);
+  assert.equal(result.steps[0].detail.registrosCalculados, 2);
+  // The created field has no original to inherit a DBF shape from.
+  assert.deepEqual(result.fields.at(-1), { name: 'TAXA' });
+  assert.equal(result.fields.at(-1).originalName, undefined);
+});
+
+test('derive-column honours the explicit division-by-zero policy, both ways', () => {
+  assert.throws(
+    () => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [derive({ formula: 'RATIO([OBITOS]; [POPULACAO])' })]),
+    /division by zero/,
+  );
+  const zero = applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [
+    derive({ formula: 'RATIO([OBITOS]; [POPULACAO])', divisionByZero: 'zero' }),
+  ]);
+  assert.deepEqual(zero.records.map((record) => record.TAXA), [0.01, 0.01, 0]);
+});
+
+test('derive-column reports a non-finite result instead of writing it as if it were a number', () => {
+  assert.throws(
+    () => applyTransformPipeline([{ OBITOS: 'texto', POPULACAO: 10 }], ['OBITOS', 'POPULACAO'], [
+      derive({ formula: '[OBITOS] + 1' }),
+    ]),
+    /non-finite value at record 1.*IFERROR/s,
+  );
+  // IFERROR is how the author says what that record should show instead.
+  const rescued = applyTransformPipeline([{ OBITOS: 'texto', POPULACAO: 10 }], ['OBITOS', 'POPULACAO'], [
+    derive({ formula: 'IFERROR([OBITOS] + 1; 0)' }),
+  ]);
+  assert.deepEqual(rescued.records.map((record) => record.TAXA), [0]);
+});
+
+test('derive-column column-wide functions see every record, in pipeline order', () => {
+  const lag = applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [
+    derive({ field: 'ANTERIOR', formula: 'IFERROR(LAG([OBITOS]); 0)' }),
+  ]);
+  assert.deepEqual(lag.records.map((record) => record.ANTERIOR), [0, 10, 20]);
+
+  const z = applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [
+    derive({ field: 'Z', formula: 'ZSCORE([OBITOS])' }),
+  ]);
+  const scores = z.records.map((record) => record.Z);
+  assert.ok(Math.abs(scores[0] - -1) < 1e-9, 'mean 20, sample SD 10, so 10 is exactly -1');
+  assert.ok(Math.abs(scores[2] - 1) < 1e-9);
+});
+
+test('a derive-column step sees only the fields that survived the steps before it', () => {
+  // The filter runs first, so LAG sees two records, not three.
+  const result = applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [
+    { id: 'f1', kind: 'filter-rows', filters: [{ field: 'POPULACAO', kind: 'numeric-range', minimum: 1 }] },
+    derive({ field: 'ANTERIOR', formula: 'IFERROR(LAG([OBITOS]); 0)' }),
+  ]);
+  assert.deepEqual(result.records.map((record) => record.ANTERIOR), [0, 10]);
+
+  // A field dropped earlier cannot be referenced by a formula later.
+  assert.throws(() => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [
+    { id: 's1', kind: 'select-columns', keepFields: ['UF', 'OBITOS'] },
+    derive({ formula: '[POPULACAO] + 1' }),
+  ]), /missing column POPULACAO/);
+});
+
+test('a derived field becomes referencable by the steps that follow it', () => {
+  const result = applyTransformPipeline(NUMERIC_RECORDS.slice(0, 2), NUMERIC_FIELDS, [
+    derive({ field: 'TAXA', formula: 'RATE([OBITOS]; [POPULACAO]; 1000)' }),
+    derive({ id: 'd2', field: 'DOBRO', formula: '[TAXA] * 2' }),
+  ]);
+  assert.deepEqual(result.records.map((record) => record.DOBRO), [20, 20]);
+  assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'OBITOS', 'POPULACAO', 'TAXA', 'DOBRO']);
+});
+
+test('derive-column refuses a name that already exists, and a formula that cannot parse', () => {
+  assert.throws(
+    () => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [derive({ field: 'OBITOS', formula: '1' })]),
+    /field OBITOS already exists/,
+  );
+  assert.throws(
+    () => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [derive({ formula: 'eval(1)' })]),
+    /unknown function eval/,
+  );
+  assert.throws(
+    () => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [derive({ formula: '' })]),
+    /has no formula/,
+  );
+  assert.throws(
+    () => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [derive({ formula: '1', divisionByZero: 'shrug' })]),
+    /divisionByZero policy is invalid/,
+  );
+});
+
+test('a bad formula is rejected while the pipeline is validated, before any record is touched', () => {
+  const before = JSON.parse(JSON.stringify(NUMERIC_RECORDS));
+  assert.throws(() => applyTransformPipeline(NUMERIC_RECORDS, NUMERIC_FIELDS, [
+    { id: 'f1', kind: 'filter-rows', filters: [{ field: 'POPULACAO', kind: 'numeric-range', minimum: 1 }] },
+    derive({ formula: '[NAO_EXISTE] * 2' }),
+  ]), /missing column NAO_EXISTE/);
+  assert.deepEqual(NUMERIC_RECORDS, before);
 });

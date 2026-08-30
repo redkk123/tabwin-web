@@ -1,15 +1,15 @@
 {
-  "revision": "r11-5-excel-style-formula-functions",
+  "revision": "r11-5b-formula-engine-wired-into-transform-pipeline",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 346,
-    "passed": 346,
+    "total": 354,
+    "passed": 354,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 18,
-    "e2e_passed": 18
+    "e2e_total": 19,
+    "e2e_passed": 19
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -256,7 +256,9 @@
     "gaussian-fit-density-and-histogram-overlay-descriptive-not-a-normality-test",
     "chart-zoom-excluded-from-svg-png-export-and-print-not-just-from-recipe",
     "shared-axis-bounds-validation-across-recipe-and-editor",
-    "table-comparison-ui-compare-view-ab-diagnostics-csv-export"
+    "table-comparison-ui-compare-view-ab-diagnostics-csv-export",
+    "r11-5b-derive-column-transform-step-mutate-on-the-shared-formula-engine",
+    "r11-5b-transform-pipeline-moved-to-analysis-package-keeping-core-free-of-analysis-imports"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -335,7 +337,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-2-transform-pipeline-remaining-step-kinds-mutate-by-formula-cast-join-bind-groupby-and-column-rename-ui",
+    "r11-4-2-transform-pipeline-remaining-step-kinds-cast-join-bind-groupby-and-column-rename-ui",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

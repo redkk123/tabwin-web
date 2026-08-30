@@ -612,3 +612,38 @@ test('Excel-style formulas compute a derived column, and the advertised function
   await expect(page.locator('#toast')).toContainText('unknown function eval');
   await expect(table).not.toContainText('Proibida');
 });
+
+test('the transform pipeline computes a new field with the same formula language, over records', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  // mutate(): DIAS and IDADE are real fields of the record, not columns of a
+  // tabulation - the same engine, addressed against the dataset's own schema.
+  await page.locator('#transform-step-kind').selectOption('derive-column');
+  await page.locator('#transform-derive-field').fill('DIAS_POR_ANO');
+  await page.locator('#transform-derive-formula').fill('=ARRED(RAZÃO([DIAS]; [IDADE]); 3)');
+  await page.locator('#transform-add-step').click();
+  await expect(page.locator('#transform-count')).toContainText('1 etapa');
+
+  await page.locator('#transform-apply-button').click();
+  await expect(page.locator('#transform-result')).toContainText('registrosCalculados: 60');
+
+  // The derived field is a real field of the transformed dataset now, so it
+  // can be tabulated like any other.
+  await expect(page.locator('#row-field')).toContainText('DIAS_POR_ANO');
+  await page.locator('#row-field').selectOption('DIAS_POR_ANO');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  // A formula whose name is outside the registry is refused here too, and
+  // the dataset is left exactly as it was.
+  await page.locator('#transform-step-kind').selectOption('derive-column');
+  await page.locator('#transform-derive-field').fill('PROIBIDA');
+  await page.locator('#transform-derive-formula').fill('eval(1)');
+  await page.locator('#transform-add-step').click();
+  await page.locator('#transform-apply-button').click();
+  await expect(page.locator('#transform-result')).toContainText('unknown function eval');
+  await expect(page.locator('#row-field')).not.toContainText('PROIBIDA');
+});

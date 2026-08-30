@@ -212,6 +212,7 @@
               <option value="recode">Recodificar valores</option>
               <option value="missing-value-policy">Marcar ausentes</option>
               <option value="dedupe">Remover duplicatas</option>
+              <option value="derive-column">Criar coluna por fórmula</option>
             </select></label>
 
             <div class="transform-step-config" id="transform-config-select-columns">
@@ -259,6 +260,16 @@
             <div class="transform-step-config" id="transform-config-dedupe" hidden>
               <label><span>Campos-chave <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-dedupe-fields" multiple size="6" disabled></select></label>
               <p class="quality-note">Mantém a primeira ocorrência de cada combinação; a ordem é a do arquivo aberto.</p>
+            </div>
+
+            <div class="transform-step-config" id="transform-config-derive-column" hidden>
+              <label><span>Nome da nova coluna</span><input id="transform-derive-field" type="text" maxlength="60" placeholder="TAXA_100K" disabled></label>
+              <label><span>Fórmula</span><input id="transform-derive-formula" type="text" spellcheck="false" list="table-operation-function-list" placeholder="=TAXA([OBITOS]; [POPULACAO])" disabled></label>
+              <label><span>Divisão por zero</span><select id="transform-derive-zero" disabled>
+                <option value="error">Interromper</option>
+                <option value="zero">Usar zero</option>
+              </select></label>
+              <p class="quality-note">Mesma linguagem de fórmulas da coluna calculada, sobre os campos do registro. Um resultado não finito interrompe o pipeline; use <code>IFERROR(…; valor)</code> para dizer o que aquele registro deve mostrar.</p>
             </div>
 
             <div class="quality-actions">

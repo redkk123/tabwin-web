@@ -43,7 +43,7 @@ import {
   applyTransformPipeline,
   type TransformStep,
   type TransformStepResult,
-} from '../../../packages/core/src/transform-pipeline.ts';
+} from '../../../packages/analysis/src/transform-pipeline.ts';
 import { createTabulationResultCache } from '../../../packages/core/src/tabulation-cache.ts';
 import type {
   CrossFieldRuleSpec,
@@ -487,6 +487,13 @@ function handle(request: DatasetRequest): void {
 
       const originalFieldByName = new Map(originalHeader.fields.map((field) => [field.name, field]));
       const fields: DbfField[] = outcome.fields.map((field) => {
+        if (field.originalName === undefined) {
+          // A field the pipeline created (derive-column) has no original to
+          // inherit a shape from, and its values are always numeric. The
+          // width is what a DBF numeric column needs to hold a computed
+          // value without truncating it, not a measurement of this data.
+          return { name: field.name, type: 'N', length: 20, decimalCount: 6 };
+        }
         const original = originalFieldByName.get(field.originalName);
         // Cannot actually be missing: applyTransformPipeline only ever
         // carries a field's originalName forward from this exact map.

@@ -507,15 +507,26 @@ function tokenize(expression: string): Token[] {
   return tokens;
 }
 
-function resolveColumn(result: TabulationResult, reference: string): number {
+/**
+ * What a formula may address. A tabulation's columns supply both halves;
+ * a raw dataset's fields use the field name as key and label alike, which
+ * lets the same parser serve the derived-column operation and the transform
+ * pipeline's formula step without either learning about the other's shape.
+ */
+export interface ExpressionColumn {
+  key: string;
+  label: string;
+}
+
+function resolveColumn(columns: readonly ExpressionColumn[], reference: string): number {
   const numbered = /^C0*(\d+)$/i.exec(reference);
   if (numbered) {
     const index = Number(numbered[1]) - 1;
-    if (index < 0 || index >= result.columns.length) throw new Error(`expression references missing column ${reference}`);
+    if (index < 0 || index >= columns.length) throw new Error(`expression references missing column ${reference}`);
     return index;
   }
   const normalized = reference.trim().toLocaleLowerCase('pt-BR');
-  const matches = result.columns
+  const matches = columns
     .map((column, index) => ({ column, index }))
     .filter(({ column }) => column.key.toLocaleLowerCase('pt-BR') === normalized
       || column.label.trim().toLocaleLowerCase('pt-BR') === normalized);
@@ -524,7 +535,22 @@ function resolveColumn(result: TabulationResult, reference: string): number {
   return matches[0]!.index;
 }
 
-export function parseTableExpression(result: TabulationResult, expression: string): ExpressionNode {
+/** True when the formula reads a whole column, so the caller must supply every row. */
+export function expressionReadsEveryRow(node: ExpressionNode): boolean {
+  switch (node.kind) {
+    case 'call': {
+      const definition: FunctionDefinition = FUNCTIONS[node.name];
+      return (definition.columnArgs ?? []).length > 0 || node.args.some(expressionReadsEveryRow);
+    }
+    case 'unary': return expressionReadsEveryRow(node.operand);
+    case 'binary':
+    case 'comparison':
+      return expressionReadsEveryRow(node.left) || expressionReadsEveryRow(node.right);
+    default: return false;
+  }
+}
+
+export function parseExpression(columns: readonly ExpressionColumn[], expression: string): ExpressionNode {
   // An Excel user reflexively starts a formula with "=".
   const source = expression.trim().replace(/^=/, '');
   if (!source.trim()) throw new Error('table expression cannot be empty');
@@ -571,7 +597,7 @@ export function parseTableExpression(result: TabulationResult, expression: strin
     const token = consume();
     if (token.kind === 'number') return { kind: 'number', value: token.value };
     if (token.kind === 'function') return call(token.value);
-    if (token.kind === 'reference') return { kind: 'column', index: resolveColumn(result, token.value) };
+    if (token.kind === 'reference') return { kind: 'column', index: resolveColumn(columns, token.value) };
     if (token.kind === 'left') {
       const node = comparison();
       if (consume().kind !== 'right') throw new Error('table expression is missing a closing parenthesis');
@@ -671,4 +697,15 @@ function evaluate(node: ExpressionNode, context: TableExpressionContext): number
 
 export function evaluateTableExpression(node: ExpressionNode, context: TableExpressionContext): number {
   return evaluate(node, context);
+}
+
+/**
+ * The tabulation-facing entry point, kept so the derived-column operation
+ * reads the same as before this parser learned to serve raw datasets too.
+ */
+export function parseTableExpression(
+  result: { columns: readonly ExpressionColumn[] },
+  expression: string,
+): ExpressionNode {
+  return parseExpression(result.columns, expression);
 }

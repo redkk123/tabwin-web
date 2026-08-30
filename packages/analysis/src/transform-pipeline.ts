@@ -18,9 +18,14 @@
  * transactional.
  */
 
-import { validateCrossFieldRuleShape, validateFilter } from './plan.js';
-import { matchesFilters, type ConversionRegistry } from './execute.js';
-import type { CrossFieldRuleSpec, DataRecord, FilterSpec } from './model.js';
+import { validateCrossFieldRuleShape, validateFilter } from '../../core/src/plan.js';
+import {
+  evaluateTableExpression,
+  expressionReadsEveryRow,
+  parseExpression,
+} from './table-expression.js';
+import { matchesFilters, type ConversionRegistry } from '../../core/src/execute.js';
+import type { CrossFieldRuleSpec, DataRecord, FilterSpec } from '../../core/src/model.js';
 
 export class TransformPipelineError extends Error {
   constructor(message: string) {
@@ -77,12 +82,27 @@ export interface DedupeStep extends TransformStepBase {
   keyFields: string[];
 }
 
+/**
+ * `mutate()`: a new numeric field computed per record by the same
+ * Excel-familiar formula language the derived-column operation uses, over
+ * the dataset's own fields instead of a tabulation's columns.
+ */
+export interface DeriveColumnStep extends TransformStepBase {
+  kind: 'derive-column';
+  /** Name of the field being created; must not collide with one already present. */
+  field: string;
+  formula: string;
+  /** Same explicit choice the derived-column operation offers; there is no invisible default. */
+  divisionByZero: 'error' | 'zero';
+}
+
 export type TransformStep =
   | SelectColumnsStep
   | FilterRowsStep
   | RecodeStep
   | MissingValuePolicyStep
-  | DedupeStep;
+  | DedupeStep
+  | DeriveColumnStep;
 
 export interface TransformStepResult {
   id: string;
@@ -99,8 +119,14 @@ export interface TransformStepResult {
 export interface TransformedField {
   /** The field's name after the pipeline - what a consumer should display and index records by. */
   name: string;
-  /** The name this field had in the pipeline's original input, traced through every rename. Never invented: a caller needing the field's original type/length/decimals looks it up by this. */
-  originalName: string;
+  /**
+   * The name this field had in the pipeline's original input, traced through
+   * every rename. Never invented: a caller needing the field's original
+   * type/length/decimals looks it up by this. `undefined` means the pipeline
+   * created the field itself (a `derive-column` step), so there is no
+   * original to inherit from and the caller must supply a numeric shape.
+   */
+  originalName?: string;
 }
 
 export interface TransformPipelineResult {
@@ -117,7 +143,17 @@ function defaultLabel(step: TransformStep): string {
     case 'recode': return `Recodificar ${step.field}`;
     case 'missing-value-policy': return `Ausentes em ${step.field}`;
     case 'dedupe': return `Deduplicar por ${step.keyFields.join(', ')}`;
+    case 'derive-column': return `Criar ${step.field}`;
   }
+}
+
+/** Same coercion the rest of the project uses for a raw field value: comma decimals included. */
+function numericValue(raw: unknown): number {
+  if (typeof raw === 'number') return raw;
+  if (raw === null || raw === undefined) return Number.NaN;
+  const text = String(raw).trim();
+  if (!text) return Number.NaN;
+  return Number(text.replace(',', '.'));
 }
 
 function stringify(raw: unknown): string {
@@ -205,6 +241,18 @@ function validateStepShape(step: TransformStep, label: string, currentFields: re
       throw new TransformPipelineError(`${label} has no key fields`);
     }
     for (const field of step.keyFields) requireKnownField(field, currentFields, label);
+  } else if (step.kind === 'derive-column') {
+    if (typeof step.field !== 'string' || !step.field.trim()) throw new TransformPipelineError(`${label} has no field name`);
+    if (currentFields.some((candidate) => candidate.name === step.field)) {
+      throw new TransformPipelineError(`${label}: field ${step.field} already exists at this point in the pipeline`);
+    }
+    if (typeof step.formula !== 'string' || !step.formula.trim()) throw new TransformPipelineError(`${label} has no formula`);
+    if (step.divisionByZero !== 'error' && step.divisionByZero !== 'zero') {
+      throw new TransformPipelineError(`${label} divisionByZero policy is invalid`);
+    }
+    // Parsed here so a bad formula or a missing field reference fails while
+    // the pipeline is being validated, not partway through the records.
+    parseExpression(currentFields.map((field) => ({ key: field.name, label: field.name })), step.formula);
   } else {
     throw new TransformPipelineError(`${label} has an unknown kind`);
   }
@@ -299,6 +347,46 @@ function runDedupe(
   return { records: kept, detail: { registrosRemovidos: records.length - kept.length, chavesDistintas: seen.size } };
 }
 
+function runDeriveColumn(
+  records: readonly DataRecord[],
+  step: DeriveColumnStep,
+  currentFields: readonly TransformedField[],
+): { records: DataRecord[]; fields: TransformedField[]; detail: Record<string, number> } {
+  const columns = currentFields.map((field) => ({ key: field.name, label: field.name }));
+  const node = parseExpression(columns, step.formula);
+
+  // A formula reading a whole column (LAG, ZSCORE) needs every record
+  // projected up front; one that only reads its own row does not, and
+  // projecting lazily there keeps a large dataset from paying for a second
+  // full copy of itself as numbers.
+  const project = (record: DataRecord): number[] => currentFields.map((field) => numericValue(record[field.name]));
+  const allCells = expressionReadsEveryRow(node) ? records.map(project) : [];
+
+  let nonFinite = 0;
+  const transformed = records.map((record, rowIndex) => {
+    const cells = allCells[rowIndex] ?? project(record);
+    const value = evaluateTableExpression(node, {
+      cells, rowIndex, allCells, divisionByZero: step.divisionByZero,
+    });
+    if (!Number.isFinite(value)) {
+      // Same rule as the derived-column operation: a non-finite result is
+      // reported, never written as if it were a number. IFERROR is how an
+      // author says what should appear instead.
+      nonFinite++;
+      throw new TransformPipelineError(
+        `${step.field}: formula produced a non-finite value at record ${rowIndex + 1}; wrap it in IFERROR to say what that record should show`,
+      );
+    }
+    return { ...record, [step.field]: value };
+  });
+
+  return {
+    records: transformed,
+    fields: [...currentFields, { name: step.field }],
+    detail: { registrosCalculados: transformed.length, naoFinitos: nonFinite },
+  };
+}
+
 export function applyTransformPipeline(
   records: readonly DataRecord[],
   fields: readonly string[],
@@ -341,6 +429,11 @@ export function applyTransformPipeline(
       } else if (step.kind === 'dedupe') {
         const outcome = runDedupe(currentRecords, step);
         currentRecords = outcome.records;
+        detail = outcome.detail;
+      } else if (step.kind === 'derive-column') {
+        const outcome = runDeriveColumn(currentRecords, step, currentFields);
+        currentRecords = outcome.records;
+        currentFields = outcome.fields;
         detail = outcome.detail;
       }
     }
