@@ -157,6 +157,56 @@ test('o zoom mexe no viewBox e o reenquadrar devolve o original', async ({ page 
   await expect(page.locator('#chart-zoom-reset')).toBeDisabled();
 });
 
+test('zoomed in, the SVG export still carries the whole chart, and leaves the on-screen zoom untouched', async ({ page }) => {
+  // The chart panel's own note promises this: "O zoom é só de visualização e
+  // não entra na exportação nem na receita." A regression here means the
+  // reader who zoomed in to read one bar gets a cropped file that only shows
+  // that bar - the export is supposed to be independent of what the screen
+  // happens to be showing.
+  await tabulateFixture(page);
+  await page.locator('[data-view="chart"]').click();
+
+  const svg = page.locator('#chart svg');
+  await page.locator('#chart-zoom-in').click();
+  await page.locator('#chart-zoom-in').click();
+  const zoomedViewBox = await svg.getAttribute('viewBox');
+  expect(zoomedViewBox).not.toBe('0 0 1000 500');
+
+  const download = page.waitForEvent('download');
+  await page.locator('#chart-svg-button').click();
+  const file = await (await download).path();
+  const exported = await (await import('node:fs/promises')).readFile(file, 'utf8');
+  expect(exported).toContain('viewBox="0 0 1000 500"');
+
+  // Exporting must not have reset what the user was actually looking at.
+  await expect(svg).toHaveAttribute('viewBox', zoomedViewBox!);
+  await expect(page.locator('#chart-zoom-reset')).toBeEnabled();
+});
+
+test('zoomed in, printing the chart also uses the full frame and restores the zoom afterward', async ({ page }) => {
+  await tabulateFixture(page);
+  await page.locator('[data-view="chart"]').click();
+  // A real print dialog would block the test; window.print is stubbed so
+  // printChart runs to completion synchronously and its own 1s fallback timer
+  // is what puts the viewBox back, exactly as it would for a browser that
+  // never fires afterprint.
+  await page.evaluate(() => { window.print = () => {}; });
+
+  const svg = page.locator('#chart svg');
+  await page.locator('#chart-zoom-in').click();
+  await page.locator('#chart-zoom-in').click();
+  const zoomedViewBox = await svg.getAttribute('viewBox');
+  expect(zoomedViewBox).not.toBe('0 0 1000 500');
+
+  await page.locator('#chart-print-button').click();
+  await expect(svg).toHaveAttribute('viewBox', '0 0 1000 500');
+  await expect(page.locator('body')).toHaveAttribute('data-print-target', 'chart');
+
+  // The 1s fallback timer restores both the marker and the on-screen zoom.
+  await expect(svg).toHaveAttribute('viewBox', zoomedViewBox!, { timeout: 2000 });
+  await expect(page.locator('body')).not.toHaveAttribute('data-print-target', 'chart');
+});
+
 test('a receita leva o estilo do gráfico e o traz de volta', async ({ page }) => {
   await tabulateFixture(page);
   await page.locator('[data-view="chart"]').click();

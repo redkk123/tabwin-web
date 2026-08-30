@@ -13,6 +13,7 @@ import {
   serializePortableTable,
   serializeRecipe,
   sumMeasureFromDefIncrement,
+  validateAxisBounds,
   type AnalysisRecipeV1,
   type CrossFieldRuleSpec,
   type ConversionRegistry,
@@ -3174,20 +3175,19 @@ function axisBounds(
   maxInput: HTMLInputElement,
   axis: string,
 ): { min?: number | undefined; max?: number | undefined; complaint?: string } {
-  const min = optionalNumber(minInput);
-  const max = optionalNumber(maxInput);
-  if (min === undefined && max === undefined) return {};
-  if (min === undefined || max === undefined) {
+  const bounds = validateAxisBounds(optionalNumber(minInput), optionalNumber(maxInput));
+  if (bounds.kind === 'none') return {};
+  if (bounds.kind === 'incomplete') {
     return { complaint: [
       'O eixo', axis, 'precisa de mínimo e máximo juntos; usando a faixa dos dados.',
     ].join(' ') };
   }
-  if (!(max > min)) {
+  if (bounds.kind === 'inverted') {
     return { complaint: [
       'O máximo do eixo', axis, 'precisa ser maior que o mínimo; usando a faixa dos dados.',
     ].join(' ') };
   }
-  return { min, max };
+  return { min: bounds.min, max: bounds.max };
 }
 
 /** Only a complete, valid pair is written to the recipe; parseRecipe rejects the rest. */
@@ -3196,22 +3196,32 @@ function savedAxisBounds(
   maxInput: HTMLInputElement,
   keys: { min: string; max: string },
 ): Record<string, number> {
-  const min = optionalNumber(minInput);
-  const max = optionalNumber(maxInput);
-  if (min === undefined || max === undefined || !(max > min)) return {};
-  return { [keys.min]: min, [keys.max]: max };
+  const bounds = validateAxisBounds(optionalNumber(minInput), optionalNumber(maxInput));
+  if (bounds.kind !== 'valid') return {};
+  return { [keys.min]: bounds.min, [keys.max]: bounds.max };
 }
 
 /**
  * Prints the chart alone. The stylesheet forces the table view when printing,
  * which is right for the default case and wrong here, so the body carries a
  * marker for the duration of the dialog and gives it back afterwards.
+ *
+ * Unlike SVG/PNG export, this prints the live element itself - there is no
+ * clone to substitute. So the same "print gives the whole chart, never the
+ * last reader's crop" promise is kept by saving the current viewBox, forcing
+ * the full frame for the dialog, and putting the saved value back afterwards.
+ * The zoom state (chartZoom) is left alone throughout: the on-screen zoom and
+ * the "Reenquadrar" button must look exactly as they did before printing.
  */
 function printChart(): void {
-  if (!chart.querySelector('svg')) return;
+  const svg = chart.querySelector<SVGSVGElement>('svg');
+  if (!svg) return;
+  const zoomedViewBox = svg.getAttribute('viewBox');
+  svg.setAttribute('viewBox', `0 0 ${CHART_VIEWBOX.width} ${CHART_VIEWBOX.height}`);
   document.body.setAttribute('data-print-target', 'chart');
   const restore = () => {
     document.body.removeAttribute('data-print-target');
+    if (zoomedViewBox) svg.setAttribute('viewBox', zoomedViewBox);
     window.removeEventListener('afterprint', restore);
   };
   window.addEventListener('afterprint', restore);
@@ -3219,7 +3229,7 @@ function printChart(): void {
     window.print();
   } finally {
     // Browsers that never fire afterprint (or block printing outright) must not
-    // leave the page stuck in chart-only print mode.
+    // leave the page stuck in chart-only print mode, or in the unzoomed frame.
     window.setTimeout(restore, 1000);
   }
 }
@@ -5361,10 +5371,21 @@ function showMapTooltip(event: PointerEvent): void {
   mapTooltip.hidden = false;
 }
 
+/**
+ * Serializes the chart on its full, un-zoomed frame regardless of what is
+ * currently on screen. Zoom is documented as "a viewport over the finished
+ * SVG, never a re-render... not part of any export" - serializing the live
+ * element directly would silently break that promise, because applyChartZoom
+ * mutates that same element's viewBox in place. Cloning first means the
+ * export is correct without ever touching what the user is actually looking
+ * at, or the zoom state they are in.
+ */
 function serializedChartSvg(): string | null {
   const svg = chart.querySelector<SVGSVGElement>('svg');
   if (!svg) return null;
-  return new XMLSerializer().serializeToString(svg);
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  clone.setAttribute('viewBox', `0 0 ${CHART_VIEWBOX.width} ${CHART_VIEWBOX.height}`);
+  return new XMLSerializer().serializeToString(clone);
 }
 
 function exportChartSvg(): void {

@@ -1,3 +1,4 @@
+import { validateAxisBounds } from './axis-bounds.js';
 import type { QueryPlan, SourceFingerprint, TableOperation, TabulationSpec } from './model.js';
 import { compileQueryPlan } from './plan.js';
 
@@ -219,7 +220,11 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
     ['x', parsed.view?.chartAxisXMin, parsed.view?.chartAxisXMax],
     ['y', parsed.view?.chartAxisYMin, parsed.view?.chartAxisYMax],
   ] as const) {
-    if (min !== undefined && max !== undefined && !(max > min)) {
+    // A lone bound (min without max, or vice versa) is allowed here - only an
+    // ordered, complete pair is required. That is deliberately looser than
+    // what the renderer treats as usable, and validateAxisBounds' 'none' and
+    // 'incomplete' cases both fall through fine; only 'inverted' rejects.
+    if (validateAxisBounds(min, max).kind === 'inverted') {
       throw new Error(`chart ${axis} axis maximum must exceed its minimum in TabWin Web recipe`);
     }
   }

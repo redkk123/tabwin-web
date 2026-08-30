@@ -140,6 +140,21 @@ function tidy(value: number): number {
  * discarded rather than half-applied, because a chart drawn on a collapsed or
  * inverted axis is worse than one drawn on the data's own range. The caller is
  * responsible for telling the user; `manual` reports which path was taken.
+ *
+ * The check below duplicates `validateAxisBounds` in
+ * packages/core/src/axis-bounds.ts, which apps/web/src/main.ts and
+ * packages/core/src/recipe.ts both already share. It cannot be pulled in
+ * here too: this file is loaded two ways - compiled, via dist/, where a real
+ * cross-package import resolves fine, and directly from source by
+ * tests/chart-renderer.test.mjs (through apps/web/src/chart-renderer.ts,
+ * itself loaded uncompiled). In the second path a genuine value import of
+ * `../../core/src/axis-bounds.js` has no literal file to resolve to outside
+ * dist/ and throws ERR_MODULE_NOT_FOUND - confirmed by testing it. The
+ * existing `import type { TabulationResult } from '../../core/src/model.js'`
+ * above survives that same path only because `import type` is erased
+ * entirely by type stripping before Node ever tries to resolve it; a real
+ * function import like `validateAxisBounds` is not erased and does not get
+ * that pass. If this rule ever needs to change, change it in both places.
  */
 export function resolveAxis(dataMin: number, dataMax: number, request: AxisRequest = {}): AxisScale {
   const tickCount = Math.min(20, Math.max(2, Math.round(request.tickCount ?? 5)));
