@@ -1,3 +1,18 @@
+> **AVISO DE DESATUALIZAÇÃO — 2026-08-30.** Este arquivo parou de ser
+> atualizado em R05.3-B (2026-08-27) e é **narrativa histórica congelada**
+> a partir daqui, preservada como registro, não como estado atual.
+>
+> Para o estado de verdade agora, leia:
+>
+> - [](./PROJECT_STATE.json) — revisão, contagem de
+>   testes, goldens e o que falta, em formato máquina-legível;
+> - [](./docs/product/ROADMAP_POR_COMPLEXIDADE.md)
+>   — as três trilhas decididas e o estado de cada faixa;
+> - [](./docs/handoffs/current/) — os cinco
+>   relatórios mais recentes.
+
+---
+
 # CHECKPOINT MASTER — TabWin Web
 
 **Revision:** R05.3-B-acquisition-progress-cancel

@@ -1,12 +1,15 @@
 {
-  "revision": "g009-numeric-range-start-position-fix",
-  "date": "2026-08-29",
-  "phase": "golden-driven-compatibility-progression",
+  "revision": "r10-14-microdatasus-plus-tab-decoded-plus-three-tracks-decided",
+  "date": "2026-08-30",
+  "phase": "faixa-4-closed-r11-decided-not-yet-implemented",
   "tests": {
-    "total": 244,
-    "passed": 244,
+    "total": 291,
+    "passed": 291,
     "failed": 0,
-    "command": "npm run check"
+    "command": "npm run check",
+    "e2e_command": "npm run e2e",
+    "e2e_total": 11,
+    "e2e_passed": 11
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -236,7 +239,18 @@
     "new-format-cnv-executable-not-writable",
     "real-g012-new-format-golden-equivalence",
     "numeric-range-cnv-ignores-def-start-position",
-    "real-g009-numeric-range-golden-equivalence"
+    "real-g009-numeric-range-golden-equivalence",
+    "chart-editor-axes-manual-bounds-series-per-column-zoom-print",
+    "e2e-playwright-suite-wired-into-ci",
+    "map-manual-breaks-reference-layers-seats-spatial-selection-to-filter",
+    "origin-destination-flows-with-discard-diagnostics-and-explicit-distance-model",
+    "legacy-tab-format-decoded-from-ten-controlled-captures-inspector-only-no-writer",
+    "delphi-published-method-recovery-from-the-real-tabwin415-binary",
+    "duckdb-sql-compiler-proven-against-a-real-duckdb-parity-gate-node-dev-dependency-only",
+    "columnar-dictionary-projection-and-l2-cache-measured-9x-on-a-real-dbc",
+    "microdatasus-filtered-csv-export-exact-tabulation-subset-with-readable-labels",
+    "national-catalog-collection-explains-why-uf-selector-is-hidden",
+    "three-track-architecture-decided-tabwin-compat-microdata-exploration-epidemiology"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -258,10 +272,7 @@
     "automatic-auxiliary-rules-outside-verified-sih-rd",
     "DEF-X-directive-semantics",
     "TAB-replay",
-    "advanced-chart-editing-axes-zoom-and-print",
-    "legacy-map-manual-breaks-label-layers-and-selection-bridge",
     "parquet-geojson-kml-and-legacy-table-exports",
-    "github-actions-runner-blocked-by-account-billing-lock",
     "golden-equivalence-for-post-tabulation-operations",
     "table-normalization-and-advanced-header-footnote-editing",
     "r06-1-top-n-tie-order-and-total-semantics-await-oracle",
@@ -276,10 +287,10 @@
     "clinical-cleaning-presets-without-authoritative-source",
     "multi-period-null-category-and-schema-drift-diagnostics",
     "sinan-def-cnv-and-tabnet-dimension-registry",
-    "message-driven-cancellation-of-an-in-flight-synchronous-decode",
-    "g009-protocol-requested-RD-file-through-an-AIH_MA-definition",
-    "g017-multiple-measures-in-one-tabulation",
-    "new-format-N-cnv-serialization-write-path"
+    "new-format-N-cnv-serialization-write-path",
+    "tab-format-decoded-but-no-writer-and-five-edge-cases-uncaptured-quantile-breaks-multi-file-quoted-row-label-two-selections-discriminated-unclassified",
+    "duckdb-wasm-in-browser-decided-on-demand-loading-not-yet-wired-to-ui",
+    "r11-analytics-track-specified-not-implemented-transform-pipeline-formulas-table-comparison-statistical-anomaly-audit-epidemiology-stats"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -304,20 +315,16 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "implement-G017-multiple-measures-from-captured-oracle",
-    "resolve-G012-N-hierarchy-only-from-captured-and-source-backed-evidence",
-    "capture-focused-post-table-tabwin-415-oracles",
-    "audit-include-table-and-paste-semantics-without-guessing",
-    "columnar-store-as-a-reanalysis-optimization-not-a-prerequisite",
-    "prove-a-columnar-executor-equals-resolvePlanRecord-before-replacing-it",
-    "add-progress-and-partial-workspace-cleanup-to-the-chunked-path",
-    "resolve-research-plan-queries-into-observed-source-manifests",
-    "capture-oracle-evidence-before-shipping-any-clinical-cleaning-preset",
-    "close-cataloged-tabwin-415-feature-families",
-    "surface-all-evidence-backed-DEF-driven-increments-and-selections",
-    "continue-TAB-archaeology-against-portable-recipe-model",
-    "expand-chart-and-map-families",
-    "after-functional-matrix-generate-short-seeded-pairwise-oracle-corpus"
+    "r11-integrate-preimplemented-statistical-anomaly-and-table-comparison-core",
+    "r11-gaussian-fit-and-overlay-for-numeric-distributions",
+    "r11-transform-pipeline-select-filter-mutate-recode-dedupe-bind-join-groupby",
+    "r11-excel-style-formula-functions-registry",
+    "r11-statistical-audit-ui-scope-detectors-signal-queue-drilldown",
+    "r11-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
+    "tab-format-five-remaining-captures-then-writer",
+    "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",
+    "continue-cataloged-tabwin-415-feature-families",
+    "expand-chart-and-map-families"
   ],
   "goldens": {
     "passing": [
