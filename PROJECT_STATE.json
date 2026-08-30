@@ -1,15 +1,15 @@
 {
-  "revision": "r11-4-2-cast-date-part-and-text-normalize-cleaning-steps",
+  "revision": "r11-4-3-group-summarize-transform-step",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 363,
-    "passed": 363,
+    "total": 370,
+    "passed": 370,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 20,
-    "e2e_passed": 20
+    "e2e_total": 21,
+    "e2e_passed": 21
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -261,7 +261,8 @@
     "r11-5b-transform-pipeline-moved-to-analysis-package-keeping-core-free-of-analysis-imports",
     "r11-4-2-cast-type-with-explicit-keep-or-missing-failure-policy",
     "r11-4-2-date-part-including-mmwr-ms-epidemiological-week-and-year",
-    "r11-4-2-text-normalize-with-ibge-municipality-6-digit-standardization"
+    "r11-4-2-text-normalize-with-ibge-municipality-6-digit-standardization",
+    "r11-4-3-group-summarize-count-sum-mean-median-min-max-distinct-one-row-per-key"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -340,7 +341,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-3-transform-pipeline-join-bind-rows-groupby-and-equivalent-r-python-code",
+    "r11-4-4-transform-pipeline-microdata-join-and-bind-rows-second-source-plus-equivalent-code",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

@@ -132,6 +132,33 @@ export interface TextNormalizeStep extends TransformStepBase {
   operations: TextOperation[];
 }
 
+/**
+ * One summary column produced by a {@link GroupSummarizeStep}. Every kind but
+ * `count` reads a source field; `count` is the group's size. `as` names the
+ * resulting column.
+ */
+export type SummaryAggregation =
+  | { kind: 'count'; as: string }
+  | { kind: 'sum'; field: string; as: string }
+  | { kind: 'mean'; field: string; as: string }
+  | { kind: 'median'; field: string; as: string }
+  | { kind: 'min'; field: string; as: string }
+  | { kind: 'max'; field: string; as: string }
+  | { kind: 'distinct'; field: string; as: string };
+
+/**
+ * `group_by() + summarise()`: collapses the records into one row per distinct
+ * combination of `groupFields`, each carrying the requested aggregations. The
+ * shape changes completely - after this step the only fields are the group
+ * keys and the summary columns, so anything a later step needs must be one of
+ * those.
+ */
+export interface GroupSummarizeStep extends TransformStepBase {
+  kind: 'group-summarize';
+  groupFields: string[];
+  aggregations: SummaryAggregation[];
+}
+
 export type TransformStep =
   | SelectColumnsStep
   | FilterRowsStep
@@ -141,7 +168,8 @@ export type TransformStep =
   | DeriveColumnStep
   | CastTypeStep
   | DatePartStep
-  | TextNormalizeStep;
+  | TextNormalizeStep
+  | GroupSummarizeStep;
 
 export interface TransformStepResult {
   id: string;
@@ -186,6 +214,7 @@ function defaultLabel(step: TransformStep): string {
     case 'cast-type': return `Converter ${step.field} para ${step.to}`;
     case 'date-part': return `Extrair ${step.part} de ${step.field}`;
     case 'text-normalize': return `Normalizar ${step.field} (${step.operations.length} operação(ões))`;
+    case 'group-summarize': return `Agrupar por ${step.groupFields.join(', ')} (${step.aggregations.length} resumo(s))`;
   }
 }
 
@@ -404,6 +433,32 @@ function validateStepShape(step: TransformStep, label: string, currentFields: re
         throw new TransformPipelineError(`${position} kind is invalid`);
       }
     }
+  } else if (step.kind === 'group-summarize') {
+    if (!Array.isArray(step.groupFields) || step.groupFields.length === 0) {
+      throw new TransformPipelineError(`${label} has no group fields`);
+    }
+    if (new Set(step.groupFields).size !== step.groupFields.length) {
+      throw new TransformPipelineError(`${label} repeats a group field`);
+    }
+    for (const field of step.groupFields) requireKnownField(field, currentFields, label);
+    if (!Array.isArray(step.aggregations) || step.aggregations.length === 0) {
+      throw new TransformPipelineError(`${label} has no aggregations`);
+    }
+    const kinds = new Set(['count', 'sum', 'mean', 'median', 'min', 'max', 'distinct']);
+    // The output field names must be unique among themselves and must not
+    // collide with a group key, so the resulting rows have no ambiguous field.
+    const outputNames = new Set(step.groupFields);
+    for (const [index, aggregation] of step.aggregations.entries()) {
+      const position = `${label} aggregation ${index + 1}`;
+      if (!kinds.has(aggregation.kind)) throw new TransformPipelineError(`${position} kind is invalid`);
+      if (typeof aggregation.as !== 'string' || !aggregation.as.trim()) throw new TransformPipelineError(`${position} has no output name`);
+      if (outputNames.has(aggregation.as)) throw new TransformPipelineError(`${label} output name ${aggregation.as} is used more than once`);
+      outputNames.add(aggregation.as);
+      if (aggregation.kind !== 'count') {
+        if (typeof aggregation.field !== 'string' || !aggregation.field.trim()) throw new TransformPipelineError(`${position} has no field`);
+        requireKnownField(aggregation.field, currentFields, label);
+      }
+    }
   } else {
     throw new TransformPipelineError(`${label} has an unknown kind`);
   }
@@ -496,6 +551,97 @@ function runDedupe(
     kept.push(record);
   }
   return { records: kept, detail: { registrosRemovidos: records.length - kept.length, chavesDistintas: seen.size } };
+}
+
+function runGroupSummarize(
+  records: readonly DataRecord[],
+  step: GroupSummarizeStep,
+  currentFields: readonly TransformedField[],
+): { records: DataRecord[]; fields: TransformedField[]; detail: Record<string, number> } {
+  interface Group {
+    keyValues: unknown[];
+    /** Finite numeric values per source field, retained for sum/mean/median/min/max. */
+    numeric: Map<string, number[]>;
+    /** Distinct raw values per field, retained for `distinct`. */
+    distinct: Map<string, Set<string>>;
+    count: number;
+  }
+  const groups = new Map<string, Group>();
+  // Which fields actually need retained values, so a group only holds what
+  // its aggregations ask for.
+  const numericFields = new Set(step.aggregations
+    .filter((aggregation) => ['sum', 'mean', 'median', 'min', 'max'].includes(aggregation.kind))
+    .map((aggregation) => (aggregation as { field: string }).field));
+  const distinctFields = new Set(step.aggregations
+    .filter((aggregation) => aggregation.kind === 'distinct')
+    .map((aggregation) => (aggregation as { field: string }).field));
+
+  for (const record of records) {
+    const keyValues = step.groupFields.map((field) => record[field] ?? null);
+    const key = JSON.stringify(keyValues);
+    let group = groups.get(key);
+    if (!group) {
+      group = { keyValues, numeric: new Map(), distinct: new Map(), count: 0 };
+      for (const field of numericFields) group.numeric.set(field, []);
+      for (const field of distinctFields) group.distinct.set(field, new Set());
+      groups.set(key, group);
+    }
+    group.count++;
+    for (const field of numericFields) {
+      const value = numericValue(record[field]);
+      if (Number.isFinite(value)) group.numeric.get(field)!.push(value);
+    }
+    for (const field of distinctFields) {
+      const raw = record[field];
+      if (raw !== null && raw !== undefined && String(raw).trim() !== '') {
+        group.distinct.get(field)!.add(String(raw));
+      }
+    }
+  }
+
+  const summarize = (group: Group, aggregation: SummaryAggregation): number | null => {
+    if (aggregation.kind === 'count') return group.count;
+    if (aggregation.kind === 'distinct') return group.distinct.get(aggregation.field)!.size;
+    const values = group.numeric.get(aggregation.field)!;
+    // A group with no finite value for this field has no honest number to
+    // report - null says "absent", never a fabricated zero.
+    if (!values.length) return null;
+    switch (aggregation.kind) {
+      case 'sum': return values.reduce((total, value) => total + value, 0);
+      case 'mean': return values.reduce((total, value) => total + value, 0) / values.length;
+      case 'min': return Math.min(...values);
+      case 'max': return Math.max(...values);
+      case 'median': {
+        const sorted = [...values].sort((a, b) => a - b);
+        const middle = Math.floor(sorted.length / 2);
+        return sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+      }
+    }
+  };
+
+  const summarized: DataRecord[] = [...groups.values()].map((group) => {
+    const record: DataRecord = {};
+    step.groupFields.forEach((field, index) => { record[field] = group.keyValues[index]; });
+    for (const aggregation of step.aggregations) record[aggregation.as] = summarize(group, aggregation);
+    return record;
+  });
+
+  // The output schema is exactly the group keys (which keep whatever lineage
+  // they already had - a group key can itself be a derived field) plus the
+  // summary columns, which are created here and have no original to inherit.
+  const lineageByName = new Map(currentFields.map((field) => [field.name, field.originalName]));
+  const keptFields: TransformedField[] = [];
+  for (const field of step.groupFields) {
+    const originalName = lineageByName.get(field);
+    keptFields.push(originalName === undefined ? { name: field } : { name: field, originalName });
+  }
+  for (const aggregation of step.aggregations) keptFields.push({ name: aggregation.as });
+
+  return {
+    records: summarized,
+    fields: keptFields,
+    detail: { gruposFormados: groups.size, colunasResumo: step.aggregations.length },
+  };
 }
 
 function runCastType(
@@ -716,6 +862,11 @@ export function applyTransformPipeline(
       } else if (step.kind === 'text-normalize') {
         const outcome = runTextNormalize(currentRecords, step);
         currentRecords = outcome.records;
+        detail = outcome.detail;
+      } else if (step.kind === 'group-summarize') {
+        const outcome = runGroupSummarize(currentRecords, step, currentFields);
+        currentRecords = outcome.records;
+        currentFields = outcome.fields;
         detail = outcome.detail;
       }
     }

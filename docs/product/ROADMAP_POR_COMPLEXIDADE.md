@@ -340,6 +340,19 @@ seria falso. O que foi feito:
   contado — nunca apagado.
   `npm run check`: **363/363**. `npm run e2e`: **20/20**.
 
+- **R11.4.3 — Agrupar e resumir (`group_by() + summarise()`).** A operação
+  que fecha o exemplo da seção 5.4 do spec: colapsa os registros em uma
+  linha por combinação das chaves, com `count`/`sum`/`mean`/`median`/`min`/
+  `max`/`distinct`. Depois de agrupar, só as chaves e os resumos existem —
+  o rastreamento de campo já cuida de fazer uma etapa posterior falhar se
+  pedir um campo que sumiu. Um grupo sem valor numérico para uma coluna
+  resume como "—", **nunca zero inventado**; o `count` do mesmo grupo
+  continua honesto. Uma chave que é campo derivado não ganha origem
+  inventada. Fora, por decisão: `proportion` como agregação — proporção de
+  quê é decisão de denominador, e com N por grupo pronto a proporção certa
+  se escreve como fórmula sobre o resultado, com o denominador explícito.
+  `npm run check`: **370/370**. `npm run e2e`: **21/21**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

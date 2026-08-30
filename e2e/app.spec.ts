@@ -701,3 +701,44 @@ test('the cleaning steps standardize an IBGE code and derive the epidemiological
   await expect(body.locator('tr')).toHaveCount(4);
   expect(await body.locator('tr > :first-child').allTextContents()).toEqual(['1', '2', '3', '27']);
 });
+
+test('group-summarize collapses the dataset to one row per key, with N and a sum', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/grupo-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  // Keep only confirmed first, then N and total VALOR by UF - the shape of
+  // the region-by-year summary the spec's own example ends on.
+  await page.locator('#transform-step-kind').selectOption('filter-rows');
+  await page.locator('#transform-filter-field').selectOption('CLASSI');
+  await page.locator('#transform-filter-categories').fill('1');
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-step-kind').selectOption('group-summarize');
+  await page.locator('#transform-group-fields').selectOption(['UF']);
+  // First aggregation row defaults to count/N; add a sum of VALOR.
+  await page.locator('#transform-group-add-agg').click();
+  const secondRow = page.locator('#transform-group-aggregations > div').nth(1);
+  await secondRow.locator('select').first().selectOption('sum');
+  await secondRow.locator('select').nth(1).selectOption('VALOR');
+  await secondRow.locator('input').fill('TOTAL');
+  await page.locator('#transform-add-step').click();
+
+  await page.locator('#transform-apply-button').click();
+  await expect(page.locator('#transform-result')).toContainText('gruposFormados: 2');
+
+  // The dataset now has exactly the key and summary fields, and one row per UF.
+  await expect(page.locator('#row-field')).toContainText('TOTAL');
+  await page.locator('#row-field').selectOption('UF');
+  // Sum the derived TOTAL column so the row values are checkable.
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('TOTAL');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  const body = page.locator('#result-table tbody');
+  await expect(body.locator('tr')).toHaveCount(2);
+  // SP kept records 2 and 3 (20 + 30 = 50); the 40 was CLASSI=2, filtered out.
+  await expect(body.locator('tr', { hasText: 'SP' })).toContainText('50');
+  await expect(body.locator('tr', { hasText: 'DF' })).toContainText('10');
+});

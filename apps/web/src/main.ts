@@ -148,6 +148,7 @@ import {
 import type {
   DatePart,
   RecodeOtherwise,
+  SummaryAggregation,
   TextOperation,
   TransformStep,
   TransformStepResult,
@@ -287,6 +288,7 @@ const transformConfigByKind: Record<TransformStep['kind'], HTMLElement> = {
   'cast-type': element<HTMLElement>('#transform-config-cast-type'),
   'date-part': element<HTMLElement>('#transform-config-date-part'),
   'text-normalize': element<HTMLElement>('#transform-config-text-normalize'),
+  'group-summarize': element<HTMLElement>('#transform-config-group-summarize'),
 };
 const transformSelectFields = element<HTMLSelectElement>('#transform-select-fields');
 const transformFilterField = element<HTMLSelectElement>('#transform-filter-field');
@@ -317,6 +319,9 @@ const transformDatePartPart = element<HTMLSelectElement>('#transform-datepart-pa
 const transformDatePartTarget = element<HTMLInputElement>('#transform-datepart-target');
 const transformTextField = element<HTMLSelectElement>('#transform-text-field');
 const transformTextOperations = element<HTMLSelectElement>('#transform-text-operations');
+const transformGroupFields = element<HTMLSelectElement>('#transform-group-fields');
+const transformGroupAggregationsContainer = element<HTMLElement>('#transform-group-aggregations');
+const transformGroupAddAgg = element<HTMLButtonElement>('#transform-group-add-agg');
 const transformAddStep = element<HTMLButtonElement>('#transform-add-step');
 const transformStepList = element<HTMLElement>('#transform-step-list');
 const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
@@ -605,6 +610,10 @@ let transformSteps: TransformStep[] = [];
 let transformStepSequence = 0;
 /** Draft rows for the recode step currently being configured; committed into a step only on "Adicionar etapa". */
 let transformRecodeRows: Array<{ from: string; to: string }> = [{ from: '', to: '' }];
+/** Draft aggregation rows for the group-summarize step being configured. */
+let transformGroupAggRows: Array<{ kind: SummaryAggregation['kind']; field: string; as: string }> = [
+  { kind: 'count', field: '', as: 'N' },
+];
 let mapZoom = 1;
 let mapPanX = 0;
 let mapPanY = 0;
@@ -1274,6 +1283,10 @@ function populateTransformFields(): void {
     control.value = names.includes(previous) ? previous : (names[0] ?? '');
   }
 
+  const previousGroupFields = new Set(selectedCatalogValues(transformGroupFields));
+  transformGroupFields.replaceChildren(...options());
+  for (const option of transformGroupFields.options) option.selected = previousGroupFields.has(option.value);
+
   const previousDedupe = new Set(selectedCatalogValues(transformDedupeFields));
   transformDedupeFields.replaceChildren(...options());
   for (const option of transformDedupeFields.options) option.selected = previousDedupe.has(option.value);
@@ -1287,7 +1300,9 @@ function populateTransformFields(): void {
     transformCastField, transformCastTo, transformCastFailure,
     transformDatePartField, transformDatePartPart, transformDatePartTarget,
     transformTextField, transformTextOperations,
+    transformGroupFields, transformGroupAddAgg,
   ]) control.disabled = false;
+  renderTransformGroupAggregations();
 
   renderTransformRecodeRows();
   updateTransformStepKindVisibility();
@@ -1351,6 +1366,68 @@ function renderTransformRecodeRows(): void {
   });
 }
 
+const GROUP_AGGREGATION_LABELS: Record<SummaryAggregation['kind'], string> = {
+  count: 'Contagem (N)', sum: 'Soma', mean: 'Média', median: 'Mediana',
+  min: 'Mínimo', max: 'Máximo', distinct: 'Valores distintos',
+};
+
+function renderTransformGroupAggregations(): void {
+  transformGroupAggregationsContainer.replaceChildren();
+  transformGroupAggRows.forEach((row, index) => {
+    const wrap = document.createElement('div');
+    wrap.className = 'filter-rule-row transform-recode-row';
+
+    const kindLabel = document.createElement('label');
+    kindLabel.innerHTML = '<span>Resumo</span>';
+    const kindSelect = document.createElement('select');
+    for (const [value, text] of Object.entries(GROUP_AGGREGATION_LABELS)) {
+      kindSelect.add(new Option(text, value));
+    }
+    kindSelect.value = row.kind;
+    kindLabel.append(kindSelect);
+
+    const fieldLabelEl = document.createElement('label');
+    fieldLabelEl.innerHTML = '<span>Campo</span>';
+    const fieldSelect = document.createElement('select');
+    fieldSelect.replaceChildren(...(dbfHeader?.fields ?? []).map((field) => new Option(selectionLabel(field.name), field.name)));
+    fieldSelect.value = row.field || (dbfHeader?.fields[0]?.name ?? '');
+    row.field = fieldSelect.value;
+    // Count has no source field; the field picker is meaningless there.
+    fieldSelect.disabled = row.kind === 'count';
+    fieldLabelEl.append(fieldSelect);
+
+    const asLabel = document.createElement('label');
+    asLabel.innerHTML = '<span>Nome</span>';
+    const asInput = document.createElement('input');
+    asInput.type = 'text';
+    asInput.maxLength = 60;
+    asInput.value = row.as;
+    asLabel.append(asInput);
+
+    kindSelect.addEventListener('change', () => {
+      row.kind = kindSelect.value as SummaryAggregation['kind'];
+      fieldSelect.disabled = row.kind === 'count';
+    });
+    fieldSelect.addEventListener('change', () => { row.field = fieldSelect.value; });
+    asInput.addEventListener('input', () => { row.as = asInput.value; });
+
+    wrap.append(kindLabel, fieldLabelEl, asLabel);
+    if (transformGroupAggRows.length > 1) {
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 'compare-pair-remove';
+      remove.textContent = '×';
+      remove.setAttribute('aria-label', `Remover resumo ${index + 1}`);
+      remove.addEventListener('click', () => {
+        transformGroupAggRows.splice(index, 1);
+        renderTransformGroupAggregations();
+      });
+      wrap.append(remove);
+    }
+    transformGroupAggregationsContainer.append(wrap);
+  });
+}
+
 function transformStepSummary(step: TransformStep): string {
   switch (step.kind) {
     case 'select-columns':
@@ -1377,6 +1454,8 @@ function transformStepSummary(step: TransformStep): string {
       return `${step.target} = ${step.part} de ${selectionLabel(step.field)}`;
     case 'text-normalize':
       return `Normalizar ${selectionLabel(step.field)}: ${step.operations.map((operation) => operation.kind).join(', ')}`;
+    case 'group-summarize':
+      return `Agrupar por ${step.groupFields.map(selectionLabel).join(', ')} → ${step.aggregations.map((aggregation) => aggregation.as).join(', ')}`;
   }
 }
 
@@ -1483,6 +1562,17 @@ function addTransformStep(): void {
       .map((value) => ({ kind: value }) as TextOperation);
     if (!operations.length) throw new Error('Escolha ao menos uma operação');
     step = { id, kind, field, operations };
+  } else if (kind === 'group-summarize') {
+    const groupFields = selectedCatalogValues(transformGroupFields);
+    if (!groupFields.length) throw new Error('Escolha ao menos um campo para agrupar');
+    const aggregations = transformGroupAggRows.map((row): SummaryAggregation => {
+      const as = row.as.trim();
+      if (!as) throw new Error('Cada resumo precisa de um nome de coluna');
+      return row.kind === 'count'
+        ? { kind: 'count', as }
+        : { kind: row.kind, field: row.field, as };
+    });
+    step = { id, kind, groupFields, aggregations };
   } else {
     const field = transformDeriveField.value.trim();
     if (!field) throw new Error('Informe o nome da nova coluna');
@@ -2107,6 +2197,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   dismissedInvestigateSignalIds.clear();
   transformSteps = [];
   transformRecodeRows = [{ from: '', to: '' }];
+  transformGroupAggRows = [{ kind: 'count', field: '', as: 'N' }];
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -6584,6 +6675,10 @@ transformRecodeOtherwise.addEventListener('change', updateTransformRecodeOtherwi
 transformRecodeAddRow.addEventListener('click', () => {
   transformRecodeRows.push({ from: '', to: '' });
   renderTransformRecodeRows();
+});
+transformGroupAddAgg.addEventListener('click', () => {
+  transformGroupAggRows.push({ kind: 'count', field: '', as: '' });
+  renderTransformGroupAggregations();
 });
 transformAddStep.addEventListener('click', () => {
   try { addTransformStep(); }

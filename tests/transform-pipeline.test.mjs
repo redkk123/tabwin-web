@@ -430,3 +430,137 @@ test('the cleaning pipeline the spec sketches runs end to end, in one pass', () 
   assert.deepEqual(result.steps.map((step) => [step.recordsBefore, step.recordsAfter]),
     [[3, 3], [3, 3], [3, 3], [3, 3], [3, 2]]);
 });
+
+// --- group-summarize: group_by() + summarise() -----------------------------
+
+const GROUP_FIELDS = ['REGIAO', 'ANO', 'VALOR', 'ID'];
+const GROUP_RECORDS = [
+  { REGIAO: 'N', ANO: 2023, VALOR: 10, ID: 'a' },
+  { REGIAO: 'N', ANO: 2023, VALOR: 20, ID: 'a' },
+  { REGIAO: 'N', ANO: 2024, VALOR: 30, ID: 'b' },
+  { REGIAO: 'S', ANO: 2023, VALOR: 40, ID: 'c' },
+];
+
+test('group-summarize collapses to one row per key with count/sum/mean', () => {
+  const result = applyTransformPipeline(GROUP_RECORDS, GROUP_FIELDS, [
+    {
+      id: 'g1', kind: 'group-summarize', groupFields: ['REGIAO', 'ANO'],
+      aggregations: [
+        { kind: 'count', as: 'N' },
+        { kind: 'sum', field: 'VALOR', as: 'TOTAL' },
+        { kind: 'mean', field: 'VALOR', as: 'MEDIA' },
+      ],
+    },
+  ]);
+  assert.equal(result.records.length, 3);
+  assert.deepEqual(result.fields.map((field) => field.name), ['REGIAO', 'ANO', 'N', 'TOTAL', 'MEDIA']);
+  const byKey = new Map(result.records.map((record) => [`${record.REGIAO}-${record.ANO}`, record]));
+  assert.deepEqual(
+    [byKey.get('N-2023').N, byKey.get('N-2023').TOTAL, byKey.get('N-2023').MEDIA],
+    [2, 30, 15],
+  );
+  assert.equal(byKey.get('N-2024').N, 1);
+  assert.equal(byKey.get('S-2023').TOTAL, 40);
+  assert.equal(result.steps[0].detail.gruposFormados, 3);
+});
+
+test('group-summarize computes median, min, max and distinct', () => {
+  const records = [
+    { G: 'x', V: 1, K: 'a' }, { G: 'x', V: 3, K: 'a' }, { G: 'x', V: 100, K: 'b' },
+    { G: 'y', V: 5, K: 'c' },
+  ];
+  const result = applyTransformPipeline(records, ['G', 'V', 'K'], [
+    {
+      id: 'g1', kind: 'group-summarize', groupFields: ['G'],
+      aggregations: [
+        { kind: 'median', field: 'V', as: 'MED' },
+        { kind: 'min', field: 'V', as: 'MIN' },
+        { kind: 'max', field: 'V', as: 'MAX' },
+        { kind: 'distinct', field: 'K', as: 'CHAVES' },
+      ],
+    },
+  ]);
+  const x = result.records.find((record) => record.G === 'x');
+  assert.deepEqual([x.MED, x.MIN, x.MAX, x.CHAVES], [3, 1, 100, 2]);
+});
+
+test('a group with no finite value for a field summarizes to null, never a fabricated zero', () => {
+  const records = [
+    { G: 'x', V: 'texto' }, { G: 'x', V: null },
+    { G: 'y', V: 10 },
+  ];
+  const result = applyTransformPipeline(records, ['G', 'V'], [
+    {
+      id: 'g1', kind: 'group-summarize', groupFields: ['G'],
+      aggregations: [{ kind: 'count', as: 'N' }, { kind: 'sum', field: 'V', as: 'S' }, { kind: 'mean', field: 'V', as: 'M' }],
+    },
+  ]);
+  const x = result.records.find((record) => record.G === 'x');
+  // The group still has two records - count is honest - but no numeric value.
+  assert.equal(x.N, 2);
+  assert.equal(x.S, null);
+  assert.equal(x.M, null);
+  assert.equal(result.records.find((record) => record.G === 'y').S, 10);
+});
+
+test('after group-summarize, only the keys and summaries exist, and a later step sees exactly those', () => {
+  const result = applyTransformPipeline(GROUP_RECORDS, GROUP_FIELDS, [
+    { id: 'g1', kind: 'group-summarize', groupFields: ['REGIAO'], aggregations: [{ kind: 'sum', field: 'VALOR', as: 'TOTAL' }] },
+    { id: 'd1', kind: 'derive-column', field: 'DOBRO', formula: '[TOTAL] * 2', divisionByZero: 'error' },
+  ]);
+  const north = result.records.find((record) => record.REGIAO === 'N');
+  assert.equal(north.TOTAL, 60);
+  assert.equal(north.DOBRO, 120);
+
+  // A field that existed before the group-by is gone afterward.
+  assert.throws(() => applyTransformPipeline(GROUP_RECORDS, GROUP_FIELDS, [
+    { id: 'g1', kind: 'group-summarize', groupFields: ['REGIAO'], aggregations: [{ kind: 'count', as: 'N' }] },
+    { id: 'f1', kind: 'filter-rows', filters: [{ field: 'ANO', kind: 'numeric-range', minimum: 2024 }] },
+  ]), /field ANO does not exist/);
+});
+
+test('a group key that is itself a derived field carries no invented origin', () => {
+  const result = applyTransformPipeline(GROUP_RECORDS, GROUP_FIELDS, [
+    { id: 'd1', kind: 'derive-column', field: 'DOBRO_ANO', formula: '[ANO] * 2', divisionByZero: 'error' },
+    { id: 'g1', kind: 'group-summarize', groupFields: ['DOBRO_ANO'], aggregations: [{ kind: 'count', as: 'N' }] },
+  ]);
+  const derivedKey = result.fields.find((field) => field.name === 'DOBRO_ANO');
+  assert.equal(derivedKey.originalName, undefined, 'a derived group key must not claim an original');
+  const realKey = applyTransformPipeline(GROUP_RECORDS, GROUP_FIELDS, [
+    { id: 'g1', kind: 'group-summarize', groupFields: ['REGIAO'], aggregations: [{ kind: 'count', as: 'N' }] },
+  ]).fields.find((field) => field.name === 'REGIAO');
+  assert.equal(realKey.originalName, 'REGIAO', 'a real group key keeps its lineage');
+});
+
+test('group-summarize validates its own shape', () => {
+  const run = (step) => applyTransformPipeline(GROUP_RECORDS, GROUP_FIELDS, [{ id: 'g1', kind: 'group-summarize', ...step }]);
+  assert.throws(() => run({ groupFields: [], aggregations: [{ kind: 'count', as: 'N' }] }), /no group fields/);
+  assert.throws(() => run({ groupFields: ['REGIAO', 'REGIAO'], aggregations: [{ kind: 'count', as: 'N' }] }), /repeats a group field/);
+  assert.throws(() => run({ groupFields: ['NADA'], aggregations: [{ kind: 'count', as: 'N' }] }), /field NADA does not exist/);
+  assert.throws(() => run({ groupFields: ['REGIAO'], aggregations: [] }), /no aggregations/);
+  assert.throws(() => run({ groupFields: ['REGIAO'], aggregations: [{ kind: 'sum', field: 'VALOR', as: 'REGIAO' }] }), /output name REGIAO is used more than once/);
+  assert.throws(() => run({ groupFields: ['REGIAO'], aggregations: [{ kind: 'sum', field: 'VALOR', as: 'X' }, { kind: 'mean', field: 'VALOR', as: 'X' }] }), /output name X is used more than once/);
+  assert.throws(() => run({ groupFields: ['REGIAO'], aggregations: [{ kind: 'sum', field: 'NADA', as: 'X' }] }), /field NADA does not exist/);
+  assert.throws(() => run({ groupFields: ['REGIAO'], aggregations: [{ kind: 'variance', field: 'VALOR', as: 'X' }] }), /kind is invalid/);
+});
+
+test('the region-by-year example the spec ends on runs end to end', () => {
+  // MUN standardized, ano from the date, sentinel out, confirmed only, then
+  // N and total by region + year - the pipeline sketched in section 5.4.
+  const records = [
+    { MUN: '5300108', DT: '20240115', EVOL: '1', CLASSI: '1', UF: 'DF' },
+    { MUN: '355030', DT: '20240220', EVOL: '9', CLASSI: '1', UF: 'SP' },
+    { MUN: '355030', DT: '20240315', EVOL: '1', CLASSI: '1', UF: 'SP' },
+    { MUN: '355030', DT: '20230101', EVOL: '1', CLASSI: '2', UF: 'SP' },
+  ];
+  const result = applyTransformPipeline(records, ['MUN', 'DT', 'EVOL', 'CLASSI', 'UF'], [
+    { id: '1', kind: 'date-part', field: 'DT', target: 'ANO', part: 'year' },
+    { id: '2', kind: 'filter-rows', filters: [{ field: 'CLASSI', acceptedCategories: ['1'] }] },
+    { id: '3', kind: 'group-summarize', groupFields: ['UF', 'ANO'], aggregations: [{ kind: 'count', as: 'CASOS' }] },
+  ]);
+  const byKey = new Map(result.records.map((record) => [`${record.UF}-${record.ANO}`, record.CASOS]));
+  assert.equal(byKey.get('DF-2024'), 1);
+  assert.equal(byKey.get('SP-2024'), 2);
+  assert.equal(byKey.size, 2, 'the 2023 record was CLASSI=2 and got filtered out before grouping');
+  assert.deepEqual(result.fields.map((field) => field.name), ['UF', 'ANO', 'CASOS']);
+});
