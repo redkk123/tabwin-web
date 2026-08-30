@@ -227,3 +227,48 @@ test('a distância só aparece depois de escolher o modelo', async ({ page }) =>
   expect(headers.some((text) => text.startsWith('Distância'))).toBe(false);
   await expect(page.locator('#flow-distance')).toHaveValue('');
 });
+
+test('o CSV do Microdatasus traz exatamente os registros aceitos pela tabulação', async ({ page }) => {
+  await tabulateFixture(page);
+  await expect(page.locator('#microdatasus-csv-button')).toBeEnabled();
+
+  const download = page.waitForEvent('download');
+  await page.locator('#microdatasus-csv-button').click();
+  const file = await (await download).path();
+  const csv = (await import('node:fs/promises')).readFile;
+  const text = await csv(file, 'utf8');
+
+  const lines = text.replace(/^﻿/, '').trim().split('\r\n');
+  // Header plus one line per accepted record: the fixture has three rows and
+  // no filter, so all three survive.
+  expect(lines).toHaveLength(4);
+  expect(lines[0]).toContain('UF');
+  expect(lines[0]).toContain('SEXO');
+  expect(lines[0]).toContain('VALOR');
+  expect(lines.slice(1).join('\n')).toContain('AC');
+  expect(lines.slice(1).join('\n')).toContain('AM');
+});
+
+test('um filtro na tabulação chega ao CSV do Microdatasus', async ({ page }) => {
+  await tabulateFixture(page);
+  const before = await page.locator('#result-table tbody').innerText();
+  expect(before).toContain('AM');
+
+  // The filter builder lives in a collapsed <details>; nothing inside it is
+  // visible until the summary is opened.
+  await page.locator('summary', { hasText: 'Filtros e seleções' }).click();
+  await page.locator('#filter-field').selectOption('UF');
+  await page.locator('#filter-value-search').fill('AC');
+  await page.locator('#filter-values input[type="checkbox"]').first().check();
+  await page.locator('#add-filter-button').click();
+  await expect(page.locator('#result-table tbody')).not.toContainText('AM');
+
+  const download = page.waitForEvent('download');
+  await page.locator('#microdatasus-csv-button').click();
+  const file = await (await download).path();
+  const text = await (await import('node:fs/promises')).readFile(file, 'utf8');
+  const lines = text.replace(/^﻿/, '').trim().split('\r\n');
+  // Two AC records survive the filter; AM must not appear anywhere in the file.
+  expect(lines).toHaveLength(3);
+  expect(text).not.toContain('AM');
+});

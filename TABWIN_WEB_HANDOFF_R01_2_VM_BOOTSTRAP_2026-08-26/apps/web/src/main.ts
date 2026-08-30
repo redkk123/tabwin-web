@@ -96,6 +96,7 @@ import {
   type MapScale,
 } from '../../../packages/visualization/src/map-scale.ts';
 import { mapObjectAtPoint } from '../../../packages/visualization/src/map-hit-test.ts';
+import type { MicrodatasusFieldSpec, MicrodatasusSourceContext } from '../../../packages/export/src/microdatasus.ts';
 import { spatialSelectionFilter } from '../../../packages/core/src/spatial-selection.ts';
 import {
   addFlowDistances,
@@ -170,6 +171,7 @@ const dropZone = element<HTMLElement>('#drop-zone');
 const fileList = element<HTMLElement>('#file-list');
 const sourceDbfButton = element<HTMLButtonElement>('#source-dbf-button');
 const selectedDbfButton = element<HTMLButtonElement>('#selected-dbf-button');
+const microdatasusCsvButton = element<HTMLButtonElement>('#microdatasus-csv-button');
 const decodeCancelButton = element<HTMLButtonElement>('#decode-cancel-button');
 const combineCompatibleFiles = element<HTMLInputElement>('#combine-compatible-files');
 const form = element<HTMLFormElement>('#analysis-form');
@@ -1483,6 +1485,8 @@ interface DatasetAskOptions {
   label: string;
   transfer?: Transferable[];
   progress?: (recordsRead: number, recordCount: number) => void;
+  /** Bounded partial payloads emitted before the terminal worker response. */
+  chunk?: (bytes: ArrayBuffer) => void;
 }
 
 class DatasetWorkerInterruptedError extends Error {
@@ -1525,6 +1529,14 @@ function askDatasetWorker<T>(
       }
       if (data.type === 'error') {
         finish(() => reject(new Error(String(data.message))));
+        return;
+      }
+      if (data.type === 'microdatasus-chunk') {
+        if (!(data.bytes instanceof ArrayBuffer)) {
+          finish(() => reject(new Error(`${options.label} produziu um bloco inválido`)));
+          return;
+        }
+        options.chunk?.(data.bytes);
         return;
       }
       finish(() => resolve(data as T));
@@ -2355,6 +2367,126 @@ async function downloadSourceDbf(): Promise<void> {
   }
 }
 
+function loadedResourceForDefOption(option: DefDefinition['options'][number]): { id: string; kind: 'cnv' | 'lookup' } | undefined {
+  if (option.kind === 'conversion') {
+    const entry = [...cnvByName.entries()].find(([name, definition]) =>
+      definition.mode !== 'new-format' && baseName(name) === baseName(option.conversionFile));
+    return entry ? { id: entry[0], kind: 'cnv' } : undefined;
+  }
+  if (option.kind === 'dbf-lookup') {
+    const entry = [...lookupByName.keys()].find((name) => baseName(name) === baseName(option.lookupFile));
+    return entry ? { id: entry, kind: 'lookup' } : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Every raw DBF field stays present. A readable companion column is added only
+ * when the active DEF points to exactly one loaded, executable resource for
+ * that field (selection-role options win when unambiguous). We never guess
+ * between two competing CNVs.
+ */
+function microdatasusFieldSpecs(): MicrodatasusFieldSpec[] {
+  if (!dbfHeader) return [];
+  return dbfHeader.fields.map((field): MicrodatasusFieldSpec => {
+    if (!activeDef) return { field: field.name };
+    const loaded = activeDef.options
+      .filter((option) => option.field.toUpperCase() === field.name.toUpperCase())
+      .map((option) => ({ option, resource: loadedResourceForDefOption(option) }))
+      .filter((item): item is typeof item & { resource: { id: string; kind: 'cnv' | 'lookup' } } => Boolean(item.resource));
+    const selection = loaded.filter((item) => item.option.roles.includes('selection'));
+    const candidates = selection.length ? selection : loaded;
+    if (candidates.length !== 1) return { field: field.name };
+    const chosen = candidates[0]!;
+    return {
+      field: field.name,
+      valueMode: 'raw-and-label',
+      labelOutputName: `${field.name}__ROTULO`,
+      dimension: chosen.resource.kind === 'cnv'
+        ? {
+            field: field.name,
+            conversionId: chosen.resource.id,
+            ...(chosen.option.kind === 'conversion' ? { startPosition: chosen.option.startPosition } : {}),
+            unclassifiedPolicy: 'discriminate',
+          }
+        : { field: field.name, lookupId: chosen.resource.id, unclassifiedPolicy: 'discriminate' },
+    };
+  });
+}
+
+function conversionsForMicrodatasus(fields: readonly MicrodatasusFieldSpec[]): ConversionRegistry {
+  const conversions: Record<string, CnvDefinition | DimensionLookupDefinition> = currentPlan
+    ? { ...conversionsForPlan(currentPlan) }
+    : {};
+  for (const field of fields) {
+    const conversionId = field.dimension?.conversionId;
+    const lookupId = field.dimension?.lookupId;
+    if (conversionId) {
+      const definition = cnvByName.get(conversionId);
+      if (!definition) throw new Error(`Conversão ${conversionId} não está carregada`);
+      conversions[conversionId] = definition;
+    }
+    if (lookupId) {
+      const definition = lookupByName.get(lookupId);
+      if (!definition) throw new Error(`Tabela auxiliar ${lookupId} não está carregada`);
+      conversions[lookupId] = definition;
+    }
+  }
+  return conversions;
+}
+
+function microdatasusSourceContexts(): MicrodatasusSourceContext[] {
+  return activeDatasetSources.map((source) => ({
+    sourceName: source.name,
+    ...(source.catalogQuery ? {
+      system: source.catalogQuery.system,
+      fileType: source.catalogQuery.fileType,
+      year: source.catalogQuery.year,
+      ...(source.catalogQuery.month ? { month: source.catalogQuery.month } : {}),
+      ...(source.catalogQuery.uf ? { uf: source.catalogQuery.uf } : {}),
+    } : {}),
+  }));
+}
+
+async function downloadMicrodatasusCsv(): Promise<void> {
+  if (!dbfHeader || !currentPlan || !currentResult) return;
+  const label = microdatasusCsvButton.textContent;
+  microdatasusCsvButton.disabled = true;
+  microdatasusCsvButton.textContent = 'Preparando Microdatasus…';
+  const chunks: BlobPart[] = [];
+  try {
+    const fields = microdatasusFieldSpecs();
+    const conversions = conversionsForMicrodatasus(fields);
+    const reply = await askDataset<{ stats: { recordsSeen: number; recordsAccepted: number; rowsEmitted: number; bytesEmitted: number } }>(
+      {
+        type: 'microdatasus-csv',
+        plan: currentPlan,
+        conversions,
+        fields,
+        provenanceColumns: ['sourceName', 'system', 'fileType', 'year', 'month', 'uf'],
+        sourceContexts: microdatasusSourceContexts(),
+        // Blob accumulation is still a browser-memory boundary. Larger exports
+        // should move to a writable File System Access stream in a later cut.
+        maxBytes: 512 * 1024 * 1024,
+      },
+      {
+        label: 'Exportação Microdatasus',
+        progress: datasetProgress('Filtrando Microdatasus'),
+        chunk: (bytes) => chunks.push(new Uint8Array(bytes)),
+      },
+    );
+    if (reply.stats.recordsAccepted !== currentResult.recordsAccepted || reply.stats.rowsEmitted !== currentResult.recordsAccepted) {
+      throw new Error('Microdatasus divergiu da contagem aceita; exportação interrompida');
+    }
+    const filename = `${datasetName.replace(/\.[^.]+$/, '')}-microdatasus.csv`;
+    downloadBlob(new Blob(chunks, { type: 'text/csv;charset=utf-8' }), filename);
+    showToast(`${filename}: ${integerFormat.format(reply.stats.rowsEmitted)} registros · ${formatBytes(reply.stats.bytesEmitted)}`);
+  } finally {
+    microdatasusCsvButton.textContent = label;
+    microdatasusCsvButton.disabled = !dbfHeader || !currentPlan || !currentResult;
+  }
+}
+
 async function downloadSelectedDbf(): Promise<void> {
   if (!dbfHeader || !currentPlan || !currentResult) return;
   const label = selectedDbfButton.textContent;
@@ -2470,6 +2602,7 @@ async function runAnalysis(): Promise<void> {
   setBusy('Montando a tabela…');
   setControlsEnabled(false);
   selectedDbfButton.disabled = true;
+  microdatasusCsvButton.disabled = true;
   await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   decodeCancelButton.hidden = false;
   try {
@@ -2501,6 +2634,7 @@ async function runAnalysis(): Promise<void> {
     chartPngButton.disabled = false;
     chartSvgButton.disabled = false;
     chartPrintButton.disabled = false;
+    microdatasusCsvButton.disabled = false;
     saveRecipeButton.disabled = false;
     saveTableButton.disabled = false;
     selectedDbfButton.disabled = false;
@@ -4896,6 +5030,7 @@ async function openPortableTable(file: File): Promise<void> {
   currentCompatibilityProfile = table.plan.spec.compatibilityProfile;
   sourceDbfButton.disabled = true;
   selectedDbfButton.disabled = true;
+  microdatasusCsvButton.disabled = true;
   configuredFilters = [];
   configuredCrossFieldRules = [];
   extraMeasures = [];
@@ -5239,6 +5374,8 @@ async function exportChartPng(): Promise<void> {
 
 fileInput.addEventListener('change', () => void loadFiles([...fileInput.files ?? []]));
 sourceDbfButton.addEventListener('click', () => void downloadSourceDbf().catch((error) =>
+  showToast(error instanceof Error ? error.message : String(error), true)));
+microdatasusCsvButton.addEventListener('click', () => void downloadMicrodatasusCsv().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
 selectedDbfButton.addEventListener('click', () => void downloadSelectedDbf().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));

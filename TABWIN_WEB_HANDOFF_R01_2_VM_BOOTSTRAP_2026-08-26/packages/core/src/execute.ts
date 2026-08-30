@@ -14,7 +14,7 @@ import type {
 
 export type ConversionRegistry = Readonly<Record<string, CnvDefinition | DimensionLookupDefinition>>;
 
-interface ResolvedDimension {
+export interface ResolvedDimensionValue {
   key?: string;
   label?: string;
 }
@@ -96,11 +96,11 @@ function extractSourceValue(
   return length === undefined ? text.slice(start) : text.slice(start, start + length);
 }
 
-function resolveDimension(
+export function resolveDimensionValue(
   record: DataRecord,
   dimension: DimensionSpec,
   conversions: ConversionRegistry,
-): ResolvedDimension {
+): ResolvedDimensionValue {
   const lookup = dimension.lookupId ? getLookup(conversions, dimension.lookupId) : undefined;
   const definition = dimension.conversionId
     ? getConversion(conversions, dimension.conversionId)
@@ -282,10 +282,10 @@ export function resolvePlanRecord(
 ): ResolvedPlanRecord | undefined {
   if (excludedByCrossFieldRules(record, plan, conversions)) return undefined;
   if (!plan.spec.filters.every((filter) => acceptsFilter(record, filter, conversions))) return undefined;
-  const row = resolveDimension(record, plan.spec.rows, conversions);
+  const row = resolveDimensionValue(record, plan.spec.rows, conversions);
   if (!row.key || row.label === undefined) return undefined;
   const column = plan.spec.columns
-    ? resolveDimension(record, plan.spec.columns, conversions)
+    ? resolveDimensionValue(record, plan.spec.columns, conversions)
     : { key: '__single__', label: singleColumnLabel(plan) };
   if (!column.key || column.label === undefined) return undefined;
   return { rowKey: row.key, rowLabel: row.label, columnKey: column.key, columnLabel: column.label };

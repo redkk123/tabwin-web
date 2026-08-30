@@ -520,6 +520,33 @@ não há UF para escolher, em vez de só esconder o seletor.
 
 ---
 
+### 4.9 Microdatasus filtrável pelo próprio aplicativo
+
+**Estado em 2026-08-30: CONCLUÍDA.** Handoff em
+`docs/handoffs/R10_14_MICRODATASUS.md`.
+
+A ideia original: baixar e filtrar microdados do DATASUS sem R e sem FTP
+manual. O catálogo oficial já resolvia o download; faltava a saída.
+
+- `packages/export/src/microdatasus.ts` exporta CSV registro a registro
+  usando o **mesmo `resolvePlanRecord`** que a tabulação usa para aceitar ou
+  rejeitar. Não existe segunda semântica de filtro.
+- Campo bruto sempre presente; coluna `CAMPO__ROTULO` só quando o DEF aponta
+  para **exatamente uma** conversão ou tabela auxiliar carregada e executável.
+  Havendo ambiguidade, fica só o bruto — não se escolhe CNV em silêncio.
+- Proveniência opcional por arquivo: fonte, sistema, tipo, ano, mês e UF,
+  aproveitando a consulta do catálogo quando o dado veio do fluxo DATASUS.
+- UTF-8 com BOM, `;`, CRLF e escape de aspas, quebras e delimitador.
+- O Worker emite blocos transferíveis por lote; a UI só baixa depois de
+  conferir `rowsEmitted === recordsAccepted` da tabulação ativa.
+
+**Teto explícito de 512 MiB.** O download final ainda cresce na heap do
+navegador porque o `Blob` precisa das partes juntas. Superar isso exige sink
+gravável (File System Access API) com fallback; remover o teto antes disso
+seria trocar um limite honesto por um OOM.
+
+---
+
 ## Bloqueados por evidência, não por esforço
 
 Não estimar nem agendar. Só saem do lugar quando aparecer fonte.

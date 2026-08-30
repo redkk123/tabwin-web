@@ -42,6 +42,13 @@ import {
 } from '../../../packages/analysis/src/data-quality.ts';
 import { createSelectedRecordCollector } from '../../../packages/export/src/selected-records.ts';
 import { writeDbf } from '../../../packages/export/src/dbf-writer.ts';
+import {
+  createMicrodatasusCsvEncoder,
+  fieldsUsedByMicrodatasusExport,
+  type MicrodatasusFieldSpec,
+  type MicrodatasusProvenanceColumn,
+  type MicrodatasusSourceContext,
+} from '../../../packages/export/src/microdatasus.ts';
 
 /** A source already parsed on the main thread, such as a CSV import. */
 interface RecordSource {
@@ -115,6 +122,17 @@ interface SelectedDbfRequest {
   conversions?: ConversionRegistry;
 }
 
+interface MicrodatasusCsvRequest {
+  type: 'microdatasus-csv';
+  requestId: number;
+  plan: QueryPlan;
+  conversions?: ConversionRegistry;
+  fields: MicrodatasusFieldSpec[];
+  provenanceColumns?: MicrodatasusProvenanceColumn[];
+  sourceContexts?: MicrodatasusSourceContext[];
+  maxBytes?: number;
+}
+
 /** Adds a schema-compatible file to the open dataset without reopening it. */
 interface AppendRequest {
   type: 'append';
@@ -124,7 +142,8 @@ interface AppendRequest {
 
 type DatasetRequest =
   | OpenRequest | AppendRequest | TabulateRequest
-  | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest | FlowRequest;
+  | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest
+  | FlowRequest | MicrodatasusCsvRequest;
 
 const workerScope: Worker = self as unknown as Worker;
 const BATCH_RECORDS = 5_000;
@@ -158,15 +177,15 @@ function reportProgress(requestId: number, recordsRead: number, recordCount: num
 function streamAll(
   requestId: number,
   fields: readonly string[] | undefined,
-  consume: (batch: DbfRecordBatch) => void,
+  consume: (batch: DbfRecordBatch, sourceIndex: number) => void,
 ): number {
   const declared = header?.recordCount ?? 0;
   let readSoFar = 0;
   let reported = 0;
 
-  for (const source of sources) {
+  for (const [sourceIndex, source] of sources.entries()) {
     const forward = (batch: DbfRecordBatch): void => {
-      consume(batch);
+      consume(batch, sourceIndex);
       const total = readSoFar + batch.recordsRead;
       if (total - reported >= PROGRESS_INTERVAL_RECORDS) {
         reported = total;
@@ -339,9 +358,41 @@ function handle(request: DatasetRequest): void {
       const collector = createSelectedRecordCollector(request.plan, request.conversions ?? {});
       // No projection here: the exported DBF must carry every declared field.
       streamAll(request.requestId, undefined, (batch) => collector.push(batch.records));
-      const bytes = writeDbf(collector.finish(), header.fields, { dateOfLastUpdate: header.dateOfLastUpdate });
+      const bytes = writeDbf(collector.finish(), header.fields, header.dateOfLastUpdate ? { dateOfLastUpdate: header.dateOfLastUpdate } : {});
       const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
       post({ type: 'selected-dbf-ready', requestId: request.requestId, bytes: buffer }, [buffer]);
+      return;
+    }
+    case 'microdatasus-csv': {
+      if (!header) throw new Error('Nenhum conjunto de dados aberto');
+      const maxBytes = request.maxBytes ?? 512 * 1024 * 1024;
+      if (!Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > 2 * 1024 * 1024 * 1024) {
+        throw new Error('Limite Microdatasus inválido');
+      }
+      if (request.sourceContexts && request.sourceContexts.length !== sources.length) {
+        throw new Error('Proveniência Microdatasus não corresponde às fontes abertas');
+      }
+      const conversions = request.conversions ?? {};
+      const exporter = createMicrodatasusCsvEncoder(request.plan, request.fields, conversions, {
+        provenanceColumns: request.provenanceColumns ?? [],
+      });
+      let emitted = 0;
+      const emitChunk = (bytes: Uint8Array): void => {
+        if (!bytes.byteLength) return;
+        emitted += bytes.byteLength;
+        if (emitted > maxBytes) {
+          throw new Error(`Microdatasus excedeu ${(maxBytes / 1024 / 1024).toFixed(0)} MiB; restrinja os filtros antes de exportar`);
+        }
+        const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+        post({ type: 'microdatasus-chunk', requestId: request.requestId, bytes: buffer }, [buffer]);
+      };
+      emitChunk(exporter.header());
+      const projectedFields = fieldsUsedByMicrodatasusExport(request.plan, request.fields);
+      streamAll(request.requestId, projectedFields, (batch, sourceIndex) => {
+        emitChunk(exporter.push(batch.records, request.sourceContexts?.[sourceIndex]));
+      });
+      const stats = exporter.finish();
+      post({ type: 'microdatasus-ready', requestId: request.requestId, stats });
       return;
     }
   }
