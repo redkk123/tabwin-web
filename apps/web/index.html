@@ -379,7 +379,7 @@
                 <label id="table-operation-left-label">Coluna A<select id="table-operation-left"></select></label>
                 <label id="table-operation-right-label">Coluna B<select id="table-operation-right"></select></label>
                 <label id="table-operation-number-label" hidden>Fator/valor<input id="table-operation-number" type="number" step="any" value="1"></label>
-                <label id="table-operation-expression-label" hidden>Expressão<input id="table-operation-expression" type="text" spellcheck="false" placeholder="(C01 + C02) / 2"></label>
+                <label id="table-operation-expression-label" hidden>Expressão<input id="table-operation-expression" type="text" spellcheck="false" list="table-operation-function-list" placeholder="=TAXA([Óbitos]; [População]; 100000)"></label>
                 <label id="table-operation-zero-label" hidden>Divisão por zero<select id="table-operation-zero"><option value="error">Interromper</option><option value="zero">Usar zero</option></select></label>
                 <label>Nome da coluna<input id="table-operation-label" type="text" maxlength="80" placeholder="Gerado automaticamente"></label>
                 <label>Política do total<select id="table-operation-total">
@@ -389,6 +389,13 @@
                 </select></label>
                 <button class="primary-button table-operation-apply" id="table-operation-apply" type="button"><span>Aplicar</span><b>＋</b></button>
               </div>
+              <datalist id="table-operation-function-list"></datalist>
+              <details class="formula-help" id="formula-help" hidden>
+                <summary>Funções disponíveis <span id="formula-function-count"></span></summary>
+                <p>Sintaxe familiar do Excel sobre as colunas desta tabela: <code>=SE([Casos] &lt; 5; 0; [Casos])</code>. A coluna é referida pelo nome entre colchetes ou pela chave (<code>C01</code>). Vírgula e ponto e vírgula funcionam como separador.</p>
+                <div id="formula-function-groups"></div>
+                <p class="quality-note">Não é o Excel inteiro: não existe grade de células, então não há <code>A1:B35</code>, <code>PROCV</code> nem macros. <code>CONT.SE</code> também não existe — o contrato dela é intervalo + critério, que esta linguagem não teria como significar honestamente.</p>
+              </details>
               <ol class="table-operation-history" id="table-operation-history" hidden></ol>
               <p class="compatibility-note">Políticas modernas explícitas. A equivalência dessas transformações com o TabWin 4.15 será promovida operação por operação após casos-oráculo.</p>
             </section>

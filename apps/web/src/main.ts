@@ -144,6 +144,10 @@ import {
   createIncludeTableOperation,
   replayTableOperations,
 } from '../../../packages/analysis/src/table-operations.ts';
+import {
+  tableExpressionFunctionCatalog,
+  type TableExpressionFunctionEntry,
+} from '../../../packages/analysis/src/table-expression.ts';
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
@@ -435,6 +439,10 @@ const tableOperationApply = element<HTMLButtonElement>('#table-operation-apply')
 const tableOperationUndo = element<HTMLButtonElement>('#table-operation-undo');
 const tableOperationReset = element<HTMLButtonElement>('#table-operation-reset');
 const tableOperationHistory = element<HTMLOListElement>('#table-operation-history');
+const tableOperationFunctionList = element<HTMLDataListElement>('#table-operation-function-list');
+const formulaHelp = element<HTMLDetailsElement>('#formula-help');
+const formulaFunctionCount = element<HTMLElement>('#formula-function-count');
+const formulaFunctionGroups = element<HTMLElement>('#formula-function-groups');
 const tablePresentation = element<HTMLElement>('#table-presentation');
 const tableTitle = element<HTMLInputElement>('#table-title');
 const tableSubtitle = element<HTMLInputElement>('#table-subtitle');
@@ -3401,6 +3409,7 @@ function updateTableOperationControls(): void {
   tableOperationRightLabel.hidden = !binary;
   tableOperationNumberLabel.hidden = kind !== 'factor' && kind !== 'sequence' && kind !== 'constant';
   tableOperationExpressionLabel.hidden = kind !== 'expression';
+  formulaHelp.hidden = kind !== 'expression';
   tableOperationZeroLabel.hidden = kind !== 'divide' && kind !== 'percentage' && kind !== 'expression';
   tableOperationUndo.disabled = tableOperations.length === 0;
   tableOperationReset.disabled = tableOperations.length === 0;
@@ -3410,6 +3419,44 @@ function updateTableOperationControls(): void {
     const item = document.createElement('li');
     item.textContent = operationLabel(operation);
     return item;
+  }));
+}
+
+/**
+ * Renders the formula function reference straight from the engine's own
+ * catalog, so the list a user reads can never drift from the list the parser
+ * accepts. Built once: the registry is static.
+ */
+function renderFormulaHelp(): void {
+  const catalog = tableExpressionFunctionCatalog();
+  tableOperationFunctionList.replaceChildren(...catalog.map((entry) => {
+    const option = document.createElement('option');
+    option.value = `${entry.name}(`;
+    option.label = `${entry.signature} — ${entry.summary}`;
+    return option;
+  }));
+
+  const byGroup = new Map<TableExpressionFunctionEntry['group'], TableExpressionFunctionEntry[]>();
+  for (const entry of catalog) byGroup.set(entry.group, [...(byGroup.get(entry.group) ?? []), entry]);
+
+  formulaFunctionCount.textContent = `${integerFormat.format(catalog.length)} funções`;
+  formulaFunctionGroups.replaceChildren(...[...byGroup.entries()].map(([group, entries]) => {
+    const section = document.createElement('div');
+    section.className = 'formula-function-group';
+    const heading = document.createElement('strong');
+    heading.textContent = group;
+    const list = document.createElement('dl');
+    for (const entry of entries) {
+      const term = document.createElement('dt');
+      term.textContent = entry.signature;
+      const description = document.createElement('dd');
+      description.textContent = entry.aliases.length
+        ? `${entry.summary} Também: ${entry.aliases.join(', ')}.`
+        : entry.summary;
+      list.append(term, description);
+    }
+    section.append(heading, list);
+    return section;
   }));
 }
 
@@ -6477,6 +6524,7 @@ transformAddStep.addEventListener('click', () => {
 });
 transformApplyButton.addEventListener('click', () => void runTransformPipeline());
 transformResetButton.addEventListener('click', () => void resetTransformPipelineData());
+renderFormulaHelp();
 for (const control of [filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum]) {
   control.addEventListener('input', updateFilterCount);
   control.addEventListener('change', updateFilterCount);

@@ -115,7 +115,9 @@ export function applyTableOperation(
     } else if (operation.kind === 'constant') {
       value = operation.value;
     } else {
-      value = evaluateTableExpression(expression!, cells, operation.divisionByZero, rowIndex);
+      value = evaluateTableExpression(expression!, {
+        cells, rowIndex, allCells: source.cells, divisionByZero: operation.divisionByZero,
+      });
     }
     return finite(value, `row ${rowIndex + 1}`);
   });

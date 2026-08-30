@@ -556,3 +556,59 @@ test('the transform pipeline recodes, marks missing, filters, dedupes and drops 
   await expect(restoredBody).not.toContainText('Feminino');
   await expect(page.locator('#result-table')).toContainText('60');
 });
+
+test('Excel-style formulas compute a derived column, and the advertised function list comes from the engine itself', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('MUNIC');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toContainText('M007');
+
+  // The function reference only appears for the formula operation, and its
+  // contents are rendered from the parser's own catalog - never a hand-kept
+  // copy that could advertise something the engine would reject.
+  await expect(page.locator('#formula-help')).toBeHidden();
+  await page.locator('#table-operation-kind').selectOption('expression');
+  await expect(page.locator('#formula-help')).toBeVisible();
+  await expect(page.locator('#formula-function-count')).toContainText('funções');
+  await expect(page.locator('.formula-function-group')).not.toHaveCount(0);
+
+  // A pt-BR Excel user's reflexes: leading "=", Portuguese names, semicolon
+  // separators, a comparison, and nesting - all in one formula.
+  await page.locator('#table-operation-expression')
+    .fill('=SE([Frequência] > 5; ARRED(TAXA([Frequência]; 1000; 1000); 1); 0)');
+  await page.locator('#table-operation-label').fill('Taxa condicional');
+  await page.locator('#table-operation-apply').click();
+
+  const table = page.locator('#result-table');
+  await expect(table).toContainText('Taxa condicional');
+  // M007 has 23 records (> 5, so it keeps its rate); M003 has 5 (not > 5, so 0).
+  const m007 = page.locator('#result-table tbody tr', { hasText: 'M007' });
+  await expect(m007).toContainText('23');
+  const m003 = page.locator('#result-table tbody tr', { hasText: 'M003' });
+  await expect(m003).toContainText('0');
+
+  // LAG reads the row above; without IFERROR the first row would have no
+  // predecessor to read, which is an error rather than an invented zero.
+  await page.locator('#table-operation-reset').click();
+  await page.locator('#table-operation-kind').selectOption('expression');
+  await page.locator('#table-operation-expression').fill('LAG([Frequência])');
+  await page.locator('#table-operation-label').fill('Sem IFERROR');
+  await page.locator('#table-operation-apply').click();
+  await expect(page.locator('#toast')).toContainText('LAG');
+  await expect(table).not.toContainText('Sem IFERROR');
+
+  // Named the same way an Excel user would, the escape hatch works.
+  await page.locator('#table-operation-expression').fill('IFERROR(LAG([Frequência]); 0)');
+  await page.locator('#table-operation-label').fill('Anterior');
+  await page.locator('#table-operation-apply').click();
+  await expect(table).toContainText('Anterior');
+
+  // A name outside the registry is refused by name - nothing is executed.
+  await page.locator('#table-operation-expression').fill('eval(1)');
+  await page.locator('#table-operation-label').fill('Proibida');
+  await page.locator('#table-operation-apply').click();
+  await expect(page.locator('#toast')).toContainText('unknown function eval');
+  await expect(table).not.toContainText('Proibida');
+});

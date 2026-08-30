@@ -1,15 +1,15 @@
 {
-  "revision": "r11-4-transform-pipeline-first-cut",
+  "revision": "r11-5-excel-style-formula-functions",
   "date": "2026-08-30",
-  "phase": "faixa-4-r11-core-orchestrator-audit-ui-and-transform-pipeline-done-excel-formulas-pending",
+  "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 326,
-    "passed": 326,
+    "total": 346,
+    "passed": 346,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 17,
-    "e2e_passed": 17
+    "e2e_total": 18,
+    "e2e_passed": 18
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -306,7 +306,11 @@
     "r11-3-investigate-ui-signal-cards-focus-field-and-session-local-dismissal",
     "r11-4-transform-pipeline-select-columns-filter-rows-recode-missing-value-policy-dedupe",
     "r11-4-transform-apply-idempotent-always-restarts-from-original-files",
-    "r11-analytics-track-remaining-formulas-and-epidemiology-stats-not-implemented"
+    "r11-5-excel-style-formula-registry-32-functions-with-comparisons-and-pt-br-aliases",
+    "r11-5-epidemiology-formula-functions-rate-percent-ratio-change-pctchange-lag-zscore",
+    "r11-5-closed-function-registry-rejects-unknown-names-at-parse-time",
+    "r11-5-function-catalog-typed-as-total-record-so-ui-list-cannot-drift-from-parser",
+    "r11-analytics-track-remaining-epidemiology-denominators-and-standardization-not-implemented"
   ],
   "pinned_dependencies": {
     "@precisa-saude/datasus-dbc": "2.0.2",
@@ -331,8 +335,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "r11-4-2-transform-pipeline-remaining-step-kinds-mutate-cast-join-bind-groupby-and-column-rename-ui",
-    "r11-5-excel-style-formula-functions-registry-sum-average-if-plus-epidemiology-rate-zscore",
+    "r11-4-2-transform-pipeline-remaining-step-kinds-mutate-by-formula-cast-join-bind-groupby-and-column-rename-ui",
     "r11-6-epidemiology-track-ibge-denominators-rates-ci-direct-age-standardization",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

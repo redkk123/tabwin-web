@@ -146,11 +146,11 @@ Isso entra na receita. **Antes de congelar qual padrão brasileiro**, é
 preciso uma rodada própria de evidência e documentação: isso vira parte da
 metodologia científica da ferramenta, não uma constante no código.
 
-## 4.13 Auditoria estatística, comparação de tabelas e transformação de dados
+## 4.13 Auditoria estatística, comparação, transformação e fórmulas
 
-**Estado em 2026-08-30: NÚCLEO, ORQUESTRADOR, UI DE INVESTIGAÇÃO E UM PRIMEIRO**
-**PIPELINE DE TRANSFORMAÇÃO INTEGRADOS (R11.0–R11.4); FÓRMULAS ESTILO EXCEL**
-**AINDA NÃO EXISTEM.** Especificação
+**Estado em 2026-08-30: NÚCLEO, ORQUESTRADOR, UI DE INVESTIGAÇÃO, UM PRIMEIRO**
+**PIPELINE DE TRANSFORMAÇÃO E AS FÓRMULAS ESTILO EXCEL INTEGRADOS**
+**(R11.0–R11.5); FALTA A TRILHA DE EPIDEMIOLOGIA (R11.6).** Especificação
 completa em `docs/product/TABWIN_WEB_MASTER_PRE_UI_R11_2.md` (recebida do
 ChatGPT como spec de engenharia + pré-implementação de núcleo). Esse
 documento tem 3.656 linhas e cobre seis frentes — aquisição, limpeza,
@@ -266,10 +266,53 @@ seria falso. O que foi feito:
   com detecção de schema drift.
   `npm run check`: **326/326**. `npm run e2e`: **17/17**.
 
-**Deliberadamente fora desta passada, e por quê:** o registro de funções
-estilo Excel (`=SOMA(...)`, `=SE(...)`, mais funções específicas de
-epidemiologia como `TAXA`/`ZSCORE`) — pelo cronograma do próprio spec, uma
-faixa própria (R11.5). Fazer rápido e mal seria pior do que não fazer.
+- **R11.5 — Fórmulas estilo Excel, sem virar Excel.** O parser de expressões
+  que já existia (números, colunas, `+ - * / ^`, parênteses) ganhou dois nós
+  no AST — chamada de função e comparação — em vez de ser reescrito, que é
+  exatamente o caminho que o ChatGPT apontou. **32 funções** em cinco grupos:
+  agregação (`SUM`/`AVERAGE`/`MIN`/`MAX`/`MEDIAN`/`COUNT`), aritmética
+  (`ABS`/`SQRT`/`POWER`/`EXP`/`LN`/`LOG`/`LOG10`), arredondamento
+  (`ROUND`/`ROUNDUP`/`ROUNDDOWN`/`TRUNC`/`INT`), lógica
+  (`IF`/`IFS`/`AND`/`OR`/`NOT`/`IFERROR`/`ISNUMBER`) e **epidemiologia**
+  (`RATE`/`PERCENT`/`RATIO`/`CHANGE`/`PCTCHANGE`/`LAG`/`ZSCORE`). Mais
+  comparações (`< > <= >= = <>`), `=` inicial opcional, `;` como separador, e
+  apelidos em português (`SOMA`, `MÉDIA`, `SE`, `TAXA`, `RAZÃO`…).
+
+  As bordas do Excel que valem estar certas foram implementadas uma a uma, não
+  por apelido: as quatro funções de arredondamento discordam entre si em
+  negativos (`ROUND(−2,5) = −3` como no Excel, não `−2` como o `Math.round` do
+  JavaScript; `INT(−2,7) = −3` mas `TRUNC(−2,7) = −2`), `LOG` tem base 10 por
+  padrão, e arredondar casas decimais desloca o expoente decimal em vez de
+  multiplicar por potência de dez — `2,345 * 100` é `234,49999999999997` em
+  binário, e a versão ingênua responderia `2,34` onde o Excel responde `2,35`.
+
+  `LAG` e `ZSCORE` leem a coluna inteira, então o avaliador passou a receber
+  todas as linhas, e esses argumentos são obrigados a ser referência de coluna
+  nua (checado no parse). `ZSCORE` reusa o mesmo desvio-padrão amostral do
+  painel de Estatística, para os dois nunca discordarem. `LAG` na primeira
+  linha **falha** em vez de devolver zero — não existe linha anterior, e
+  inventar uma fabricaria um dado; `IFERROR(LAG([X]); 0)` é a saída explícita.
+  As funções que dividem respeitam a mesma política `Interromper`/`Usar zero`
+  que a operação já expõe.
+
+  Segurança: nada avalia texto como código. Todo nome chamável precisa estar
+  no registro, e qualquer outro é recusado **por nome, no parse**
+  (`unknown function eval`). O catálogo que alimenta o painel "Funções
+  disponíveis" e o autocomplete é tipado como registro **total** sobre os
+  nomes reais, então uma função sem documentação não compila e a lista que o
+  usuário lê nunca diverge da que o parser aceita.
+
+  **Fora, por decisão:** `COUNTIF`/`CONT.SE` — o contrato dela é intervalo +
+  critério, e fingir isso sobre uma linha só daria ao nome um significado que
+  um usuário de Excel leria errado. Também fora: `PROCV`/`VLOOKUP`,
+  referências `A1:B35`, macros, e editor de fórmula com destaque de sintaxe.
+  `npm run check`: **346/346**. `npm run e2e`: **18/18**.
+
+**Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
+completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
+confiança, padronização direta (R11.6). As fórmulas acima dão as contas
+linha a linha; a trilha é sobre trazer o denominador populacional certo para
+dentro do produto, o que é aquisição de dado, não sintaxe.
 
 ---
 

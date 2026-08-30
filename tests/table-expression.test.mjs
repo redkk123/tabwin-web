@@ -36,5 +36,12 @@ test('expression division by zero and non-finite results fail explicitly', () =>
 
 test('expression parser rejects missing columns and executable syntax', () => {
   assert.throws(() => applyTableOperation(result, expression('C03 + 1')), /missing column C03/);
-  assert.throws(() => applyTableOperation(result, expression('globalThis.alert(1)')), /missing column|unexpected trailing/);
+  // Any callable name must be in the registry, so host objects and methods
+  // are refused by name rather than reaching an evaluator at all.
+  assert.throws(() => applyTableOperation(result, expression('globalThis.alert(1)')), /unknown function globalThis\.alert/);
+  assert.throws(() => applyTableOperation(result, expression('constructor(1)')), /unknown function constructor/);
+  assert.throws(() => applyTableOperation(result, expression('eval(1)')), /unknown function eval/);
+  // COUNTIF is deliberately absent: its contract is a range plus a criteria
+  // string, which this language has no way to mean honestly.
+  assert.throws(() => applyTableOperation(result, expression('COUNTIF(C01, 1)')), /unknown function COUNTIF/);
 });
