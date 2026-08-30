@@ -137,6 +137,10 @@ select:disabled, input:disabled { color: #859196; background: #f4f6f5; }
 .formula-function-group dl { display: grid; grid-template-columns: minmax(0,auto) minmax(0,1fr); gap: 2px 10px; margin: 5px 0 0; }
 .formula-function-group dt { color: var(--ink); font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 9.5px; white-space: nowrap; }
 .formula-function-group dd { margin: 0; color: #607573; font-size: 9.5px; line-height: 1.45; }
+.transform-code-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.transform-code-actions select { min-height: 30px; width: auto; padding: 4px 8px; font-size: 10px; }
+.transform-code { margin-top: 8px; }
+.transform-code pre { margin: 6px 0 0; padding: 10px 12px; max-height: 320px; overflow: auto; border: 1px solid #d5e1dd; border-radius: 9px; background: #0f2a37; color: #d7efe6; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 10px; line-height: 1.55; white-space: pre; }
 .transform-history { display: grid; gap: 8px; margin-top: 4px; }
 .transform-history-step { padding: 9px 11px; border: 1px solid #dce7e3; border-radius: 9px; background: #fff; }
 .transform-history-step strong { display: block; color: var(--ink); font-size: 11px; }

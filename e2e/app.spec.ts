@@ -742,3 +742,40 @@ test('group-summarize collapses the dataset to one row per key, with N and a sum
   await expect(body.locator('tr', { hasText: 'SP' })).toContainText('50');
   await expect(body.locator('tr', { hasText: 'DF' })).toContainText('10');
 });
+
+test('"Ver código equivalente" renders the pipeline as dplyr and pandas, without running anything', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/grupo-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  // The button only means something once there is a pipeline to render.
+  await expect(page.locator('#transform-code-toggle')).toBeDisabled();
+
+  await page.locator('#transform-step-kind').selectOption('filter-rows');
+  await page.locator('#transform-filter-field').selectOption('CLASSI');
+  await page.locator('#transform-filter-categories').fill('1');
+  await page.locator('#transform-add-step').click();
+  await page.locator('#transform-step-kind').selectOption('group-summarize');
+  await page.locator('#transform-group-fields').selectOption(['UF']);
+  await page.locator('#transform-add-step').click();
+
+  await expect(page.locator('#transform-code-toggle')).toBeEnabled();
+  await page.locator('#transform-code-toggle').click();
+  const code = page.locator('#transform-code-output');
+  await expect(page.locator('#transform-code')).toBeVisible();
+  // dplyr by default.
+  await expect(code).toContainText('library(dplyr)');
+  await expect(code).toContainText('dplyr::filter(CLASSI %in% c("1"))');
+  await expect(code).toContainText('dplyr::group_by(UF)');
+
+  await page.locator('#transform-code-target').selectOption('python');
+  await expect(code).toContainText('import pandas as pd');
+  await expect(code).toContainText('df.groupby(["UF"]');
+
+  // It is a view, not an action: the dataset is untouched by opening it.
+  await expect(page.locator('#transform-result')).toBeEmpty();
+
+  await page.locator('#transform-code-toggle').click();
+  await expect(page.locator('#transform-code')).toBeHidden();
+});

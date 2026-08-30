@@ -153,6 +153,10 @@ import type {
   TransformStep,
   TransformStepResult,
 } from '../../../packages/analysis/src/transform-pipeline.ts';
+import {
+  transformPipelineToCode,
+  type PipelineCodeTarget,
+} from '../../../packages/analysis/src/transform-pipeline-code.ts';
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
@@ -327,6 +331,10 @@ const transformStepList = element<HTMLElement>('#transform-step-list');
 const transformResetButton = element<HTMLButtonElement>('#transform-reset-button');
 const transformApplyButton = element<HTMLButtonElement>('#transform-apply-button');
 const transformResult = element<HTMLElement>('#transform-result');
+const transformCodeToggle = element<HTMLButtonElement>('#transform-code-toggle');
+const transformCodeTarget = element<HTMLSelectElement>('#transform-code-target');
+const transformCodePanel = element<HTMLElement>('#transform-code');
+const transformCodeOutput = element<HTMLElement>('#transform-code-output');
 const transformCount = element<HTMLElement>('#transform-count');
 const openRecipeButton = element<HTMLButtonElement>('#open-recipe-button');
 const saveRecipeButton = element<HTMLButtonElement>('#save-recipe-button');
@@ -1481,6 +1489,22 @@ function renderTransformSteps(): void {
     ? `${integerFormat.format(transformSteps.length)} etapa(s)`
     : 'nenhuma etapa';
   transformApplyButton.disabled = !dbfHeader || transformSteps.length === 0;
+  transformCodeToggle.disabled = transformSteps.length === 0;
+  if (transformSteps.length === 0) {
+    transformCodePanel.hidden = true;
+    transformCodeTarget.hidden = true;
+    transformCodeToggle.textContent = 'Ver código equivalente';
+  } else if (!transformCodePanel.hidden) {
+    renderTransformCode();
+  }
+}
+
+function renderTransformCode(): void {
+  transformCodeOutput.textContent = transformPipelineToCode(
+    transformSteps,
+    transformCodeTarget.value as PipelineCodeTarget,
+    'dados',
+  );
 }
 
 function addTransformStep(): void {
@@ -6684,6 +6708,14 @@ transformAddStep.addEventListener('click', () => {
   try { addTransformStep(); }
   catch (error) { showToast(error instanceof Error ? error.message : String(error), true); }
 });
+transformCodeToggle.addEventListener('click', () => {
+  const show = transformCodePanel.hidden;
+  transformCodePanel.hidden = !show;
+  transformCodeTarget.hidden = !show;
+  transformCodeToggle.textContent = show ? 'Ocultar código equivalente' : 'Ver código equivalente';
+  if (show) renderTransformCode();
+});
+transformCodeTarget.addEventListener('change', renderTransformCode);
 transformApplyButton.addEventListener('click', () => void runTransformPipeline());
 transformResetButton.addEventListener('click', () => void resetTransformPipelineData());
 renderFormulaHelp();

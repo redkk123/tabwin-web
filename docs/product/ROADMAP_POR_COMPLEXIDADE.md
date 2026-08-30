@@ -353,6 +353,17 @@ seria falso. O que foi feito:
   se escreve como fórmula sobre o resultado, com o denominador explícito.
   `npm run check`: **370/370**. `npm run e2e`: **21/21**.
 
+- **R11.4.4 — "Ver código equivalente" (dplyr / pandas).** Recurso
+  pedagógico da seção 5.6 do spec, pedido explicitamente na conversa com o
+  ChatGPT: o pipeline renderizado como código R ou Python, **só leitura, uma
+  via** — derivado do plano, nunca executado, sem parser de volta. Onde a
+  semântica do TabWin Web difere do embutido do alvo (semana epidemiológica,
+  código IBGE, funções de fórmula como RATE/ZSCORE/LAG), há um comentário
+  dizendo, em vez de uma chamada que calcularia outra coisa. O pipe nativo do
+  R exigiu cuidado: notas vão em linhas próprias de comentário e o pipe final
+  sempre no último verbo habilitado, para nunca deixar um `|>` pendurado.
+  `npm run check`: **378/378**. `npm run e2e`: **22/22**.
+
 **Deliberadamente fora desta passada, e por quê:** a trilha de epidemiologia
 completa — denominadores IBGE, taxas padronizadas por idade, intervalos de
 confiança, padronização direta (R11.6). As fórmulas acima dão as contas

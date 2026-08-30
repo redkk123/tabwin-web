@@ -331,6 +331,17 @@
               <button class="secondary-button" id="transform-add-step" type="button" disabled>Adicionar etapa</button>
             </div>
             <div class="active-filter-list" id="transform-step-list"></div>
+            <div class="transform-code-actions">
+              <button class="text-button" id="transform-code-toggle" type="button" disabled>Ver código equivalente</button>
+              <select id="transform-code-target" hidden>
+                <option value="r">R (dplyr)</option>
+                <option value="python">Python (pandas)</option>
+              </select>
+            </div>
+            <div class="transform-code" id="transform-code" hidden>
+              <p class="quality-note">Visão pedagógica, só leitura: o código é derivado do pipeline, não o contrário, e não é executado. Onde a semântica do TabWin Web difere do R/pandas (semana epidemiológica, código IBGE, funções de fórmula), há um comentário dizendo.</p>
+              <pre id="transform-code-output"></pre>
+            </div>
             <div class="quality-actions">
               <button class="secondary-button" id="transform-reset-button" type="button" disabled>Restaurar dados originais</button>
               <button class="primary-button" id="transform-apply-button" type="button" disabled>Aplicar pipeline</button>
