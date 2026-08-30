@@ -8,8 +8,8 @@
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 12,
-    "e2e_passed": 12
+    "e2e_total": 14,
+    "e2e_passed": 14
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -253,7 +253,9 @@
     "three-track-architecture-decided-tabwin-compat-microdata-exploration-epidemiology",
     "statistical-anomaly-core-robust-outliers-hampel-jsd-tvd-hhi-wilson-rr-or-benjamini-hochberg",
     "table-comparison-core-inner-left-right-full-explicit-row-mapping-coverage-diagnostics",
-    "gaussian-fit-density-and-histogram-overlay-descriptive-not-a-normality-test"
+    "gaussian-fit-density-and-histogram-overlay-descriptive-not-a-normality-test",
+    "chart-zoom-excluded-from-svg-png-export-and-print-not-just-from-recipe",
+    "shared-axis-bounds-validation-across-recipe-and-editor"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
