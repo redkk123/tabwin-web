@@ -549,3 +549,55 @@ test('a sum with no DEF increment behind it keeps the neutral header instead of 
   const result = executeInMemory([{ UF: 'AC', VAL_TOT: 10.5 }], plan);
   assert.deepEqual(result.columns.map((column) => column.label), ['Valor']);
 });
+
+test('a recipe carries the transform pipeline, because the plan alone would rebuild a different table', () => {
+  // Without the pipeline, replaying this recipe would run the plan over the
+  // untransformed file and produce different numbers - while its own source
+  // fingerprints still asserted that the file matched.
+  const recipe = {
+    schema: 'tabwin-web.recipe',
+    version: 1,
+    spec: { compatibilityProfile: 'modern', rows: { field: 'ANO' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [],
+    sourceHints: [],
+    transformSteps: [
+      { id: 't1', kind: 'text-normalize', field: 'MUN', operations: [{ kind: 'ibge-municipality' }] },
+      { id: 't2', kind: 'date-part', field: 'DT', target: 'ANO', part: 'year' },
+    ],
+  };
+  const json = serializeRecipe(recipe);
+  const parsed = parseRecipe(json);
+  assert.deepEqual(parsed.transformSteps, recipe.transformSteps);
+  // Serialization stays stable, so two saves of the same analysis match byte
+  // for byte the way the rest of the recipe already guarantees.
+  assert.equal(serializeRecipe(parsed), json);
+});
+
+test('a recipe with no pipeline stays exactly as it was - the field is absent, not empty', () => {
+  const recipe = {
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'modern', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [],
+  };
+  const parsed = parseRecipe(serializeRecipe(recipe));
+  assert.equal('transformSteps' in parsed, false);
+});
+
+test('a malformed transform pipeline is rejected when the recipe is read, not when a record hits it', () => {
+  const base = {
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'modern', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [],
+  };
+  const withSteps = (transformSteps) => JSON.stringify({ ...base, transformSteps });
+
+  assert.throws(() => parseRecipe(withSteps('nope')), /invalid transform steps/);
+  assert.throws(() => parseRecipe(withSteps([null])), /invalid transform step/);
+  assert.throws(() => parseRecipe(withSteps([{ kind: 'dedupe' }])), /transform step has no id/);
+  assert.throws(() => parseRecipe(withSteps([{ id: 'a' }])), /transform step has no kind/);
+  assert.throws(() => parseRecipe(withSteps([{ id: '  ', kind: 'dedupe' }])), /transform step has no id/);
+  assert.throws(
+    () => parseRecipe(withSteps([{ id: 'a', kind: 'dedupe' }, { id: 'a', kind: 'dedupe' }])),
+    /repeats id a/,
+  );
+});

@@ -1009,3 +1009,45 @@ test('several DEFs can be loaded at once, and which one is in force is a visible
   await expect(page.locator('#measure-field')).not.toContainText('Casos confirmados');
   await expect(page.locator('#measure-field')).toContainText('CASOS');
 });
+
+test('a saved recipe replays its transform pipeline, so it rebuilds the same table it saved', async ({ page }) => {
+  // The pipeline runs before the tabulation. A recipe that carried only the
+  // plan would replay it over the untransformed file and rebuild a different
+  // table - while its own source fingerprints asserted the file matched.
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/limpeza-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+  await page.locator('#transform-step-kind').selectOption('date-part');
+  await page.locator('#transform-datepart-field').selectOption('DT');
+  await page.locator('#transform-datepart-part').selectOption('year');
+  await page.locator('#transform-datepart-target').fill('ANO');
+  await page.locator('#transform-add-step').click();
+  await page.locator('#transform-apply-button').click();
+
+  // ANO exists only because the pipeline created it.
+  await expect(page.locator('#row-field')).toContainText('ANO');
+  await page.locator('#row-field').selectOption('ANO');
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  const body = page.locator('#result-table tbody');
+  await expect(body).toContainText('2024');
+  const savedTable = await body.innerText();
+
+  const download = page.waitForEvent('download');
+  await page.locator('#save-recipe-button').click();
+  const recipeFile = await (await download).path();
+
+  // Fresh session, same raw file: ANO does not exist yet.
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/limpeza-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await expect(page.locator('#row-field')).not.toContainText('ANO');
+
+  await page.locator('#recipe-input').setInputFiles(recipeFile!);
+  // Opening the recipe replays the pipeline first, so the field it needs
+  // exists and the rebuilt table is the one that was saved.
+  await expect(page.locator('#transform-count')).toContainText('1 etapa');
+  await expect(page.locator('#result-table tbody')).toContainText('2024');
+  expect(await page.locator('#result-table tbody').innerText()).toBe(savedTable);
+});

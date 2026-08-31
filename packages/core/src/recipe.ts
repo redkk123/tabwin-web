@@ -20,6 +20,24 @@ export interface RecipeSourceHint extends Pick<SourceFingerprint, 'name' | 'sha2
   archiveSha256?: string;
 }
 
+/**
+ * A transform-pipeline step as the recipe carries it.
+ *
+ * Structural on purpose rather than the analysis package's `TransformStep`
+ * union: the recipe contract lives in core, and core must not depend on
+ * analysis. It is also honest about when a step can be fully checked - each
+ * step is validated against the fields present *at its own point in the
+ * pipeline*, which only exists once a dataset is open. `parseRecipe` checks
+ * the shape every step must have; applying the pipeline is what checks it
+ * against real data, and a step that no longer fits is exactly the schema
+ * drift the caller has to report.
+ */
+export interface RecipeTransformStep {
+  id: string;
+  kind: string;
+  [key: string]: unknown;
+}
+
 export interface AnalysisRecipeV1 {
   schema: 'tabwin-web.recipe';
   version: 1;
@@ -27,6 +45,14 @@ export interface AnalysisRecipeV1 {
   spec: TabulationSpec;
   conversions: ConversionFingerprint[];
   sourceHints: RecipeSourceHint[];
+  /**
+   * Record-level transformations replayed **before** the tabulation, in array
+   * order. They change the data the plan runs over, so a recipe that omitted
+   * them would replay `spec` against the untransformed file and produce a
+   * different table than the one that was saved - while its source
+   * fingerprints still asserted a match.
+   */
+  transformSteps?: RecipeTransformStep[];
   /** Deterministic post-tabulation transforms, replayed in array order. */
   resultOperations?: TableOperation[];
   view?: {
@@ -142,6 +168,17 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
     if (source.archiveSha256 !== undefined
       && (typeof source.archiveSha256 !== 'string' || !/^[a-f\d]{64}$/i.test(source.archiveSha256))) {
       throw new Error('invalid archive fingerprint in TabWin Web recipe');
+    }
+  }
+  if (parsed.transformSteps !== undefined) {
+    if (!Array.isArray(parsed.transformSteps)) throw new Error('invalid transform steps in TabWin Web recipe');
+    const stepIds = new Set<string>();
+    for (const step of parsed.transformSteps) {
+      if (!step || typeof step !== 'object') throw new Error('invalid transform step in TabWin Web recipe');
+      if (typeof step.id !== 'string' || !step.id.trim()) throw new Error('transform step has no id in TabWin Web recipe');
+      if (typeof step.kind !== 'string' || !step.kind.trim()) throw new Error('transform step has no kind in TabWin Web recipe');
+      if (stepIds.has(step.id)) throw new Error(`transform step repeats id ${step.id} in TabWin Web recipe`);
+      stepIds.add(step.id);
     }
   }
   if (parsed.resultOperations !== undefined) {

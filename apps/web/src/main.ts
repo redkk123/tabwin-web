@@ -25,6 +25,7 @@ import {
   type TableOperation,
   type TabulationResult,
   type TotalPolicy,
+  type RecipeTransformStep,
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
@@ -6477,6 +6478,11 @@ function saveRecipe(): void {
       ...(source.retrievedAt ? { retrievedAt: source.retrievedAt } : {}),
       ...(source.archiveSha256 ? { archiveSha256: source.archiveSha256 } : {}),
     })),
+    // The pipeline runs before the tabulation, so a recipe that omitted it
+    // would replay `spec` against the untransformed file and rebuild a
+    // different table than the one saved - while its own source fingerprints
+    // still asserted a match.
+    ...(transformSteps.length ? { transformSteps: transformSteps as unknown as RecipeTransformStep[] } : {}),
     ...(tableOperations.length ? { resultOperations: tableOperations } : {}),
     view: {
       chartType: chartType.value as ChartType,
@@ -6676,7 +6682,6 @@ async function includePortableTable(file: File): Promise<void> {
 async function openRecipe(file: File): Promise<void> {
   if (!dbfHeader || !activeDatasetSources.length) throw new Error('Abra um DBC ou DBF antes de aplicar a análise');
   const recipe = parseRecipe(await file.text());
-  const fields = new Set(dbfHeader.fields.map((field) => field.name));
   const requiredFields = [
     recipe.spec.rows.field,
     recipe.spec.columns?.field,
@@ -6685,7 +6690,25 @@ async function openRecipe(file: File): Promise<void> {
     ...recipe.spec.filters.map((filter) => filter.field),
     ...(recipe.spec.crossFieldRules ?? []).flatMap((rule) => rule.conditions.map((condition) => condition.field)),
   ].filter((field): field is string => Boolean(field));
-  const missing = requiredFields.filter((field) => !fields.has(field));
+  // The pipeline runs before the tabulation and can create the very fields
+  // the plan needs (a date part, a derived column, a joined column), so its
+  // steps are restored and replayed first; only then can the plan's fields be
+  // required to exist. A step that no longer fits the current file is exactly
+  // the schema drift this replay has to surface, and applyTransformPipeline
+  // names the offending step.
+  transformSteps = (recipe.transformSteps ?? []) as unknown as TransformStep[];
+  renderTransformSteps();
+  if (transformSteps.length) {
+    try {
+      await runTransformPipeline();
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`A receita traz ${transformSteps.length} etapa(s) de transformação que não puderam ser aplicadas a este arquivo: ${detail}`);
+    }
+  }
+
+  const currentFields = new Set((dbfHeader?.fields ?? []).map((field) => field.name));
+  const missing = requiredFields.filter((field) => !currentFields.has(field));
   if (missing.length) throw new Error(`O arquivo atual não possui: ${[...new Set(missing)].join(', ')}`);
 
   rowField.value = recipe.spec.rows.field;

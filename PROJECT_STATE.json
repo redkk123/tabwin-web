@@ -1,15 +1,15 @@
 {
-  "revision": "r12-2-def-selection",
+  "revision": "r12-3-recipe-carries-the-transform-pipeline",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 424,
-    "passed": 424,
+    "total": 427,
+    "passed": 427,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
-    "e2e_total": 28,
-    "e2e_passed": 28
+    "e2e_total": 29,
+    "e2e_passed": 29
   },
   "architecture": "acquisition -> legacy inputs -> AnalysisSpec -> QueryPlan -> Executor -> TabulationResult -> views/exports",
   "implemented": [
@@ -279,7 +279,8 @@
     "r12-1-group-summarize-minmax-reduced-not-spread-no-stack-overflow",
     "r12-1-rate-ratio-reports-a-genuine-zero-rate-instead-of-null",
     "r12-1-exports-keep-the-technical-field-name-labels-stay-in-the-ui",
-    "r12-2-def-selection-several-defs-held-active-one-is-a-visible-choice"
+    "r12-2-def-selection-several-defs-held-active-one-is-a-visible-choice",
+    "r12-3-recipe-persists-transform-pipeline-and-replays-it-before-tabulating"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -358,7 +359,6 @@
     "golden_modified_to_pass": false
   },
   "next": [
-    "transform-pipeline-persist-to-recipe-then-schema-drift-aware-re-execution-and-dbf-second-source",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",
     "continue-cataloged-tabwin-415-feature-families",
