@@ -1,105 +1,108 @@
+<div align="center">
+
 # TabWin Web
 
-Reimplementação moderna, local e auditável dos fluxos analíticos do DATASUS
-TabWin. A aplicação roda no navegador: Windows, macOS e Android usam a mesma
-interface, e os microdados permanecem no aparelho.
+**Tabulação de microdados públicos do DATASUS no navegador.**
+Sem instalar nada. Sem enviar dados para lugar nenhum.
 
-**Aplicação:** <https://redkk123.github.io/tabwin-web/>
+[**▶ Abrir a aplicação**](https://redkk123.github.io/tabwin-web/) · [**📖 Manual do usuário**](./docs/product/MANUAL_DO_USUARIO.md)
+
+</div>
+
+---
+
+Reimplementação local e auditável dos fluxos analíticos do **TabWin 4.15** do
+DATASUS. Lê os arquivos que você já usa — `.DBC`, `.DBF`, `.CSV` — e os
+metadados legados `.DEF`, `.CNV` e `.MAP`. Roda igual no Windows, macOS,
+Linux e Android, porque roda no navegador.
 
 > Esforço independente e não oficial de modernização. Não é afiliado ao DATASUS
 > nem ao Ministério da Saúde, e não é endossado por eles.
 
-## O que já funciona
+## Seus dados ficam no seu aparelho
 
-**Leitura e tabulação**
+Não é slogan, é como o programa funciona. A leitura e o cálculo acontecem no
+navegador; nenhum microdado, resultado ou consulta sai da máquina. Quando você
+busca no catálogo oficial, o que trafega é o download do DATASUS **para você**.
 
-- DBC e DBF lidos localmente, sem servidor;
-- CSV/TSV com inferência numérica conservadora;
-- `.DEF` completo (A/S/L/C/Q/D/T/I/G/R), com posição inicial e frequência
-  agrupada;
-- `.CNV` clássico e o formato novo `N`, incluindo subtotais e faixas numéricas;
-- frequência, soma, medidas múltiplas, linhas, colunas, filtros combinados e
-  supressão de zeros;
-- receitas reproduzíveis `.twrecipe` e tabelas portáteis `.twtable`.
+Depois que o arquivo abriu, nem internet é necessária.
 
-**Apresentação**
+## O que ele faz
 
-- oito famílias de gráfico, com eixos, limites manuais, séries por coluna,
-  legenda, cores, zoom e impressão;
-- mapas temáticos com quebras manuais, camadas de referência, sedes, legendas
-  discretas e seleção espacial que vira filtro;
-- estatística descritiva, correlação de Pearson, regressão simples e histograma;
-- fluxos origem–destino com diagnóstico de descarte e distância sob modelo
-  explícito.
+| | |
+| --- | --- |
+| **Tabular** | linha × coluna, medidas, filtros, DEF/CNV executáveis, múltiplos arquivos e períodos |
+| **Transformar** | pipeline de 11 verbos no estilo dplyr — inclusive semana epidemiológica (MMWR/MS) e código IBGE de município |
+| **Calcular** | fórmulas estilo Excel, 57 funções, com nomes em português e inglês |
+| **Visualizar** | gráficos editáveis e mapas temáticos, com exportação SVG/PNG |
+| **Analisar** | descritivas, correlação, regressão, e taxas com IC de Byar, padronização direta (DSR) e indireta (SMR) |
+| **Auditar** | procedência com SHA-256, histórico da sessão, e detecção estatística de anomalias |
+| **Salvar** | receitas `.twrecipe`, tabelas `.twtable`, CSV/JSON/XLSX/XML, DBF filtrado, CSV para o `microdatasus` do R |
 
-**Dados oficiais**
+O **manual do usuário** cobre tudo isso com o passo a passo:
+[`docs/product/MANUAL_DO_USUARIO.md`](./docs/product/MANUAL_DO_USUARIO.md).
 
-- catálogo do DATASUS dentro do aplicativo, sem R e sem FTP manual;
-- cache local visível, removível e reabrível offline;
-- URL de origem, hora da coleta e hash do ZIP registrados na auditoria;
-- exportação Microdatasus: CSV com exatamente o subconjunto da tabulação ativa.
+## Compatibilidade que se pode conferir
 
-## Compatibilidade com o TabWin 4.15
+Este projeto distingue três coisas, e diz qual é qual:
 
-O projeto **não** declara equivalência completa. Cada afirmação de
-compatibilidade vale só até onde um caso golden capturado no programa de
-referência sustenta.
+- **Compatível** — verificado contra o **TabWin 4.15 real**, com arquivo real,
+  resultado capturado do programa original e comparação com **tolerância zero**.
+  São **16 casos** hoje, em [`fixtures/golden/`](./fixtures/golden), cada um com
+  manifesto, evidência e hashes.
+- **Moderno** — funcionalidade nova, que o TabWin 4.15 não tinha. Não afirma
+  equivalência com nada.
+- **Não verificado** — existe e funciona, mas ninguém conferiu contra o
+  original.
 
-Hoje são **15 goldens**, todos passando com **tolerância zero**, nenhum
-bloqueado e nenhum classificado como divergência deliberada. Um golden nunca é
-ajustado para um teste passar; quando o motor discorda do TabWin, quem muda é o
-motor.
+**Nada vira "compatível" por suposição.** Um golden é imutável: quando um teste
+falha, muda a implementação ou registra-se um desconhecido — nunca o golden.
 
-A metodologia está em [`docs/testing/`](./docs/testing/), e cada caso resolvido
-tem relatório em [`docs/handoffs/`](./docs/handoffs/).
+### Regras que valem no código inteiro
 
-## Rodar
+1. **Zero nunca é fabricado.** Denominador zero, célula ilegível ou valor
+   ausente viram `null` / "—". Zero é uma afirmação sobre o mundo.
+2. **Nada é amostrado em silêncio.**
+3. **Um padrão pode existir; um padrão invisível não.**
 
-```bash
-npm ci
-npm run check
-```
-
-`check` roda os testes, o typecheck do navegador e o build de produção. Para os
-testes de ponta a ponta:
+## Rodando localmente
 
 ```bash
-npx playwright install chromium && npm run e2e
+npm install
+npm run web:dev
 ```
+
+| Comando | O que faz |
+| --- | --- |
+| `npm run check` | testes unitários + typecheck + build web |
+| `npm run e2e` | testes ponta a ponta (Playwright) |
+| `npm run web:build` | build de produção em `dist-web/` |
+| `npm run seed:differential` | gera casos determinísticos para conferir contra o TabWin real |
 
 ## Estrutura
 
-```text
-apps/web/               aplicação do navegador
-apps/datasus-proxy/     proxy opcional, restrito às rotas oficiais
-packages/core/          semântica de tabulação, QueryPlan, executor, receitas
-packages/formats/       formatos legados (.CNV, .DEF, .MAP, .TAB)
-packages/acquisition/   descoberta e requisição das fontes oficiais
-packages/analysis/      estatística, qualidade de dados, fluxos espaciais
-packages/export/        exportações determinísticas
-packages/visualization/ modelos de gráfico e mapa
-tests/                  testes de compatibilidade semântica
-e2e/                    Playwright
-fixtures/golden/        casos golden capturados no TabWin 4.15
-scripts/                aquisição, verificação e medição
-docs/                   arquitetura, metodologia, roadmap e engenharia reversa
+```
+apps/web              a aplicação
+apps/datasus-proxy    Worker Cloudflare para o CORS do catálogo oficial
+packages/core         modelo, plano normalizado, execução, receitas
+packages/formats      DEF, CNV, .TAB, Windows-1252, mapas, BIFF
+packages/analysis     estatística, epidemiologia, transformação, fórmulas
+packages/acquisition  catálogo DATASUS, limites de arquivo
+packages/export       CSV, JSON, XLSX, XML, DBF
+fixtures/golden       as capturas do TabWin 4.15 que sustentam a compatibilidade
+docs/                 manual, ADRs, protocolos de captura, engenharia reversa
 ```
 
-## Regra de ouro
+Regra de camadas: `analysis → core`. `core` **nunca** importa `analysis`.
 
-Toda capacidade é classificada como:
+## Origem dos dados
 
-1. **COMPAT** — necessária para reproduzir um resultado ou fluxo do TabWin;
-2. **UX** — moderniza como um fluxo existente é feito;
-3. **INOVAÇÃO** — acrescenta capacidade sem mexer na semântica de
-   compatibilidade.
+Os microdados são públicos e do DATASUS/Ministério da Saúde, sujeitos aos
+termos de uso do órgão. Este repositório **não** redistribui microdados nem o
+binário original do TabWin 4.15 — as capturas em `fixtures/golden/` são
+resultados de referência, não os arquivos de origem.
 
-Controles modernos de apresentação são inovação, e nenhum deles altera a
-tabulação, o total ou o que é exportado como tabela.
-
-## Estado e continuidade
-
-A memória viva do projeto está em [`PROJECT_STATE.json`](./PROJECT_STATE.json) e
-em [`CHECKPOINT_MASTER.md`](./CHECKPOINT_MASTER.md); o roadmap por complexidade
-está em
-[`docs/product/ROADMAP_POR_COMPLEXIDADE.md`](./docs/product/ROADMAP_POR_COMPLEXIDADE.md).
+> **Licença ainda não definida.** Sem um arquivo `LICENSE`, o padrão legal é
+> "todos os direitos reservados": ninguém pode reusar, modificar ou
+> redistribuir este código. Se a intenção é que o projeto seja utilizável por
+> outras pessoas, escolher e adicionar uma licença é um passo pendente.

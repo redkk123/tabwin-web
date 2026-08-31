@@ -4,7 +4,7 @@ Status: **CAPTURED AND PASSING — 2026-08-29.** G002, G003, G004 and G005 were
 captured by the user against the real TabWin 4.15 and all four now pass with
 tolerance zero. Fixtures live in `fixtures/golden/G002`–`G005`; full results,
 including the two real divergences G003 found, are in
-`docs/handoffs/R10_0_G002_G005_GOLDEN_RESULTS.md`. G006 remains deferred for
+the R10.0 golden results report (in git history). G006 remains deferred for
 the reason documented in its section below.
 
 Two predictions in this document were confirmed and one open question was
@@ -42,7 +42,7 @@ the real file contents — no more raw-column assumption.
 
 ## 1. Scope of this batch
 
-Per `docs/product/REMAINING_IMPLEMENTATION_PLAN.md`, P5, batch 1:
+Per the former implementation plan, P5, batch 1:
 
 > G002–G006: row×column, sum, raw/CNV selection, zeros, non-classified.
 
@@ -61,7 +61,7 @@ the CNV folder next to `RD2008.DEF`:
 | `SEXO.CNV` | `003E1B250D26B987867B9D0C1D155C42E340C4A62BFFDCD4DB85C7C41E60691E` |
 
 `CARATEND.CNV` and `SEXO.CNV` match, byte for byte, the hashes already
-recorded on 2026-08-27 in `R01_2_A_G001_ASSET_ACQUISITION_REPORT.md` — same
+recorded on 2026-08-27 in the acquisition report (in git history) — same
 official file, re-fetched two days later, unchanged.
 
 ## 2. Why these five recipes, specifically

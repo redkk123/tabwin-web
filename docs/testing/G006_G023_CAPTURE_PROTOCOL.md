@@ -105,13 +105,14 @@ fila se aparecer evidência de que o 4.15 tinha essas mesmas políticas.
 ## 6. G023 — um clique a mais em qualquer caso
 
 > **✅ Fechado em 2026-08-31.** Você salvou `g002.tab` e ele está em
-> `fixtures/golden/G023/`. O achado: **o `.TAB` é texto puro
-> Windows-1252**, não container binário — o que corrige a hipótese sob a qual
-> `legacy-tab.ts` foi escrito. Como o arquivo veio da mesma execução do
-> G002, a leitura pôde ser provada contra um golden capturado por outro
-> caminho de exportação, e bate célula por célula. Leitor em
-> `packages/formats/src/tab-file.ts`; escrita segue fora de escopo até
-> haver vários artefatos, não um.
+> `fixtures/golden/G023/`. O formato em si já estava descrito em
+> `docs/reverse-engineering/RE_001_TAB.md` a partir de dez capturas
+> controladas; o que este golden acrescenta é o primeiro `.TAB` **commitado
+> como evidência**, com manifesto e hash, mais um leitor
+> (`packages/formats/src/tab-file.ts`) provado contra um golden anterior e
+> independente — o arquivo veio da mesma execução do G002, então a leitura é
+> conferida contra a exportação BIFF, e bate célula por célula. Escrita segue
+> fora de escopo até haver vários artefatos, não um.
 
 
 **Correção:** eu tinha deduzido que você já tinha `.TAB` salvos, porque o

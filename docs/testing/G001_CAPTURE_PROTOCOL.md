@@ -88,7 +88,7 @@ Why this is preferred:
 This is the simplest low-cardinality ordinary `L` option confirmed in both the
 real DEF and DBC schema without requiring `X`, related DBF lookup or new-format
 `N` semantics. Full acquisition evidence and hashes are recorded in
-`docs/handoffs/R01_2_A_G001_ASSET_ACQUISITION_REPORT.md`.
+o relatório de aquisição de 27/08/2026 (no histórico do git).
 
 ## 5. Reference capture discipline
 

@@ -3,13 +3,16 @@
  *
  * ## What the evidence actually says
  *
- * Until a real artifact arrived, this format was assumed to be a binary
- * container, and `legacy-tab.ts` was written as bounded reconnaissance for
- * exactly that reason - it inspects, it does not claim to replay. The first
- * real capture (golden G023, saved from the same TabWin run as G002) settles
- * the question for that save path: the file is **plain Windows-1252 text with
- * CRLF line endings**, opening on the literal line `NEW`, with `key=value`
- * lines, `[Section]` headers, and a `;`-separated quoted result matrix.
+ * The format was described in `docs/reverse-engineering/RE_001_TAB.md` from
+ * ten controlled captures, one interface property changed per file. Golden
+ * G023 then committed one such file as evidence, with a manifest and a hash.
+ * (`legacy-tab.ts` predates both and was written as bounded binary
+ * reconnaissance because no fixture existed to check against; it inspects and
+ * never claimed to replay.)
+ *
+ * The file is **plain Windows-1252 text with CRLF line endings**, opening on
+ * the literal line `NEW`, with `key=value` lines, `[Section]` headers, and a
+ * `;`-separated quoted result matrix.
  *
  * This parser therefore reads that text faithfully. It deliberately does not
  * interpret what it cannot yet justify from a real file:

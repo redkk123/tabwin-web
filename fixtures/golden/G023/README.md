@@ -7,15 +7,20 @@ quando você salva uma tabela.
 
 ## O que este golden prova
 
-O `.TAB` **não é um container binário** — é texto Windows-1252 com CRLF,
-sem BOM, abrindo na linha literal `NEW`, com preâmbulo `chave=valor`,
-seções `[Opções]` e `[Arquivos]`, e uma matriz `;`-separada com aspas.
+**Correção de escopo:** o formato já tinha sido descrito em
+`docs/reverse-engineering/RE_001_TAB.md` (30/08/2026), a partir de dez
+capturas controladas — uma propriedade da interface alterada por arquivo. O
+que este golden acrescenta **não** é a descoberta de que o `.TAB` é texto;
+isso já era conhecido. O que ele acrescenta é:
 
-Isso corrige uma suposição de trabalho. `packages/formats/src/legacy-tab.ts`
-foi escrito como reconhecimento binário justamente porque não havia arquivo
-real para conferir; ele nunca afirmou saber reproduzir o painel, e listava
-`plain-text` entre as hipóteses que sabia relatar. Este artefato resolve a
-questão para este caminho de gravação.
+1. o **primeiro `.TAB` commitado como evidência de golden**, com manifesto e
+   hash, em vez de descrito só em prosa;
+2. um **leitor** (`packages/formats/src/tab-file.ts`) cuja saída é conferida
+   contra um golden anterior e independente.
+
+O arquivo é texto Windows-1252 com CRLF, sem BOM, abrindo na linha literal
+`NEW`, com preâmbulo `chave=valor`, seções `[Opções]` e `[Arquivos]`, e uma
+matriz `;`-separada com aspas.
 
 ## Por que este caso e não outro
 

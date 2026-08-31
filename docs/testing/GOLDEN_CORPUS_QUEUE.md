@@ -4,7 +4,7 @@
 **Por que este documento existe:** três fontes diferentes do projeto
 descreviam "o que vem depois do G001" de formas incompatíveis:
 `docs/testing/GOLDEN_TEST_STRATEGY.md` (mais antigo, ~8 itens),
-`docs/product/REMAINING_IMPLEMENTATION_PLAN.md` §P5 (usado para desenhar
+o antigo plano de implementação §P5 (usado para desenhar
 G002–G006) e uma lista de ~20 itens que o Codex recuperou de memória numa
 conversa fora deste repositório. Este documento reconcilia as três e passa a
 ser a fila oficial. Não descarta nada já publicado.
@@ -12,15 +12,35 @@ ser a fila oficial. Não descarta nada já publicado.
 ## O que é real, com fonte
 
 A lista do Codex **não existia escrita em nenhum lugar** como fila numerada
-fechada. O que existe de fato é `CHECKPOINT_MASTER.md` §8.2 ("Golden corpus
-matrix") — uma lista **não ordenada** de comportamentos de CNV e tabulação a
+fechada. O que existia de fato era a "golden corpus matrix" do antigo checkpoint master do projeto — uma lista **não ordenada** de comportamentos a
 cobrir eventualmente. O Codex pegou essa matriz real e a ordenou/numerou na
 hora, apresentando como se a sequência já estivesse fechada. Os conceitos são
-legítimos; a ordem é nova, definida agora, aqui.
+legítimos; a ordem é nova, definida aqui.
 
-`CHECKPOINT_MASTER.md` §8.3 confirma, de forma independente da disputa de
-numeração, que testes diferenciais com fixtures aleatórias/seed são plano
-real — entram na seção 4 deste documento.
+Aquele documento saiu do repositório na limpeza de 2026-08-31 (continua no
+histórico do git). Para esta fila não depender de um arquivo removido, a
+matriz que ela citava está transcrita abaixo, e o plano de teste diferencial
+que ela também citava virou a seção 4 deste documento.
+
+### A matriz original, transcrita
+
+**Tipos de entrada:** DBF; DBC.
+
+**Comportamento de CNV:** mapeamento direto de código; mapeamentos
+sobrepostos / precedência; códigos curtos; códigos literais; códigos longos;
+faixas; `Faixas` numéricas; hierarquia de subtotal; códigos desconhecidos;
+comentários; formato novo (`N`) quando estiver especificado.
+
+**Comportamento de tabulação:** só linha; linha × coluna; múltiplos
+arquivos/meses; seleções; múltiplas seleções; incremento/medida; supressão de
+zeros; totais; erro de campo ausente; encoding/acentos; cardinalidade alta.
+
+**Conjuntos reais:** ao menos um caso canônico de SIH, SIA, SIM, SINASC,
+SINAN e CNES.
+
+**Ambiente do oráculo:** manter um Windows documentado capaz de rodar o
+pacote 4.15 original. O binário original **não** entra neste repositório
+público sem direito de redistribuição confirmado.
 
 ## Correção de uma afirmação específica
 
@@ -46,7 +66,7 @@ Complexidade do Procedimento, sem coluna, frequência, sem seleção. **Não é
 Sexo** — o `RD2008.DEF` real expõe Sexo só atrás de uma diretiva `X` não
 resolvida, e assumir seu papel seria inferir associação DEF/CNV por
 semelhança de nome, que o projeto proíbe. Decisão documentada desde
-27/08/2026 em `R01_2_A_G001_ASSET_ACQUISITION_REPORT.md`. Passa com
+27/08/2026 (relatório no histórico do git). Passa com
 tolerância zero, não muda.
 
 ## 2. G002–G006 — protocolo publicado, aguardando captura
@@ -79,7 +99,7 @@ captura em detalhe prematuro.
 | G020 | Tipos diferentes de total (soma/produto/média/inicial/final/mín/máx/pré-calculado) | §4.6.2; já implementado no motor moderno, falta golden contra TabWin 4.15 | N/A — é operação pós-tabela, não do TabWin legado; goldens aqui provam o que o TabWin fazia, não a operação moderna |
 | G021 | Múltiplos arquivos/meses combinados | §8.2 | Precisa de um segundo DBC real (mesmo esquema) |
 | G022 | Encoding/acentuação | §4.4.5; §8.2 | `RDAC2401.dbc` já tem texto acentuado — verificar se algum campo exercita isso |
-| G023 | `.TAB` salvar/reabrir | §4.15; §8.2 | ✅ **capturado 2026-08-31** — `g002.tab`. Achado: é **texto Windows-1252**, não container binário. Leitura provada contra o G002, capturado por outro caminho de exportação. Escrita segue fora de escopo. |
+| G023 | `.TAB` salvar/reabrir | §4.15; matriz acima | ✅ **capturado 2026-08-31** — `g002.tab`. O formato já estava descrito em `RE_001_TAB.md` (dez capturas); este golden acrescenta o primeiro `.TAB` commitado como evidência e um leitor provado contra o G002, capturado por outro caminho de exportação. Escrita segue fora de escopo. |
 
 G020 está marcado à parte de propósito: não é comportamento do TabWin 4.15
 legado, é a suíte de operações pós-tabela que **já existe e já tem testes
@@ -91,9 +111,8 @@ mesmas políticas de total.
 
 ## 4. Fase seguinte — diferencial por seed
 
-Só começa depois da fila determinística acima fechar substancialmente,
-conforme `CHECKPOINT_MASTER.md` §8.3. Fixtures pequenas e aleatórias rodadas
-nos dois motores; toda divergência interessante vira golden permanente
+Só começa depois da fila determinística acima fechar substancialmente.
+Fixtures pequenas e aleatórias rodadas nos dois motores; toda divergência interessante vira golden permanente
 imutável, nunca se "conserta" o golden pra passar o teste.
 
 ### 4.1 Gerador (metade que não depende do oracle) — pronto
