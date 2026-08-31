@@ -255,6 +255,12 @@ export interface RateRatioResult {
  * Both rates must already be standardized to the **same** standard
  * population; comparing rates standardized to different ones is meaningless,
  * and this function cannot detect it - the caller is responsible.
+ *
+ * A numerator rate of exactly zero is a real result, not a missing one: the
+ * ratio is 0 and is reported as such. Only its interval is withheld, because
+ * the log scale has no value at zero - reporting `ratio: null` there would
+ * hide the very finding ("this group had no events") that the comparison was
+ * run to surface.
  */
 export function standardizedRateRatio(
   numerator: DirectStandardizationResult,
@@ -262,8 +268,11 @@ export function standardizedRateRatio(
 ): RateRatioResult {
   const a = numerator.standardizedRate;
   const b = denominator.standardizedRate;
-  if (a === null || b === null || b === 0 || a === 0) return { ratio: null, lower: null, upper: null };
+  // Without a denominator rate there is no ratio at all; dividing by zero
+  // would invent one.
+  if (a === null || b === null || b === 0) return { ratio: null, lower: null, upper: null };
   const ratio = a / b;
+  if (a === 0) return { ratio, lower: null, upper: null };
   const seA = numerator.standardError ?? 0;
   const seB = denominator.standardError ?? 0;
   const logVariance = (seA / a) ** 2 + (seB / b) ** 2;

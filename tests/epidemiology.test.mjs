@@ -206,3 +206,20 @@ test('a rate ratio has no value when either side has none', () => {
   assert.equal(standardizedRateRatio(usable, unusable).ratio, null);
   assert.equal(standardizedRateRatio(unusable, usable).ratio, null);
 });
+
+test('a standardized rate of zero is a real ratio, not a missing one', () => {
+  // A group with no events has DSR 0; the ratio 0/b is well defined and
+  // reporting null there would hide the very finding the comparison exists
+  // to surface. Only the log-scale interval is withheld.
+  const zeroEvents = directlyStandardizedRate([{ events: 0, population: 1000, standardWeight: 1000 }], 100_000);
+  const reference = directlyStandardizedRate([{ events: 20, population: 1000, standardWeight: 1000 }], 100_000);
+  assert.equal(zeroEvents.standardizedRate, 0);
+
+  const srr = standardizedRateRatio(zeroEvents, reference);
+  assert.equal(srr.ratio, 0, 'the ratio is zero, not unavailable');
+  assert.equal(srr.lower, null, 'the log-scale interval has no value at zero');
+  assert.equal(srr.upper, null);
+
+  // A zero denominator is still no ratio at all - that would be a division by zero.
+  assert.equal(standardizedRateRatio(reference, zeroEvents).ratio, null);
+});

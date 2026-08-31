@@ -731,3 +731,64 @@ test('join validates its own shape', () => {
   assert.throws(() => run({ keyPairs: [{ current: 'UF', source: 'NADA' }] }), /the source has no field NADA/);
   assert.throws(() => run({ bringFields: ['NADA'] }), /no field NADA to bring in/);
 });
+
+// --- regressions found in the R12 review ------------------------------------
+
+test('a join key matches across types: a numeric code equals the same code as text', () => {
+  // parseDelimited types an all-digit CSV column as numeric, while a DBF
+  // character field yields a string. Comparing raw values made these never
+  // match and returned an all-null join with no hint why.
+  const current = [{ MUNIC: 530010, CASOS: 10 }];
+  const source = { label: 'pop', fields: ['MUNIC', 'POP'], records: [{ MUNIC: '530010', POP: 900 }] };
+  const result = applyTransformPipeline(current, ['MUNIC', 'CASOS'], [
+    { id: 'j1', kind: 'join', source, keyPairs: [{ current: 'MUNIC', source: 'MUNIC' }], joinType: 'left' },
+  ]);
+  assert.equal(result.steps[0].detail.registrosCorrespondentes, 1);
+  assert.equal(result.records[0].POP, 900);
+});
+
+test('a blank key matches nothing - not even another blank key', () => {
+  // SQL's rule: NULL never equals NULL in a join. Two records that merely
+  // share "we do not know the município" have nothing in common, and pairing
+  // them would attribute one's population to the other.
+  const current = [{ MUNIC: '', CASOS: 10 }, { MUNIC: '530010', CASOS: 5 }];
+  const source = {
+    label: 'pop', fields: ['MUNIC', 'POP'],
+    records: [{ MUNIC: '', POP: 999 }, { MUNIC: '530010', POP: 900 }],
+  };
+  const result = applyTransformPipeline(current, ['MUNIC', 'CASOS'], [
+    { id: 'j1', kind: 'join', source, keyPairs: [{ current: 'MUNIC', source: 'MUNIC' }], joinType: 'left' },
+  ]);
+  const blank = result.records.find((record) => record.MUNIC === '');
+  assert.equal(blank.POP, null, 'the blank-key record must not borrow a population');
+  assert.equal(result.records.find((record) => record.MUNIC === '530010').POP, 900);
+  // The diagnostic separates "no counterpart" from "no key to match on".
+  assert.equal(result.steps[0].detail.registrosSemChave, 1);
+  assert.equal(result.steps[0].detail.registrosCorrespondentes, 1);
+});
+
+test('a full join still emits source rows whose key was blank', () => {
+  const current = [{ K: 'a', A: 1 }];
+  const source = { label: 's', fields: ['K', 'B'], records: [{ K: '', B: 7 }] };
+  const result = applyTransformPipeline(current, ['K', 'A'], [
+    { id: 'j1', kind: 'join', source, keyPairs: [{ current: 'K', source: 'K' }], joinType: 'full' },
+  ]);
+  // The keyless source record cannot match, but a full join must not lose it.
+  assert.equal(result.records.length, 2);
+  assert.equal(result.steps[0].detail.registrosSoFonte, 1);
+  assert.equal(result.records.find((record) => record.B === 7).A, null);
+});
+
+test('min and max survive a group far larger than the argument limit', () => {
+  // Math.min(...values) passes one argument per value and throws RangeError
+  // past ~125k; a single UF group over a national file is well past that.
+  const records = Array.from({ length: 200_000 }, (_, index) => ({ G: 'x', V: index }));
+  const result = applyTransformPipeline(records, ['G', 'V'], [
+    {
+      id: 'g1', kind: 'group-summarize', groupFields: ['G'],
+      aggregations: [{ kind: 'min', field: 'V', as: 'MIN' }, { kind: 'max', field: 'V', as: 'MAX' }],
+    },
+  ]);
+  assert.equal(result.records[0].MIN, 0);
+  assert.equal(result.records[0].MAX, 199_999);
+});

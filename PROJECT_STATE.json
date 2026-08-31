@@ -1,10 +1,10 @@
 {
-  "revision": "r12-0-datasus-field-label-dictionary",
+  "revision": "r12-1-review-fixes-join-keys-minmax-rate-ratio-export-labels",
   "date": "2026-08-30",
   "phase": "faixa-4-r11-0-through-r11-5-done-epidemiology-track-pending",
   "tests": {
-    "total": 419,
-    "passed": 419,
+    "total": 424,
+    "passed": 424,
     "failed": 0,
     "command": "npm run check",
     "e2e_command": "npm run e2e",
@@ -273,7 +273,12 @@
     "r11-6-epidemiology-statistics-panel-operation-crude-and-standardized-rates-with-ci",
     "r11-6-2-indirect-standardization-smr-with-byar-interval-on-observed",
     "r11-6-2-standardized-rate-ratio-log-scale-interval-core-only-no-ui-home-yet",
-    "r12-0-datasus-field-label-dictionary-presentation-only-def-wins-technical-name-kept"
+    "r12-0-datasus-field-label-dictionary-presentation-only-def-wins-technical-name-kept",
+    "r12-1-join-key-compared-as-text-so-numeric-and-character-codes-match",
+    "r12-1-join-blank-key-matches-nothing-sql-null-semantics",
+    "r12-1-group-summarize-minmax-reduced-not-spread-no-stack-overflow",
+    "r12-1-rate-ratio-reports-a-genuine-zero-rate-instead-of-null",
+    "r12-1-exports-keep-the-technical-field-name-labels-stay-in-the-ui"
   ],
   "live_verification": {
     "catalog_file": "RDAC2401.dbc",
@@ -352,6 +357,7 @@
     "golden_modified_to_pass": false
   },
   "next": [
+    "def-selection-ui-active-def-is-a-single-silently-overwritten-slot-unlike-cnvs",
     "transform-pipeline-persist-to-recipe-then-schema-drift-aware-re-execution-and-dbf-second-source",
     "tab-format-five-remaining-captures-then-writer",
     "duckdb-wasm-on-demand-loading-wired-to-an-explore-microdata-panel",

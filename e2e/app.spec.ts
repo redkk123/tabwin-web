@@ -381,7 +381,12 @@ test('a comparação de tabelas alinha por chave, reporta o que não casou e nã
   await expect(page.locator('#run-button')).toBeEnabled();
   await page.locator('#row-field').selectOption('UF');
   await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
-  await expect(page.locator('#result-table tbody')).toContainText('AC');
+  // Wait on a row only A has. Both fixtures contain AC, so asserting on that
+  // is satisfied by B's still-displayed table and lets the comparison run
+  // with A === B - which is exactly how this test used to fail intermittently.
+  const bodyA = page.locator('#result-table tbody');
+  await expect(bodyA).toContainText('AM');
+  await expect(bodyA).not.toContainText('SP');
 
   await page.locator('[data-view="compare"]').click();
   await expect(page.locator('#compare-run-button')).toBeDisabled();

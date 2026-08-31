@@ -708,8 +708,11 @@ function runGroupSummarize(
     switch (aggregation.kind) {
       case 'sum': return values.reduce((total, value) => total + value, 0);
       case 'mean': return values.reduce((total, value) => total + value, 0) / values.length;
-      case 'min': return Math.min(...values);
-      case 'max': return Math.max(...values);
+      // Reduced rather than spread: Math.min(...values) passes one argument
+      // per value, and a single group over a national file blows the argument
+      // limit with a RangeError.
+      case 'min': return values.reduce((best, value) => (value < best ? value : best), values[0]!);
+      case 'max': return values.reduce((best, value) => (value > best ? value : best), values[0]!);
       case 'median': {
         const sorted = [...values].sort((a, b) => a - b);
         const middle = Math.floor(sorted.length / 2);
@@ -804,22 +807,49 @@ function runJoin(
   const prefix = step.sourcePrefix ?? '';
   const broughtNames = bring.map((name) => ({ source: name, final: `${prefix}${name}` }));
 
-  const keyOf = (record: DataRecord, side: 'current' | 'source'): string =>
-    JSON.stringify(step.keyPairs.map((pair) => {
-      const value = record[side === 'current' ? pair.current : pair.source];
-      return value === undefined || value === '' ? null : value;
-    }));
+  /**
+   * The comparable form of one key value.
+   *
+   * Compared as text, deliberately: the same municipality code arrives as the
+   * number 530010 from a CSV whose column is all digits, and as the string
+   * "530010" from a DBF character field. Comparing the raw values would make
+   * those two never match and hand back an all-null join with no hint why.
+   * A Date is reduced to its calendar day for the same reason.
+   */
+  const keyPart = (value: unknown): string | null => {
+    if (value === null || value === undefined) return null;
+    const text = value instanceof Date ? value.toISOString().slice(0, 10) : String(value).trim();
+    return text === '' ? null : text;
+  };
 
-  // Index the source by key so each current record's match is a lookup, not a scan.
+  /**
+   * The match key, or `null` when any part of it is absent. An absent key
+   * matches nothing - not even another absent key - the way SQL treats NULL
+   * in a join. Two records that merely share "we don't know the município"
+   * have nothing in common, and pairing them would attribute one's data to
+   * the other.
+   */
+  const keyOf = (record: DataRecord, side: 'current' | 'source'): string | null => {
+    const parts = step.keyPairs.map((pair) =>
+      keyPart(record[side === 'current' ? pair.current : pair.source]));
+    return parts.some((part) => part === null) ? null : JSON.stringify(parts);
+  };
+
+  // Index the source by key so each current record's match is a lookup, not a
+  // scan. Source records with an absent key can never match, but a right/full
+  // join still has to emit them, so they are kept aside rather than dropped.
   const sourceByKey = new Map<string, DataRecord[]>();
+  const sourceWithoutKey: DataRecord[] = [];
   for (const record of step.source.records) {
     const key = keyOf(record, 'source');
+    if (key === null) { sourceWithoutKey.push(record); continue; }
     const bucket = sourceByKey.get(key);
     if (bucket) bucket.push(record); else sourceByKey.set(key, [record]);
   }
   const currentByKey = new Map<string, DataRecord[]>();
   for (const record of records) {
     const key = keyOf(record, 'current');
+    if (key === null) continue;
     const bucket = currentByKey.get(key);
     if (bucket) bucket.push(record); else currentByKey.set(key, [record]);
   }
@@ -836,7 +866,6 @@ function runJoin(
     }
   }
 
-  const emptySource = (): DataRecord => Object.fromEntries(broughtNames.map(({ final }) => [final, null]));
   const withSource = (base: DataRecord, sourceRecord: DataRecord | null): DataRecord => {
     const next: DataRecord = { ...base };
     for (const { source, final } of broughtNames) next[final] = sourceRecord ? (sourceRecord[source] ?? null) : null;
@@ -845,33 +874,39 @@ function runJoin(
 
   const output: DataRecord[] = [];
   let matchedCurrent = 0;
+  let unmatchableKeys = 0;
   const matchedSourceKeys = new Set<string>();
   for (const record of records) {
     const key = keyOf(record, 'current');
-    const matches = sourceByKey.get(key);
+    const matches = key === null ? undefined : sourceByKey.get(key);
+    if (key === null) unmatchableKeys++;
     if (matches && matches.length) {
       matchedCurrent++;
-      matchedSourceKeys.add(key);
+      matchedSourceKeys.add(key!);
       for (const match of matches) output.push(withSource(record, match));
     } else if (step.joinType === 'left' || step.joinType === 'full') {
       output.push(withSource(record, null));
     }
     // inner/right with no match: the current record is dropped.
   }
-  // right/full: source records whose key matched nothing on the current side.
+  // right/full: source records whose key matched nothing on the current side,
+  // plus those whose key was absent and so could never have matched.
   let sourceOnly = 0;
   if (step.joinType === 'right' || step.joinType === 'full') {
-    for (const [key, sourceRecords] of sourceByKey) {
-      if (matchedSourceKeys.has(key)) continue;
-      for (const sourceRecord of sourceRecords) {
-        sourceOnly++;
-        // The current-side columns are absent for a source-only row, but the
-        // key columns are known - fill them from the source's key fields.
-        const base: DataRecord = {};
-        for (const field of currentFields) base[field.name] = null;
-        for (const pair of step.keyPairs) base[pair.current] = sourceRecord[pair.source] ?? null;
-        output.push(withSource(base, sourceRecord));
-      }
+    const unmatchedSource = [
+      ...[...sourceByKey.entries()]
+        .filter(([key]) => !matchedSourceKeys.has(key))
+        .flatMap(([, sourceRecords]) => sourceRecords),
+      ...sourceWithoutKey,
+    ];
+    for (const sourceRecord of unmatchedSource) {
+      sourceOnly++;
+      // The current-side columns are absent for a source-only row, but the
+      // key columns are known - fill them from the source's key fields.
+      const base: DataRecord = {};
+      for (const field of currentFields) base[field.name] = null;
+      for (const pair of step.keyPairs) base[pair.current] = sourceRecord[pair.source] ?? null;
+      output.push(withSource(base, sourceRecord));
     }
   }
 
@@ -886,6 +921,9 @@ function runJoin(
       registrosCorrespondentes: matchedCurrent,
       registrosSemCorrespondencia: records.length - matchedCurrent,
       registrosSoFonte: sourceOnly,
+      // Records whose key was blank on the current side: they could never
+      // match anything, which is a different problem from "no counterpart".
+      registrosSemChave: unmatchableKeys,
       colunasTrazidas: broughtNames.length,
     },
   };
@@ -1024,7 +1062,6 @@ function runDeriveColumn(
   const project = (record: DataRecord): number[] => currentFields.map((field) => numericValue(record[field.name]));
   const allCells = expressionReadsEveryRow(node) ? records.map(project) : [];
 
-  let nonFinite = 0;
   const transformed = records.map((record, rowIndex) => {
     const cells = allCells[rowIndex] ?? project(record);
     const value = evaluateTableExpression(node, {
@@ -1034,7 +1071,6 @@ function runDeriveColumn(
       // Same rule as the derived-column operation: a non-finite result is
       // reported, never written as if it were a number. IFERROR is how an
       // author says what should appear instead.
-      nonFinite++;
       throw new TransformPipelineError(
         `${step.field}: formula produced a non-finite value at record ${rowIndex + 1}; wrap it in IFERROR to say what that record should show`,
       );
@@ -1045,7 +1081,10 @@ function runDeriveColumn(
   return {
     records: transformed,
     fields: [...currentFields, { name: step.field }],
-    detail: { registrosCalculados: transformed.length, naoFinitos: nonFinite },
+    // No "non-finite" counter here: the first one aborts the whole step, so a
+    // count could only ever be zero and would falsely suggest the pipeline
+    // looked at every record and found none.
+    detail: { registrosCalculados: transformed.length },
   };
 }
 

@@ -797,8 +797,9 @@ function labelledFieldName(fieldName: string, defLabel?: string): string {
   return strip(label) === strip(fieldName) ? fieldName : `${label} · ${fieldName}`;
 }
 
-function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
-  if (!activeDef) return labelledFieldName(fieldName);
+/** The DEF's own label for a field in this role, when one is declared. */
+function defFieldLabel(fieldName: string, role: 'row' | 'column'): string | undefined {
+  if (!activeDef) return undefined;
   const selectedResource = role === 'row' ? rowConversion.value : columnConversion.value;
   const candidates = activeDef.options.filter((option) =>
     option.field.toUpperCase() === fieldName.toUpperCase() && option.roles.includes(role));
@@ -809,11 +810,31 @@ function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
         ? baseName(option.lookupFile) === baseName(selectedResource)
         : false
   )) ?? candidates[0];
-  return labelledFieldName(fieldName, match?.label);
+  return match?.label;
+}
+
+function fieldLabel(fieldName: string, role: 'row' | 'column' = 'row'): string {
+  return labelledFieldName(fieldName, defFieldLabel(fieldName, role));
 }
 
 function activeRowLabel(): string {
   return currentRowLabel || fieldLabel(rowField.value) || currentPlan?.spec.rows.field || 'Linha';
+}
+
+/**
+ * The dimension name written into an exported file (CSV header, XML/JSON
+ * dimension). A DEF's label belongs there - it is the official name for that
+ * exact file, and exports carried it before the label dictionary existed -
+ * but the dictionary's own guess does not: an export is read by scripts, and
+ * silently turning a `TP_NOT` header into `Tipo de notificação · TP_NOT`
+ * breaks them for a purely cosmetic gain.
+ */
+function exportRowLabel(): string {
+  if (currentRowLabel) return currentRowLabel;
+  const field = rowField.value;
+  const declared = defFieldLabel(field, 'row');
+  if (declared) return labelledFieldName(field, declared);
+  return field || currentPlan?.spec.rows.field || 'Linha';
 }
 
 function incrementLabel(fieldName: string): string {
@@ -6479,7 +6500,7 @@ function savePortableTable(): void {
     schema: 'tabwin-web.table',
     version: 1,
     title: tableTitle.value.trim() || resultTitle.textContent?.trim() || `Tabela ${currentPlan.spec.rows.field}`,
-    rowLabel: activeRowLabel(),
+    rowLabel: exportRowLabel(),
     createdAt: new Date().toISOString(),
     ...(datasetFingerprint ? { source: {
       name: datasetFingerprint.name,
@@ -6760,7 +6781,7 @@ function exportCsv(): void {
   if (!currentResult) return;
   const csv = tabulationToCsv(currentResult, {
     sourceName: datasetName,
-    rowLabel: activeRowLabel(),
+    rowLabel: exportRowLabel(),
   });
   downloadBlob(new Blob([csv], { type: 'text/csv;charset=utf-8' }), `${exportBaseName()}.csv`);
 }
@@ -6769,7 +6790,7 @@ function exportJson(): void {
   if (!currentResult) return;
   const json = tabulationToJson(currentResult, {
     sourceName: datasetName,
-    rowLabel: activeRowLabel(),
+    rowLabel: exportRowLabel(),
   });
   downloadBlob(new Blob([json], { type: 'application/json;charset=utf-8' }), `${exportBaseName()}.json`);
 }
@@ -6778,7 +6799,7 @@ function exportXml(): void {
   if (!currentResult) return;
   const xml = tabulationToXml(currentResult, {
     sourceName: datasetName,
-    rowLabel: activeRowLabel(),
+    rowLabel: exportRowLabel(),
   });
   downloadBlob(new Blob([xml], { type: 'application/xml;charset=utf-8' }), `${exportBaseName()}.xml`);
 }
@@ -6787,7 +6808,7 @@ function exportXlsx(): void {
   if (!currentResult) return;
   const bytes = tabulationToXlsx(currentResult, {
     sourceName: datasetName,
-    rowLabel: activeRowLabel(),
+    rowLabel: exportRowLabel(),
   });
   downloadBlob(new Blob([bytes as BlobPart], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
@@ -6797,7 +6818,7 @@ function exportXlsx(): void {
 async function copyPresentedTable(): Promise<void> {
   if (!currentResult) return;
   const tsv = tableRowsToTsv(currentResult, currentTableRowIndexes(), {
-    rowLabel: activeRowLabel(),
+    rowLabel: exportRowLabel(),
     includeKey: tableKeyVisible.checked,
   });
   await navigator.clipboard.writeText(tsv);

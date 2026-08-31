@@ -32,6 +32,12 @@ function pyString(value: string): string {
   return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
+/** A file label turned into a legal R/Python variable name. */
+function rIdentifier(label: string): string {
+  const cleaned = label.replace(/[^a-zA-Z0-9_]/g, '_');
+  return /^[a-zA-Z.]/.test(cleaned) ? cleaned : `base_${cleaned}`;
+}
+
 function rVector(values: readonly string[]): string {
   return `c(${values.map(rString).join(', ')})`;
 }
@@ -211,19 +217,26 @@ function stepToR(step: TransformStep): RVerb[] {
         { code: `dplyr::group_by(${step.groupFields.join(', ')})` },
         { code: `dplyr::summarise(${step.aggregations.map(aggregationR).join(', ')}, .groups = "drop")` },
       ];
-    case 'bind-rows':
+    case 'bind-rows': {
+      // The second base is a separate data frame in R, so it is named as a
+      // variable rather than smuggled in as a pipe placeholder - a learner
+      // copying this line should see the real idiom.
+      const source = rIdentifier(step.source.label);
       return [{
-        code: `dplyr::bind_rows(${rString(step.source.label)} = .x)`,
+        code: step.originField
+          ? `dplyr::bind_rows(${source}, .id = ${rString(step.originField)})`
+          : `dplyr::bind_rows(${source})`,
         notes: [
-          `empilha a segunda base (${step.source.label}); colunas só de um lado ficam NA`,
-          ...(step.originField ? [`coluna de origem: ${step.originField}`] : []),
+          `empilha a segunda base; carregue-a antes em ${source}. Colunas só de um lado ficam NA`,
+          ...(step.originField ? ['.id numera as bases; para rotular, use uma lista nomeada'] : []),
         ],
       }];
+    }
     case 'join': {
       const fn = { inner: 'inner_join', left: 'left_join', right: 'right_join', full: 'full_join' }[step.joinType];
       const by = step.keyPairs.map((pair) => `${rString(pair.current)} = ${rString(pair.source)}`).join(', ');
       return [{
-        code: `dplyr::${fn}(${step.source.label.replace(/[^a-zA-Z0-9_]/g, '_')}, by = c(${by}))`,
+        code: `dplyr::${fn}(${rIdentifier(step.source.label)}, by = c(${by}))`,
         notes: [`junta a base ${step.source.label} pela chave; diagnóstico de cardinalidade fica no TabWin Web`],
       }];
     }
@@ -293,7 +306,7 @@ function stepToPython(step: TransformStep): string[] {
     case 'bind-rows': {
       const lines = [
         `# empilha a segunda base (${step.source.label}); colunas só de um lado ficam NaN`,
-        line(`df = pd.concat([df, ${step.source.label.replace(/[^a-zA-Z0-9_]/g, '_')}], ignore_index=True)`),
+        line(`df = pd.concat([df, ${rIdentifier(step.source.label)}], ignore_index=True)`),
       ];
       if (step.originField) lines.splice(1, 0, `# coluna de origem: ${step.originField}`);
       return lines;
@@ -304,7 +317,7 @@ function stepToPython(step: TransformStep): string[] {
       const rightKeys = pyList(step.keyPairs.map((pair) => pair.source));
       return [
         `# diagnóstico de cardinalidade (N:N bloqueado) fica no TabWin Web`,
-        line(`df = df.merge(${step.source.label.replace(/[^a-zA-Z0-9_]/g, '_')}, how="${how}", left_on=${leftKeys}, right_on=${rightKeys})`),
+        line(`df = df.merge(${rIdentifier(step.source.label)}, how="${how}", left_on=${leftKeys}, right_on=${rightKeys})`),
       ];
     }
   }
