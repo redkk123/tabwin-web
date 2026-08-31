@@ -87,7 +87,7 @@ apps/datasus-proxy    Worker Cloudflare para o CORS do catálogo oficial
 packages/core         modelo, plano normalizado, execução, receitas
 packages/formats      DEF, CNV, .TAB, Windows-1252, mapas, BIFF
 packages/analysis     estatística, epidemiologia, transformação, fórmulas
-packages/acquisition  catálogo DATASUS, limites de arquivo
+packages/acquisition  catálogo DATASUS, lote resiliente, fallback e limites
 packages/export       CSV, JSON, XLSX, XML, DBF
 fixtures/golden       as capturas do TabWin 4.15 que sustentam a compatibilidade
 docs/                 manual, ADRs, protocolos de captura, engenharia reversa

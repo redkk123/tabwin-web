@@ -82,10 +82,24 @@ export interface AnalysisRecipeV1 {
     mapManualBreaks?: number[];
     mapClassCount?: number;
     mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
-    statisticsOperation?: 'descriptive' | 'correlation' | 'regression' | 'histogram';
+    statisticsOperation?: 'descriptive' | 'correlation' | 'regression' | 'histogram' | 'epidemiology';
     statisticsXColumnKey?: string;
     statisticsYColumnKey?: string;
     histogramBins?: number;
+    histogramGaussian?: boolean;
+    /**
+     * Epidemiology settings.
+     *
+     * The standard-population and reference-rate columns are stored by column
+     * **key**, never by index: a recipe reopened against the same source can
+     * legitimately produce columns in a different order, and an index would
+     * then silently point at the wrong series while the recipe still claimed
+     * fidelity to its source.
+     */
+    epidemiologyMethod?: 'direct' | 'indirect';
+    epidemiologyPer?: 1000 | 10000 | 100000;
+    epidemiologyStandardColumnKey?: string;
+    epidemiologyReferenceColumnKey?: string;
     tableSortColumnKey?: string;
     tableSortDirection?: 'original' | 'ascending' | 'descending';
     tableDecimalPlaces?: number;
@@ -299,13 +313,30 @@ export function parseRecipe(json: string): AnalysisRecipeV1 {
   if (parsed.view?.mapPalette && !allowedMapPalettes.has(parsed.view.mapPalette)) {
     throw new Error('invalid map palette in TabWin Web recipe');
   }
-  const allowedStatisticsOperations = new Set(['descriptive', 'correlation', 'regression', 'histogram']);
+  const allowedStatisticsOperations = new Set(['descriptive', 'correlation', 'regression', 'histogram', 'epidemiology']);
   if (parsed.view?.statisticsOperation && !allowedStatisticsOperations.has(parsed.view.statisticsOperation)) {
     throw new Error('invalid statistics operation in TabWin Web recipe');
   }
   if (parsed.view?.histogramBins !== undefined
     && (!Number.isInteger(parsed.view.histogramBins) || parsed.view.histogramBins < 1 || parsed.view.histogramBins > 50)) {
     throw new Error('invalid histogram bin count in TabWin Web recipe');
+  }
+  if (parsed.view?.histogramGaussian !== undefined && typeof parsed.view.histogramGaussian !== 'boolean') {
+    throw new Error('invalid histogram gaussian flag in TabWin Web recipe');
+  }
+  if (parsed.view?.epidemiologyMethod !== undefined
+    && !new Set(['direct', 'indirect']).has(parsed.view.epidemiologyMethod)) {
+    throw new Error('invalid epidemiology method in TabWin Web recipe');
+  }
+  if (parsed.view?.epidemiologyPer !== undefined
+    && !new Set([1000, 10000, 100000]).has(parsed.view.epidemiologyPer)) {
+    throw new Error('invalid epidemiology rate scale in TabWin Web recipe');
+  }
+  for (const key of ['epidemiologyStandardColumnKey', 'epidemiologyReferenceColumnKey'] as const) {
+    if (parsed.view?.[key] !== undefined
+      && (typeof parsed.view[key] !== 'string' || !parsed.view[key].trim())) {
+      throw new Error(`invalid ${key} in TabWin Web recipe`);
+    }
   }
   if (parsed.view?.tableSortColumnKey !== undefined && typeof parsed.view.tableSortColumnKey !== 'string') {
     throw new Error('invalid table sort column in TabWin Web recipe');

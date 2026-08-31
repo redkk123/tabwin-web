@@ -562,6 +562,70 @@ test('the transform pipeline recodes, marks missing, filters, dedupes and drops 
   await expect(page.locator('#result-table')).toContainText('60');
 });
 
+test('recipes save the applied pipeline, failures stop replay, and an empty transform clears the old table', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('summary', { hasText: 'Transformar dados' }).click();
+
+  await page.locator('#transform-step-kind').selectOption('filter-rows');
+  await page.locator('#transform-filter-field').selectOption('IDADE');
+  await page.locator('#transform-filter-kind').selectOption('numeric-range');
+  await page.locator('#transform-filter-minimum').fill('10');
+  await page.locator('#transform-add-step').click();
+  await page.locator('#transform-apply-button').click();
+  await expect(page.locator('#transform-result')).toContainText('60 → 40');
+  await expect(page.locator('#result-table')).toContainText('40');
+
+  // Add a second draft step but do not apply it. The recipe must describe the
+  // dataset that produced the visible table (one applied step), not this draft.
+  await page.locator('#transform-filter-minimum').fill('1000');
+  await page.locator('#transform-add-step').click();
+  await expect(page.locator('#transform-count')).toContainText('2 etapa');
+  const download = page.waitForEvent('download');
+  await page.locator('#save-recipe-button').click();
+  const recipeFile = await (await download).path();
+  if (!recipeFile) throw new Error('the browser did not expose the saved recipe path');
+
+  // Applying both steps removes every record. The previous 40-row table must
+  // disappear and, critically, may no longer be exported or saved as current.
+  await page.locator('#transform-apply-button').click();
+  await expect(page.locator('#transform-result')).toContainText('40 → 0');
+  await expect(page.locator('#result-title')).toContainText('não contém registros');
+  await expect(page.locator('#table-wrap')).toBeHidden();
+  await expect(page.locator('#save-recipe-button')).toBeDisabled();
+
+  await page.locator('#transform-reset-button').click();
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+  await page.locator('#recipe-input').setInputFiles(recipeFile);
+  await expect(page.locator('#transform-count')).toContainText('1 etapa');
+  await expect(page.locator('#result-table')).toContainText('40');
+
+  // A runtime-invalid pipeline must stop recipe replay instead of being caught
+  // and followed by a misleading "reproduced" success over the raw dataset.
+  await page.locator('#recipe-input').setInputFiles('e2e/fixtures/invalid-transform-e2e.twrecipe');
+  await expect(page.locator('#toast')).toContainText('não puderam ser aplicadas');
+  await expect(page.locator('#toast')).not.toContainText('reproduzida');
+});
+
+test('a DEF G directive weights frequency in the UI and the saved measure replays without the DEF', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles([
+    'e2e/fixtures/grouped-frequency-e2e.def',
+    'e2e/fixtures/grouped-frequency-e2e.csv',
+  ]);
+  const body = page.locator('#result-table tbody');
+  await expect(body).toBeVisible();
+  await expect(body.locator('tr', { hasText: 'AC' })).toContainText('7');
+  await expect(body.locator('tr', { hasText: 'DF' })).toContainText('10');
+
+  await page.reload();
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/grouped-frequency-e2e.csv');
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+  await page.locator('#recipe-input').setInputFiles('e2e/fixtures/grouped-frequency-e2e.twrecipe');
+  await expect(page.locator('#result-table tbody').locator('tr', { hasText: 'AC' })).toContainText('7');
+});
+
 test('Excel-style formulas compute a derived column, and the advertised function list comes from the engine itself', async ({ page }) => {
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
@@ -932,6 +996,124 @@ test('the indirect method reports observed against expected as an SMR, and reads
   await expect(result).toContainText('25');
   await expect(result).toContainText('1,2');
   await expect(result).toContainText('intervalo contém 1');
+});
+
+test('the epidemiology panel refuses fractional events instead of rounding an invented count', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/epi-fractional-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  await page.locator('#row-field').selectOption('FAIXA');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('EVENTOS');
+  await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
+  await page.locator('#extra-measure-field').selectOption('POP');
+  await page.locator('#extra-measure-add').click();
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('epidemiology');
+  await page.locator('#statistics-x').selectOption('0');
+  await page.locator('#statistics-y').selectOption('1');
+  await expect(page.locator('#statistics-result')).toContainText('valor fracionário');
+  await expect(page.locator('#statistics-result')).toContainText('0-59');
+  await expect(page.locator('#statistics-result')).not.toContainText('Taxa bruta');
+});
+
+test('an epidemiology recipe restores method, scale and column bindings by key', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/epi-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+
+  await page.locator('#row-field').selectOption('FAIXA');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('OBITOS');
+  await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
+  for (const field of ['POP', 'PADRAO', 'TXREF']) {
+    await page.locator('#extra-measure-field').selectOption(field);
+    await page.locator('#extra-measure-add').click();
+  }
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#result-table tbody')).toBeVisible();
+
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('epidemiology');
+  await page.locator('#statistics-x').selectOption('0');
+  await page.locator('#statistics-y').selectOption('1');
+  await page.locator('#epi-standard').selectOption('2');
+  await page.locator('#epi-per').selectOption('1000');
+  await page.locator('#epi-method').selectOption('indirect');
+  await page.locator('#epi-reference').selectOption('3');
+  await expect(page.locator('#statistics-result')).toContainText('SMR');
+
+  const download = page.waitForEvent('download');
+  await page.locator('#save-recipe-button').click();
+  const recipeFile = await (await download).path();
+  if (!recipeFile) throw new Error('the browser did not expose the saved recipe path');
+
+  // Deliberately move every control away from the saved state. Reopening must
+  // bind the semantic column keys again, not reuse these current indices.
+  await page.locator('#epi-reference').selectOption('');
+  await page.locator('#epi-method').selectOption('direct');
+  await page.locator('#epi-per').selectOption('100000');
+  await page.locator('#epi-standard').selectOption('');
+  await page.locator('#statistics-operation').selectOption('descriptive');
+
+  await page.locator('#recipe-input').setInputFiles(recipeFile);
+  await expect(page.locator('#statistics-operation')).toHaveValue('epidemiology');
+  await expect(page.locator('#statistics-x')).toHaveValue('0');
+  await expect(page.locator('#statistics-y')).toHaveValue('1');
+  await expect(page.locator('#epi-method')).toHaveValue('indirect');
+  await expect(page.locator('#epi-per')).toHaveValue('1000');
+  await expect(page.locator('#epi-standard')).toHaveValue('2');
+  await expect(page.locator('#epi-reference')).toHaveValue('3');
+  await expect(page.locator('#statistics-result')).toContainText('SMR');
+  await expect(page.locator('#statistics-result')).toContainText('1,2');
+});
+
+test('statistical and epidemiological bindings follow column keys when columns move', async ({ page }) => {
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/epi-e2e.csv');
+  await expect(page.locator('#run-button')).toBeEnabled();
+  await page.locator('#row-field').selectOption('FAIXA');
+  await page.locator('#measure-kind').selectOption('sum');
+  await page.locator('#measure-field').selectOption('OBITOS');
+  await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
+  for (const field of ['POP', 'PADRAO', 'TXREF']) {
+    await page.locator('#extra-measure-field').selectOption(field);
+    await page.locator('#extra-measure-add').click();
+  }
+  await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  await page.locator('[data-view="statistics"]').click();
+  await page.locator('#statistics-operation').selectOption('epidemiology');
+  await page.locator('#statistics-x').selectOption('0');
+  await page.locator('#statistics-y').selectOption('1');
+  await page.locator('#epi-standard').selectOption('2');
+  await page.locator('#epi-method').selectOption('indirect');
+  await page.locator('#epi-reference').selectOption('3');
+
+  await page.locator('[data-view="table"]').click();
+  const edit = page.locator('#table-edit-column');
+  const columnKeys = await edit.locator('option').evaluateAll((options) =>
+    options.map((option) => (option as HTMLOptionElement).value));
+  const standardKey = columnKeys[2];
+  if (!standardKey) throw new Error('PADRAO column was not available to move');
+  await edit.selectOption(standardKey);
+  await page.locator('#table-column-left').click();
+  const referenceKey = columnKeys[3];
+  if (!referenceKey) throw new Error('TXREF column was not available to move');
+  await edit.selectOption(referenceKey);
+  await page.locator('#table-column-left').click();
+
+  // New order is OBITOS, PADRAO, TXREF, POP. Index preservation would silently
+  // bind Y/standard/reference to the wrong series; key preservation moves them.
+  await page.locator('[data-view="statistics"]').click();
+  await expect(page.locator('#statistics-x')).toHaveValue('0');
+  await expect(page.locator('#statistics-y')).toHaveValue('3');
+  await expect(page.locator('#epi-standard')).toHaveValue('1');
+  await expect(page.locator('#epi-reference')).toHaveValue('2');
+  await expect(page.locator('#statistics-result')).toContainText('SMR');
 });
 
 test('a raw DATASUS file reads as prose, without hiding the technical field name', async ({ page }) => {

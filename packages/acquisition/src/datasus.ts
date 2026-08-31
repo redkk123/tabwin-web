@@ -36,6 +36,14 @@ export interface DatasusRemoteFile {
   address: string;
   /** Explicit official catalog tuple, retained for source-level provenance. */
   catalogQuery?: DatasusSearchQuery;
+  /** Resolver that produced this address. Omitted on legacy/local records. */
+  resolver?: 'primary' | 'microdatasus-compatible';
+  /** Resolver attempts consumed before this candidate became usable. */
+  resolverAttempts?: number;
+  /** Short-lived official URL already prepared while verifying a fallback. */
+  preparedUrl?: string;
+  /** Epoch milliseconds used only to avoid reusing an expired prepared URL. */
+  preparedAt?: number;
 }
 
 /** Explicit expansion of a multi-period catalog selection. */

@@ -82,8 +82,8 @@ campo**, separados por espaço.
 
 ### `[Mapa]`
 
-**O mapa não é embutido.** É uma referência por caminho absoluto, mais a
-classificação:
+**Na captura T08, o mapa não foi embutido.** O arquivo registrou uma referência
+por caminho absoluto, mais a classificação:
 
 ```text
 [Mapa]
@@ -193,7 +193,7 @@ Duas consequências:
 | --- | --- |
 | Assinatura `NEW`, CRLF, seções INI, tabela `;` no fim | **PROVADO** |
 | Encoding Windows-1252 | **PROVADO** (bytes crus) |
-| Mapa por referência, nunca embutido | **PROVADO** |
+| T08 gravou o mapa por referência, sem conteúdo embutido | **PROVADO para T08** |
 | `Cor<n>` é `TColor` `$00BBGGRR` | **FORTEMENTE INDICADO** (bate com paleta verde) |
 | `Classe<n>` é limite superior, intervalos iguais na captura | **PROVADO** para esta captura |
 | Casas decimais não são persistidas como chave | **PROVADO** |
@@ -202,6 +202,11 @@ Duas consequências:
 | Aspas na descrição de linha | **DESCONHECIDO** |
 | Múltiplos arquivos em `[Arquivos]` | **DESCONHECIDO** (só uma captura tinha um) |
 | `.PRN` compartilhando o caminho de leitura | **FORTEMENTE INDICADO** (RE-000) |
+
+As capturas exploratórias T01–T10 que originaram parte desta análise não estão
+versionadas neste repositório. Portanto, as conclusões que dependem apenas delas
+são rastreáveis ao protocolo descrito aqui, mas não são reproduzíveis a partir
+do clone. Os goldens commitados continuam sendo a evidência verificável.
 
 ---
 

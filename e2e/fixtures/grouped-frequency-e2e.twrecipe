@@ -1,0 +1,12 @@
+{
+  "schema": "tabwin-web.recipe",
+  "version": 1,
+  "spec": {
+    "compatibilityProfile": "modern",
+    "rows": { "field": "UF" },
+    "measure": { "kind": "count", "weightField": "QUANTIDADE" },
+    "filters": []
+  },
+  "conversions": [],
+  "sourceHints": []
+}

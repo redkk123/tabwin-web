@@ -15,6 +15,19 @@ import {
   type DatasusCatalogQueryResult,
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
+import { validateDatasusZipArchive } from '../../../packages/acquisition/src/archive-validation.ts';
+import { resolveMicrodatasusCompatibleCandidates } from '../../../packages/acquisition/src/microdatasus-resolver.ts';
+import {
+  runDatasusBatch,
+  type DatasusBatchResult,
+} from '../../../packages/acquisition/src/resilient-batch.ts';
+import {
+  isAbortErrorLike,
+  retryAttempts,
+  retryCause,
+  retryWithPolicy,
+  type RetrySuccess,
+} from '../../../packages/acquisition/src/retry-policy.ts';
 import {
   ARCHIVE_LIMITS,
   classifyArchiveEntry,
@@ -36,6 +49,21 @@ export interface ExtractedArchive {
 const SUPPORTED_EXTENSIONS = new Set(['DBC', 'DBF', 'DEF', 'CNV', 'MAP']);
 const MAX_ARCHIVE_BYTES = ARCHIVE_LIMITS.maxArchiveBytes;
 const DATASUS_PROXY_BASE = (import.meta.env.VITE_DATASUS_PROXY_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
+const TRANSIENT_HTTP = new Set([429, 502, 503, 504]);
+
+class DatasusHttpError extends Error {
+  constructor(readonly status: number, message: string) {
+    super(message);
+    this.name = 'DatasusHttpError';
+  }
+}
+
+class DatasusTimeoutError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'DatasusTimeoutError';
+  }
+}
 
 function endpointFor(endpoint: string): string {
   if (!DATASUS_PROXY_BASE) return endpoint;
@@ -48,7 +76,7 @@ function extensionOf(name: string): string {
   return name.includes('.') ? (name.split('.').pop() ?? '').toUpperCase() : '';
 }
 
-async function datasusHttpError(response: Response, context: string): Promise<Error> {
+async function datasusHttpError(response: Response, context: string): Promise<DatasusHttpError> {
   const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
   if (contentType.includes('application/json')) {
     try {
@@ -57,37 +85,64 @@ async function datasusHttpError(response: Response, context: string): Promise<Er
         const error = (envelope as { error?: unknown }).error;
         if (error && typeof error === 'object' && 'message' in error
           && typeof (error as { message?: unknown }).message === 'string') {
-          return new Error(`${context}: ${(error as { message: string }).message}`);
+          return new DatasusHttpError(response.status, `${context}: ${(error as { message: string }).message}`);
         }
       }
     } catch {
       // Fall back to the stable HTTP envelope below.
     }
   }
-  return new Error(`${context}: HTTP ${response.status}`);
+  return new DatasusHttpError(response.status, `${context}: HTTP ${response.status}`);
+}
+
+function shouldRetryDatasus(error: unknown): boolean {
+  return error instanceof DatasusHttpError ? TRANSIENT_HTTP.has(error.status)
+    : error instanceof DatasusTimeoutError || error instanceof TypeError;
+}
+
+function readableError(error: unknown): string {
+  const cause = retryCause(error);
+  return cause instanceof Error ? cause.message : String(cause);
 }
 
 async function postForm(endpoint: string, body: URLSearchParams, signal?: AbortSignal): Promise<string> {
+  const timeout = new AbortController();
+  const timer = globalThis.setTimeout(() => timeout.abort(), 30_000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout.signal]) : timeout.signal;
   let response: Response;
   try {
     response = await fetch(endpointFor(endpoint), {
       method: 'POST',
       body,
-      ...(signal ? { signal } : {}),
+      signal: requestSignal,
       headers: { Accept: 'application/json, text/plain, */*' },
     });
   } catch (error) {
+    if (signal?.aborted) throw signal.reason ?? error;
+    if (timeout.signal.aborted) throw new DatasusTimeoutError('O DATASUS não respondeu em 30 segundos');
     if (!DATASUS_PROXY_BASE && error instanceof TypeError) {
       throw new Error('O portal DATASUS bloqueou a consulta direta deste domínio. Abra um DBC local ou use uma implantação com proxy DATASUS configurado.');
     }
     throw error;
+  } finally {
+    globalThis.clearTimeout(timer);
   }
   if (!response.ok) throw await datasusHttpError(response, 'Falha na consulta ao DATASUS');
   return response.text();
 }
 
-export async function searchOfficialFiles(query: DatasusSearchQuery, signal?: AbortSignal): Promise<DatasusRemoteFile[]> {
+async function searchOfficialFilesOnce(query: DatasusSearchQuery, signal?: AbortSignal): Promise<DatasusRemoteFile[]> {
   return parseSearchResponse(await postForm(DATASUS_TRANSFER_ENDPOINT, buildSearchBody(query), signal));
+}
+
+export function searchOfficialFilesDetailed(query: DatasusSearchQuery, signal?: AbortSignal): Promise<RetrySuccess<DatasusRemoteFile[]>> {
+  return retryWithPolicy(() => searchOfficialFilesOnce(query, signal), {
+    ...(signal ? { signal } : {}), maxAttempts: 3, shouldRetry: shouldRetryDatasus,
+  });
+}
+
+export async function searchOfficialFiles(query: DatasusSearchQuery, signal?: AbortSignal): Promise<DatasusRemoteFile[]> {
+  return (await searchOfficialFilesDetailed(query, signal)).value;
 }
 
 /** The official form accepts one period/UF tuple; batch it deterministically. */
@@ -101,23 +156,98 @@ export async function searchOfficialFilesBatch(
 export async function searchOfficialCatalogBatch(
   queries: readonly DatasusSearchQuery[],
   signal?: AbortSignal,
-): Promise<{ files: DatasusRemoteFile[]; availability: DatasusAvailabilityManifest }> {
-  const files: DatasusRemoteFile[] = [];
-  const results: DatasusCatalogQueryResult[] = [];
-  for (const query of queries) {
-    const result = await searchOfficialFiles(query, signal);
-    results.push({ query: { ...query }, files: result });
-    files.push(...result.map((file) => ({ ...file, catalogQuery: { ...query } })));
-  }
-  return { files: deduplicateRemoteFiles(files), availability: buildAvailabilityManifest(results) };
+): Promise<{
+  files: DatasusRemoteFile[];
+  availability: DatasusAvailabilityManifest;
+  batch: DatasusBatchResult<DatasusSearchQuery, DatasusRemoteFile[]>;
+}> {
+  const batch = await runDatasusBatch<DatasusSearchQuery, DatasusRemoteFile[]>(queries, async (query) => {
+    try {
+      const primary = await searchOfficialFilesDetailed(query, signal);
+      const files = primary.value.map((file) => ({
+        ...file,
+        catalogQuery: { ...query },
+        resolver: 'primary' as const,
+        resolverAttempts: primary.attempts,
+      }));
+      return {
+        status: files.length ? 'FOUND' as const : 'NOT_PUBLISHED' as const,
+        value: files,
+        resolver: 'primary' as const,
+        attempts: primary.attempts,
+      };
+    } catch (primaryError) {
+      if (isAbortErrorLike(primaryError) || signal?.aborted) throw primaryError;
+      const candidates = resolveMicrodatasusCompatibleCandidates(query);
+      if (!candidates.length) {
+        return {
+          status: 'LOOKUP_FAILED' as const,
+          resolver: 'primary' as const,
+          attempts: retryAttempts(primaryError),
+          error: `${readableError(primaryError)} Fallback seguro indisponível para esta combinação.`,
+        };
+      }
+      let attempts = retryAttempts(primaryError);
+      let lastError: unknown = primaryError;
+      for (const candidate of candidates) {
+        try {
+          // Preparing through the independent official endpoint verifies the
+          // evidence-derived FTP candidate without downloading it twice.
+          const prepared = await prepareOfficialDownloadDetailed([candidate], signal);
+          attempts += prepared.attempts;
+          return {
+            status: 'FOUND' as const,
+            resolver: 'microdatasus-compatible' as const,
+            attempts,
+            value: [{
+              ...candidate,
+              preparedUrl: prepared.value,
+              preparedAt: Date.now(),
+              resolverAttempts: attempts,
+            }],
+          };
+        } catch (fallbackError) {
+          if (isAbortErrorLike(fallbackError) || signal?.aborted) throw fallbackError;
+          attempts += retryAttempts(fallbackError);
+          lastError = fallbackError;
+        }
+      }
+      return {
+        status: 'LOOKUP_FAILED' as const,
+        resolver: 'microdatasus-compatible' as const,
+        attempts,
+        error: readableError(lastError),
+      };
+    }
+  }, { ...(signal ? { signal } : {}), failureStatus: 'LOOKUP_FAILED' });
+
+  const results: DatasusCatalogQueryResult[] = batch.items.flatMap((item) => {
+    if (item.status !== 'FOUND' && item.status !== 'NOT_PUBLISHED') return [];
+    return [{ query: { ...item.request }, files: item.value ?? [] }];
+  });
+  const files = deduplicateRemoteFiles(batch.items.flatMap((item) => item.status === 'FOUND' ? item.value ?? [] : []));
+  return { files, availability: buildAvailabilityManifest(results), batch };
 }
 
 export async function searchOfficialAuxiliaries(system: string, signal?: AbortSignal): Promise<DatasusRemoteFile[]> {
-  return parseSearchResponse(await postForm(DATASUS_TRANSFER_ENDPOINT, buildAuxiliarySearchBody(system), signal));
+  return (await retryWithPolicy(
+    () => postForm(DATASUS_TRANSFER_ENDPOINT, buildAuxiliarySearchBody(system), signal).then(parseSearchResponse),
+    { ...(signal ? { signal } : {}), maxAttempts: 3, shouldRetry: shouldRetryDatasus },
+  )).value;
+}
+
+async function prepareOfficialDownloadOnce(files: readonly DatasusRemoteFile[], signal?: AbortSignal): Promise<string> {
+  return parsePreparedDownloadResponse(await postForm(DATASUS_DOWNLOAD_ENDPOINT, buildDownloadBody(files), signal));
+}
+
+export function prepareOfficialDownloadDetailed(files: readonly DatasusRemoteFile[], signal?: AbortSignal): Promise<RetrySuccess<string>> {
+  return retryWithPolicy(() => prepareOfficialDownloadOnce(files, signal), {
+    ...(signal ? { signal } : {}), maxAttempts: 3, shouldRetry: shouldRetryDatasus,
+  });
 }
 
 export async function prepareOfficialDownload(files: readonly DatasusRemoteFile[], signal?: AbortSignal): Promise<string> {
-  return parsePreparedDownloadResponse(await postForm(DATASUS_DOWNLOAD_ENDPOINT, buildDownloadBody(files), signal));
+  return (await prepareOfficialDownloadDetailed(files, signal)).value;
 }
 
 export interface ArchiveDownloadProgress {
@@ -125,7 +255,7 @@ export interface ArchiveDownloadProgress {
   totalBytes?: number;
 }
 
-export async function fetchOfficialArchive(
+async function fetchOfficialArchiveOnce(
   url: string,
   signal?: AbortSignal,
   onProgress?: (progress: ArchiveDownloadProgress) => void,
@@ -142,6 +272,7 @@ export async function fetchOfficialArchive(
     const bytes = new Uint8Array(await response.arrayBuffer());
     if (bytes.byteLength > MAX_ARCHIVE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');
     onProgress?.({ receivedBytes: bytes.byteLength, ...(totalBytes ? { totalBytes } : {}) });
+    validateDatasusZipArchive(bytes, response.headers.get('content-type'));
     return bytes;
   }
 
@@ -165,7 +296,26 @@ export async function fetchOfficialArchive(
     archive.set(chunk, offset);
     offset += chunk.byteLength;
   }
+  validateDatasusZipArchive(archive, response.headers.get('content-type'));
   return archive;
+}
+
+export function fetchOfficialArchiveDetailed(
+  url: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: ArchiveDownloadProgress) => void,
+): Promise<RetrySuccess<Uint8Array>> {
+  return retryWithPolicy(() => fetchOfficialArchiveOnce(url, signal, onProgress), {
+    ...(signal ? { signal } : {}), maxAttempts: 3, shouldRetry: shouldRetryDatasus,
+  });
+}
+
+export async function fetchOfficialArchive(
+  url: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: ArchiveDownloadProgress) => void,
+): Promise<Uint8Array> {
+  return (await fetchOfficialArchiveDetailed(url, signal, onProgress)).value;
 }
 
 /**

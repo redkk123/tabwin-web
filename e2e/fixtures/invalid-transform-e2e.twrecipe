@@ -1,0 +1,21 @@
+{
+  "schema": "tabwin-web.recipe",
+  "version": 1,
+  "spec": {
+    "compatibilityProfile": "modern",
+    "rows": { "field": "MUNIC" },
+    "measure": { "kind": "count" },
+    "filters": []
+  },
+  "conversions": [],
+  "sourceHints": [],
+  "transformSteps": [
+    {
+      "id": "missing-field",
+      "kind": "filter-rows",
+      "filters": [
+        { "field": "INEXISTENTE", "mode": "include", "acceptedCategories": ["x"] }
+      ]
+    }
+  ]
+}

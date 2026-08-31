@@ -7,6 +7,7 @@ import {
 } from '@precisa-saude/datasus-dbc';
 import {
   compileQueryPlan,
+  frequencyMeasureFromDef,
   lookupDefinitionFromDefOption,
   parsePortableTable,
   parseRecipe,
@@ -75,12 +76,26 @@ import {
   type SkippedArchiveEntry,
 } from '../../../packages/acquisition/src/archive-limits.ts';
 import {
+  InvalidDatasusArchiveError,
+  validateDatasusZipArchive,
+} from '../../../packages/acquisition/src/archive-validation.ts';
+import {
+  createBatchPromiseCache,
+  createDatasusBatchManifest,
+  retryFailedRequests,
+  runDatasusBatch,
+  serializeDatasusBatchManifest,
+  type BatchPromiseCache,
+  type DatasusBatchResult,
+} from '../../../packages/acquisition/src/resilient-batch.ts';
+import { retryAttempts, retryCause } from '../../../packages/acquisition/src/retry-policy.ts';
+import {
   chooseVerifiedAuxiliaryBundle,
   extractOneArchiveEntry,
   extractSupportedArchive,
   extractSupportedArchiveFiles,
-  fetchOfficialArchive,
-  prepareOfficialDownload,
+  fetchOfficialArchiveDetailed,
+  prepareOfficialDownloadDetailed,
   searchOfficialAuxiliaries,
   searchOfficialCatalogBatch,
   searchOfficialFiles,
@@ -191,6 +206,8 @@ interface LoadedSource {
   modality?: string;
   /** Explicit catalog selection for an acquired official data source. */
   catalogQuery?: DatasusSearchQuery | undefined;
+  resolver?: 'primary' | 'microdatasus-compatible';
+  acquisitionAttempts?: number;
 }
 
 interface OfficialArchiveProvenance {
@@ -198,6 +215,8 @@ interface OfficialArchiveProvenance {
   cacheHit: boolean;
   retrievedAt: string;
   archiveSha256: string;
+  resolver: 'primary' | 'microdatasus-compatible';
+  attempts: number;
 }
 
 interface DownloadedArchive {
@@ -207,7 +226,21 @@ interface DownloadedArchive {
   provenance: OfficialArchiveProvenance;
 }
 
-type OpenOfficialFileResult = { ok: true } | { ok: false; error: string };
+type OpenOfficialFileResult = {
+  ok: true;
+  resolver: 'primary' | 'microdatasus-compatible';
+  attempts: number;
+} | {
+  ok: false;
+  status: 'DOWNLOAD_FAILED' | 'INVALID_FILE' | 'CANCELLED';
+  error: string;
+  resolver: 'primary' | 'microdatasus-compatible';
+  attempts: number;
+};
+
+interface OfficialBatchContext {
+  auxiliaries: BatchPromiseCache<string, number>;
+}
 
 const numberFormat = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
 const integerFormat = new Intl.NumberFormat('pt-BR');
@@ -667,6 +700,8 @@ let lastInvestigateResult: AuditScanResult | null = null;
 /** Session-local only: a dismissal never survives a reload, and a fresh dataset clears it. */
 const dismissedInvestigateSignalIds = new Set<string>();
 let transformSteps: TransformStep[] = [];
+/** Exact pipeline that produced the dataset currently active in the Worker. */
+let appliedTransformSteps: TransformStep[] = [];
 let transformStepSequence = 0;
 /** Draft rows for the recode step currently being configured; committed into a step only on "Adicionar etapa". */
 let transformRecodeRows: Array<{ from: string; to: string }> = [{ from: '', to: '' }];
@@ -1792,7 +1827,19 @@ function renderTransformApplyResult(steps: TransformStepResult[]): void {
   transformResult.append(list);
 }
 
-async function runTransformPipeline(): Promise<void> {
+async function restoreOriginalDatasetForPipeline(label: string): Promise<void> {
+  const { sources, fields } = await rebuildSourcesFromOriginalFiles();
+  const originalHeader = await openDataset(sources, label, fields);
+  // `openDataset` is transactional. Clear the applied snapshot only after the
+  // original dataset really replaced the previous Worker state.
+  dbfHeader = originalHeader;
+  appliedTransformSteps = [];
+  populateControls();
+  updateDatasetStats();
+  clearCombinationProfile();
+}
+
+async function runTransformPipeline(options: { rethrow?: boolean; rerunAnalysis?: boolean } = {}): Promise<void> {
   if (!dbfHeader || !transformSteps.length) return;
   transformApplyButton.disabled = true;
   transformResult.replaceChildren();
@@ -1808,8 +1855,7 @@ async function runTransformPipeline(): Promise<void> {
     // look "missing" to an earlier step instead of failing predictably, or
     // worse, a filter would silently mean something different the second
     // time because the values it reads were already recoded once.
-    const { sources, fields } = await rebuildSourcesFromOriginalFiles();
-    dbfHeader = await openDataset(sources, 'Preparação do pipeline', fields);
+    await restoreOriginalDatasetForPipeline('Preparação do pipeline');
 
     const conversions = conversionsForFilters(
       transformSteps.flatMap((step) => (step.kind === 'filter-rows' ? step.filters : [])),
@@ -1822,13 +1868,14 @@ async function runTransformPipeline(): Promise<void> {
     }, { label: 'Transformar dados' });
     dbfHeader = response.header;
     datasetRecordCount = response.recordCount;
+    appliedTransformSteps = structuredClone(transformSteps);
     populateControls();
     updateDatasetStats();
     clearCombinationProfile();
     renderTransformApplyResult(response.steps);
     transformResetButton.disabled = false;
     showToast(`Pipeline aplicado: ${integerFormat.format(response.recordCount)} registro(s) ativo(s)`);
-    await runAnalysis();
+    if (options.rerunAnalysis !== false) await runAnalysis();
   } catch (error) {
     transformResult.replaceChildren();
     const message = error instanceof Error ? error.message : String(error);
@@ -1836,6 +1883,7 @@ async function runTransformPipeline(): Promise<void> {
     paragraph.textContent = message;
     transformResult.append(paragraph);
     showToast(message, true);
+    if (options.rethrow) throw error;
   } finally {
     transformApplyButton.disabled = transformSteps.length === 0;
   }
@@ -1844,11 +1892,7 @@ async function runTransformPipeline(): Promise<void> {
 async function resetTransformPipelineData(): Promise<void> {
   transformResetButton.disabled = true;
   try {
-    const { sources, fields } = await rebuildSourcesFromOriginalFiles();
-    dbfHeader = await openDataset(sources, 'Restauração dos dados originais', fields);
-    populateControls();
-    updateDatasetStats();
-    clearCombinationProfile();
+    await restoreOriginalDatasetForPipeline('Restauração dos dados originais');
     transformResult.replaceChildren();
     showToast('Dados originais restaurados; o pipeline continua na lista para revisar ou reaplicar');
     await runAnalysis();
@@ -2404,6 +2448,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   lastInvestigateResult = null;
   dismissedInvestigateSignalIds.clear();
   transformSteps = [];
+  appliedTransformSteps = [];
   transformRecodeRows = [{ from: '', to: '' }];
   transformGroupAggRows = [{ kind: 'count', field: '', as: 'N' }];
   transformBindSource = null;
@@ -2453,6 +2498,9 @@ async function appendCompatibleDbf(
   setBusy(`Combinando ${file.name}…`);
   decodeCancelButton.hidden = false;
   try {
+    if (appliedTransformSteps.length) {
+      await restoreOriginalDatasetForPipeline('Restauração antes de combinar fontes');
+    }
     // The Worker holds every source and checks the schema against the open
     // dataset, so nothing is concatenated on this thread.
     dbfHeader = await appendDataset(
@@ -2764,6 +2812,7 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   lastInvestigateResult = null;
   dismissedInvestigateSignalIds.clear();
   transformSteps = [];
+  appliedTransformSteps = [];
   transformRecodeRows = [{ from: '', to: '' }];
   renderConfiguredFilters();
   renderCrossFieldRules();
@@ -3574,7 +3623,7 @@ async function loadFiles(files: File[]): Promise<void> {
   }
 }
 
-function buildPlan(): QueryPlan {
+function buildPlan(measureOverride?: MeasureSpec): QueryPlan {
   const conversionName = rowConversion.value;
   const columnConversionName = columnConversion.value;
   const row = {
@@ -3593,9 +3642,9 @@ function buildPlan(): QueryPlan {
   const increment = activeDef?.increments.find(
     (candidate) => candidate.field.toUpperCase() === measureField.value.toUpperCase(),
   );
-  const measure = measureKind.value === 'sum'
+  const measure = measureOverride ?? (measureKind.value === 'sum'
     ? (increment ? sumMeasureFromDefIncrement(increment) : { kind: 'sum' as const, field: measureField.value })
-    : { kind: 'count' as const };
+    : activeDef ? frequencyMeasureFromDef(activeDef) : { kind: 'count' as const });
   const spec = {
     compatibilityProfile: currentCompatibilityProfile,
     rows: row,
@@ -3635,8 +3684,41 @@ function conversionsForPlan(plan: QueryPlan): ConversionRegistry {
   return conversions;
 }
 
-async function runAnalysis(): Promise<void> {
-  if (!dbfHeader || !datasetRecordCount || !rowField.value) return;
+function clearAnalysisResult(message: string): void {
+  currentPlan = null;
+  baseResult = null;
+  currentResult = null;
+  tableOperations = [];
+  virtualTable = null;
+  currentRowLabel = '';
+  emptyState.hidden = false;
+  tableWrap.hidden = true;
+  tableOperationsPanel.hidden = true;
+  tablePresentation.hidden = true;
+  tableEditing.hidden = true;
+  includeTableButton.disabled = true;
+  for (const button of [exportCsvButton, exportJsonButton, exportXlsxButton, exportXmlButton,
+    chartPngButton, chartSvgButton, chartPrintButton, microdatasusCsvButton, saveRecipeButton,
+    saveTableButton, selectedDbfButton]) button.disabled = true;
+  chart.replaceChildren();
+  statisticsResult.replaceChildren(Object.assign(document.createElement('p'), { textContent: message }));
+  auditOutput.textContent = '';
+  compareResult.replaceChildren();
+  mapLegend.hidden = true;
+  mapPngButton.disabled = true;
+  mapMessage.hidden = false;
+  mapMessage.textContent = message;
+  resultKicker.textContent = 'Sem resultado atual';
+  resultTitle.textContent = message;
+}
+
+async function runAnalysis(measureOverride?: MeasureSpec): Promise<boolean> {
+  if (!dbfHeader || !rowField.value) return false;
+  if (!datasetRecordCount) {
+    clearAnalysisResult('O conjunto atual não contém registros para tabular.');
+    setControlsEnabled(true);
+    return false;
+  }
   setBusy('Montando a tabela…');
   setControlsEnabled(false);
   selectedDbfButton.disabled = true;
@@ -3644,7 +3726,7 @@ async function runAnalysis(): Promise<void> {
   await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   decodeCancelButton.hidden = false;
   try {
-    const plan = buildPlan();
+    const plan = buildPlan(measureOverride);
     const conversions = conversionsForPlan(plan);
     const { result, cached } = await askDataset<{ result: TabulationResult; cached: boolean }>(
       { type: 'tabulate', plan, conversions },
@@ -3678,6 +3760,7 @@ async function runAnalysis(): Promise<void> {
     selectedDbfButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map' || rowField.value.toUpperCase().includes('MUNIC')) await ensureMap();
+    return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     resultKicker.textContent = 'Análise interrompida';
@@ -3685,6 +3768,7 @@ async function runAnalysis(): Promise<void> {
     showToast(message, true);
     setControlsEnabled(Boolean(dbfHeader));
     selectedDbfButton.disabled = !dbfHeader || !currentPlan || !currentResult;
+    return false;
   } finally {
     decodeCancelButton.hidden = true;
   }
@@ -4351,28 +4435,35 @@ function renderChart(result: TabulationResult): void {
 }
 
 function populateStatisticsColumns(result: TabulationResult): void {
-  const previousX = statisticsX.value;
-  const previousY = statisticsY.value;
+  const previousXKey = statisticsX.selectedOptions[0]?.dataset.columnKey;
+  const previousYKey = statisticsY.selectedOptions[0]?.dataset.columnKey;
   statisticsX.replaceChildren();
   statisticsY.replaceChildren();
   result.columns.forEach((column, index) => {
     const optionX = document.createElement('option');
     optionX.value = String(index);
     optionX.textContent = column.label;
+    optionX.dataset.columnKey = column.key;
     const optionY = optionX.cloneNode(true) as HTMLOptionElement;
     statisticsX.append(optionX);
     statisticsY.append(optionY);
   });
   statisticsX.disabled = result.columns.length === 0;
   statisticsY.disabled = result.columns.length < 2;
-  if ([...statisticsX.options].some((option) => option.value === previousX)) statisticsX.value = previousX;
-  if ([...statisticsY.options].some((option) => option.value === previousY)) statisticsY.value = previousY;
+  const previousX = [...statisticsX.options].find((option) => option.dataset.columnKey === previousXKey);
+  const previousY = [...statisticsY.options].find((option) => option.dataset.columnKey === previousYKey);
+  if (previousX) statisticsX.value = previousX.value;
+  if (previousY) statisticsY.value = previousY.value;
   else if (result.columns.length > 1) statisticsY.value = '1';
 }
 
 function statisticsColumn(index: number): number[] {
   if (!currentResult) return [];
-  return currentResult.cells.map((row) => row[index] ?? 0);
+  // Uma célula ausente vira NaN, não 0. Com zero ela entrava na conta como
+  // uma observação de valor zero - inventando um dado e mexendo em n, média e
+  // correlação. As funções estatísticas já descartam não-finitos, e a
+  // epidemiologia recusa explicitamente.
+  return currentResult.cells.map((row) => row[index] ?? Number.NaN);
 }
 
 function statisticCard(label: string, value: string): HTMLElement {
@@ -4506,12 +4597,15 @@ function populateEpiColumnPickers(): void {
     [epiStandard, '— só taxa bruta —'],
     [epiReference, '— escolha a coluna —'],
   ] as const) {
-    const previous = select.value;
+    const previousKey = select.selectedOptions[0]?.dataset.columnKey;
     select.replaceChildren(new Option(placeholder, ''));
     currentResult?.columns.forEach((column, index) => {
-      select.add(new Option(column.label, String(index)));
+      const option = new Option(column.label, String(index));
+      option.dataset.columnKey = column.key;
+      select.add(option);
     });
-    select.value = [...select.options].some((option) => option.value === previous) ? previous : '';
+    const previous = [...select.options].find((option) => option.dataset.columnKey === previousKey);
+    select.value = previous?.value ?? '';
   }
 }
 
@@ -4538,18 +4632,26 @@ function renderEpidemiology(): void {
   const standardIndex = epiStandard.value === '' ? -1 : Number(epiStandard.value);
   const standardCol = standardIndex >= 0 ? statisticsColumn(standardIndex) : null;
 
-  let nonIntegerEvents = false;
-  const strata: StandardizationStratum[] = currentResult.rows.map((row, index) => {
-    const rawEvents = eventsCol[index] ?? 0;
-    const events = Math.round(rawEvents);
-    if (events !== rawEvents) nonIntegerEvents = true;
-    return {
-      label: row.label,
-      events,
-      population: populationCol[index] ?? 0,
-      standardWeight: standardCol ? (standardCol[index] ?? 0) : 0,
-    };
-  });
+  // O intervalo de Poisson exige contagem inteira. Antes a tela arredondava e
+  // avisava depois; agora ela recusa e diz qual linha é o problema, porque um
+  // evento fracionário quase sempre significa que a coluna escolhida não é uma
+  // contagem - e arredondar produziria um IC sobre um número que ninguém
+  // observou.
+  const fractionalIndex = eventsCol.findIndex((value) => Number.isFinite(value) && !Number.isInteger(value));
+  if (fractionalIndex >= 0) {
+    const label = currentResult.rows[fractionalIndex]?.label ?? `linha ${fractionalIndex + 1}`;
+    const message = document.createElement('p');
+    message.textContent = `A coluna de eventos tem valor fracionário em "${label}". `
+      + 'O intervalo de confiança de Poisson exige contagens inteiras — escolha uma coluna de contagem.';
+    statisticsResult.append(message);
+    return;
+  }
+  const strata: StandardizationStratum[] = currentResult.rows.map((row, index) => ({
+    label: row.label,
+    events: eventsCol[index] ?? Number.NaN,
+    population: populationCol[index] ?? Number.NaN,
+    standardWeight: standardCol ? (standardCol[index] ?? Number.NaN) : 0,
+  }));
 
   // Summary cards: crude rate over all strata, and the standardized rate if a
   // standard was chosen.
@@ -4608,7 +4710,6 @@ function renderEpidemiology(): void {
   const parts = ['IC por Byar (Poisson); denominador zero mostra "—", nunca uma taxa inventada.'];
   if (standardCol) parts.push('Padronização direta: a coluna de padrão é a população-padrão por estrato (junte a tabela oficial OMS/IBGE por "Juntar outra base").');
   else parts.push('Escolha uma coluna de população-padrão para a taxa padronizada por idade.');
-  if (nonIntegerEvents) parts.push('Alguns valores de evento não eram inteiros e foram arredondados para o IC de contagem.');
   note.textContent = parts.join(' ');
   statisticsResult.append(note);
 }
@@ -4628,11 +4729,20 @@ function renderIndirectStandardization(eventsCol: number[], populationCol: numbe
     return;
   }
   const referenceCol = statisticsColumn(referenceIndex);
+  const fractionalIndex = eventsCol.findIndex((value) => Number.isFinite(value) && !Number.isInteger(value));
+  if (fractionalIndex >= 0) {
+    const label = currentResult?.rows[fractionalIndex]?.label ?? `linha ${fractionalIndex + 1}`;
+    const message = document.createElement('p');
+    message.textContent = `A coluna de eventos tem valor fracionário em "${label}". `
+      + 'O intervalo de confiança de Poisson exige contagens inteiras — escolha uma coluna de contagem.';
+    statisticsResult.append(message);
+    return;
+  }
   const strata: IndirectStandardizationStratum[] = (currentResult?.rows ?? []).map((row, index) => ({
     label: row.label,
-    events: eventsCol[index] ?? 0,
-    population: populationCol[index] ?? 0,
-    referenceRate: referenceCol[index] ?? 0,
+    events: eventsCol[index] ?? Number.NaN,
+    population: populationCol[index] ?? Number.NaN,
+    referenceRate: referenceCol[index] ?? Number.NaN,
   }));
   const result = indirectlyStandardizedRatio(strata);
 
@@ -5860,18 +5970,31 @@ function catalogQueryLabel(query: DatasusSearchQuery): string {
   return [query.year, query.month, coverage].filter(Boolean).join(' · ');
 }
 
-function renderAvailabilityManifest(manifest: DatasusAvailabilityManifest): void {
+function renderAvailabilityManifest(
+  manifest: DatasusAvailabilityManifest,
+  batch?: DatasusBatchResult<DatasusSearchQuery, DatasusRemoteFile[]>,
+): void {
   const item = document.createElement('div');
   item.className = 'catalog-availability';
   const summary = document.createElement('b');
-  summary.textContent = `${integerFormat.format(manifest.availableQueries)} de ${integerFormat.format(manifest.requestedQueries)} combinação(ões) retornaram arquivo`;
+  summary.textContent = batch
+    ? `${integerFormat.format(batch.succeeded)} encontrada(s) · ${integerFormat.format(batch.notPublished)} sem publicação confirmada · ${integerFormat.format(batch.failed)} falha(s)`
+    : `${integerFormat.format(manifest.availableQueries)} de ${integerFormat.format(manifest.requestedQueries)} combinação(ões) retornaram arquivo`;
   item.append(summary);
-  if (manifest.missingQueries.length) {
+  const missingQueries = batch
+    ? batch.items.filter((entry) => entry.status === 'NOT_PUBLISHED').map((entry) => entry.request)
+    : manifest.missingQueries;
+  if (missingQueries.length) {
     const missing = document.createElement('small');
-    const visible = manifest.missingQueries.slice(0, 12).map(catalogQueryLabel);
-    const remainder = manifest.missingQueries.length - visible.length;
+    const visible = missingQueries.slice(0, 12).map(catalogQueryLabel);
+    const remainder = missingQueries.length - visible.length;
     missing.textContent = `Sem resultado oficial: ${visible.join('; ')}${remainder ? `; +${integerFormat.format(remainder)}` : ''}. Isso indica ausência na resposta atual, não prova que o dado nunca existiu.`;
     item.append(missing);
+  }
+  if (batch?.failed) {
+    const failed = document.createElement('small');
+    failed.textContent = `${integerFormat.format(batch.failed)} consulta(s) falharam mesmo após tentativas limitadas; não foram classificadas como ausência.`;
+    item.append(failed);
   }
   catalogResults.append(item);
 }
@@ -5987,24 +6110,36 @@ async function downloadCatalogEntries(
   let archive: Uint8Array | null = null;
   let summary: CachedArchiveSummary | null = null;
   let cacheHit = false;
+  let attempts = 0;
   try {
     const cached = await readCachedArchive(cacheKey, maxCacheAgeMs);
     if (cached) {
-      archive = cached.bytes;
-      summary = cached.summary;
-      cacheHit = true;
+      try {
+        validateDatasusZipArchive(cached.bytes);
+        archive = cached.bytes;
+        summary = cached.summary;
+        cacheHit = true;
+      } catch (error) {
+        if (!(error instanceof InvalidDatasusArchiveError)) throw error;
+        await deleteCachedArchive(cacheKey);
+      }
     }
   } catch {
     // Private browsing or storage policies may disable IndexedDB; acquisition remains usable.
   }
   if (!archive) {
-    const preparedUrl = await prepareOfficialDownload(files, signal);
-    archive = await fetchOfficialArchive(preparedUrl, signal, ({ receivedBytes, totalBytes }) => {
+    const prepared = files.length === 1 && files[0]?.preparedUrl && files[0].preparedAt
+      && Date.now() - files[0].preparedAt < 4 * 60 * 1000
+      ? { value: files[0].preparedUrl, attempts: 0 }
+      : await prepareOfficialDownloadDetailed(files, signal);
+    const downloaded = await fetchOfficialArchiveDetailed(prepared.value, signal, ({ receivedBytes, totalBytes }) => {
       const progress = totalBytes
         ? `${Math.min(100, Math.round(receivedBytes / totalBytes * 100))}% · ${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`
         : formatBytes(receivedBytes);
       setCatalogStatus(`Baixando ${files.map((file) => file.name).join(', ')}… ${progress}`);
     });
+    archive = downloaded.value;
+    attempts = prepared.attempts + downloaded.attempts;
     const archiveSha256 = await sha256(archive);
     try {
       summary = await writeCachedArchive(cacheKey, archive, {
@@ -6038,6 +6173,8 @@ async function downloadCatalogEntries(
       cacheHit,
       retrievedAt: new Date(summary?.savedAt ?? Date.now()).toISOString(),
       archiveSha256,
+      resolver: files[0]?.resolver ?? 'primary',
+      attempts,
     },
   };
 }
@@ -6075,6 +6212,8 @@ async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: Abort
       source.archiveSha256 = downloaded.provenance.archiveSha256;
       source.cacheKey = downloaded.provenance.cacheKey;
       source.catalogQuery = query;
+      source.resolver = downloaded.provenance.resolver;
+      source.acquisitionAttempts = downloaded.provenance.attempts;
     }
   }
   return selected.length;
@@ -6098,6 +6237,8 @@ function markAuxiliarySource(
   source.archiveSha256 = downloaded.provenance.archiveSha256;
   source.cacheKey = downloaded.provenance.cacheKey;
   source.catalogQuery = catalogQuery;
+  source.resolver = downloaded.provenance.resolver;
+  source.acquisitionAttempts = downloaded.provenance.attempts;
 }
 
 /**
@@ -6293,6 +6434,7 @@ async function openOfficialFile(
   remote: DatasusRemoteFile,
   query: DatasusSearchQuery,
   keepDialogOpen = false,
+  batchContext?: OfficialBatchContext,
 ): Promise<OpenOfficialFileResult> {
   const controller = new AbortController();
   activeCatalogController = controller;
@@ -6308,7 +6450,10 @@ async function openOfficialFile(
     if (catalogAuxiliary.checked) {
       if (verifiedAuxiliaryBundleName(query.system, query.fileType)) {
         try {
-          auxiliaryCount = await loadVerifiedAuxiliaries(query, controller.signal);
+          const auxiliaryKey = `${query.system}\n${query.fileType}`;
+          auxiliaryCount = batchContext
+            ? await batchContext.auxiliaries.getOrCreate(auxiliaryKey, () => loadVerifiedAuxiliaries(query, controller.signal))
+            : await loadVerifiedAuxiliaries(query, controller.signal);
         } catch (error) {
           if (isAbortError(error)) throw error;
           showToast(`Auxiliares verificados não carregados: ${error instanceof Error ? error.message : String(error)}`, true);
@@ -6334,6 +6479,8 @@ async function openOfficialFile(
       source.archiveSha256 = downloaded.provenance.archiveSha256;
       source.cacheKey = downloaded.provenance.cacheKey;
       source.catalogQuery = remote.catalogQuery ?? query;
+      source.resolver = downloaded.provenance.resolver;
+      source.acquisitionAttempts = downloaded.provenance.attempts;
     }
     renderAudit();
     setCatalogStatus(manualAuxiliariesOffered
@@ -6344,13 +6491,26 @@ async function openOfficialFile(
       ? `${remote.name} reaberto do cache local`
       : `${remote.name} carregado diretamente do DATASUS`);
     void renderRecentArchives();
-    return { ok: true };
+    return {
+      ok: true,
+      resolver: downloaded.provenance.resolver,
+      attempts: downloaded.provenance.attempts,
+    };
   } catch (error) {
+    const cause = retryCause(error);
     const message = isAbortError(error)
       ? timedOut ? 'O DATASUS demorou mais de 2 minutos para responder. Tente novamente.' : 'Operação cancelada.'
-      : error instanceof Error ? error.message : String(error);
+      : cause instanceof Error ? cause.message : String(cause);
     setCatalogStatus(message, !isAbortError(error) || timedOut);
-    return { ok: false, error: message };
+    return {
+      ok: false,
+      status: isAbortError(error) && !timedOut
+        ? 'CANCELLED'
+        : cause instanceof InvalidDatasusArchiveError ? 'INVALID_FILE' : 'DOWNLOAD_FAILED',
+      error: message,
+      resolver: remote.resolver ?? 'primary',
+      attempts: retryAttempts(error),
+    };
   } finally {
     window.clearTimeout(timer);
     if (activeCatalogController === controller) activeCatalogController = null;
@@ -6361,23 +6521,70 @@ async function openOfficialFile(
 async function openOfficialFileBatch(files: readonly DatasusRemoteFile[], fallbackQuery: DatasusSearchQuery): Promise<void> {
   const previousCombine = combineCompatibleFiles.checked;
   let opened = 0;
-  let failure = '';
+  const context: OfficialBatchContext = { auxiliaries: createBatchPromiseCache() };
   try {
-    for (const [index, remote] of files.entries()) {
-      combineCompatibleFiles.checked = index > 0;
-      const outcome = await openOfficialFile(remote, remote.catalogQuery ?? fallbackQuery, true);
-      if (!outcome.ok) {
-        failure = outcome.error;
-        break;
+    const batch = await runDatasusBatch<DatasusRemoteFile, true>(files, async (remote) => {
+      combineCompatibleFiles.checked = opened > 0;
+      const outcome = await openOfficialFile(remote, remote.catalogQuery ?? fallbackQuery, true, context);
+      if (outcome.ok) {
+        opened += 1;
+        return { status: 'FOUND', value: true, resolver: outcome.resolver, attempts: outcome.attempts };
       }
-      opened += 1;
+      return {
+        status: outcome.status,
+        resolver: outcome.resolver,
+        attempts: outcome.attempts,
+        error: outcome.error,
+      };
+    }, { failureStatus: 'DOWNLOAD_FAILED' });
+    if (batch.cancelled) {
+      setCatalogStatus(`Lote cancelado; ${integerFormat.format(batch.succeeded)} arquivo(s) já aberto(s) foram preservados.`);
+    } else if (!batch.failed) {
+      setCatalogStatus(`${integerFormat.format(batch.succeeded)} arquivo(s) combinados com esquema compatível.`);
+    } else {
+      setCatalogStatus(`${integerFormat.format(batch.succeeded)} de ${integerFormat.format(batch.requested)} arquivo(s) abertos; ${integerFormat.format(batch.failed)} falharam e os seguintes foram tentados normalmente.`, true);
     }
-    if (opened === files.length) setCatalogStatus(`${integerFormat.format(opened)} arquivo(s) combinados com esquema compatível.`);
-    else if (opened > 0) setCatalogStatus(`Lote interrompido após ${integerFormat.format(opened)} arquivo(s); o conjunto parcial foi preservado. Motivo: ${failure}`, true);
-    else if (failure) setCatalogStatus(`Nenhum arquivo foi combinado. Motivo: ${failure}`, true);
+    renderDownloadBatchActions(batch, fallbackQuery);
   } finally {
     combineCompatibleFiles.checked = previousCombine;
   }
+}
+
+function renderDownloadBatchActions(
+  batch: DatasusBatchResult<DatasusRemoteFile, true>,
+  fallbackQuery: DatasusSearchQuery,
+): void {
+  for (const previous of catalogResults.querySelectorAll('.catalog-batch-actions')) previous.remove();
+  const panel = document.createElement('div');
+  panel.className = 'catalog-result catalog-batch-actions';
+  const summary = document.createElement('small');
+  summary.textContent = `${integerFormat.format(batch.succeeded)} sucesso(s) · ${integerFormat.format(batch.failed)} falha(s)${batch.cancelled ? ' · cancelado' : ''}`;
+  const save = document.createElement('button');
+  save.className = 'secondary-button';
+  save.type = 'button';
+  save.textContent = 'Salvar manifesto do lote';
+  save.addEventListener('click', () => {
+    const manifest = createDatasusBatchManifest(batch, (item) => ({
+      file: item.request.name,
+      address: item.request.address,
+      query: item.request.catalogQuery ?? fallbackQuery,
+    }));
+    downloadBlob(
+      new Blob([serializeDatasusBatchManifest(manifest)], { type: 'application/json;charset=utf-8' }),
+      `datasus-lote-${manifest.createdAt.slice(0, 10)}.json`,
+    );
+  });
+  panel.append(summary, save);
+  const failed = retryFailedRequests(batch);
+  if (failed.length) {
+    const retry = document.createElement('button');
+    retry.className = 'secondary-button';
+    retry.type = 'button';
+    retry.textContent = `Retentar somente falhas (${integerFormat.format(failed.length)})`;
+    retry.addEventListener('click', () => void openOfficialFileBatch(failed, fallbackQuery));
+    panel.append(retry);
+  }
+  catalogResults.append(panel);
 }
 
 async function openRecentArchive(summary: CachedArchiveSummary): Promise<void> {
@@ -6470,84 +6677,140 @@ async function renderRecentArchives(): Promise<void> {
   }
 }
 
-async function searchCatalog(): Promise<void> {
-  const type = fileTypesForSystem(catalogSystem.value).find((item) => item.code === catalogFileType.value);
-  if (!type) return;
-  const selection = {
-    system: catalogSystem.value,
-    fileType: catalogFileType.value,
-    years: selectedCatalogValues(catalogYear),
-    ...(!systemIsAnnual(catalogSystem.value)
-      ? { months: selectedCatalogValues(catalogMonth) }
-      : { annual: true }),
-    ...(selectedCatalogValues(catalogUf).length ? { ufs: selectedCatalogValues(catalogUf) } : {}),
-  };
+type CatalogSearchBatch = Awaited<ReturnType<typeof searchOfficialCatalogBatch>>;
+
+function renderLookupBatchActions(
+  batch: DatasusBatchResult<DatasusSearchQuery, DatasusRemoteFile[]>,
+  system: string,
+  fileType: string,
+): void {
+  const panel = document.createElement('div');
+  panel.className = 'catalog-result catalog-batch-actions';
+  const save = document.createElement('button');
+  save.className = 'secondary-button';
+  save.type = 'button';
+  save.textContent = 'Salvar manifesto operacional';
+  save.title = 'Inclui todas as consultas, inclusive falhas e cancelamentos';
+  save.addEventListener('click', () => {
+    const manifest = createDatasusBatchManifest(batch, (item) => ({
+      query: item.request,
+      files: (item.value ?? []).map(({ name, address }) => ({ name, address })),
+    }));
+    downloadBlob(
+      new Blob([serializeDatasusBatchManifest(manifest)], { type: 'application/json;charset=utf-8' }),
+      `${system}-${fileType}-operacao-${manifest.createdAt.slice(0, 10)}.json`,
+    );
+  });
+  panel.append(save);
+  const failed = retryFailedRequests(batch);
+  if (failed.length) {
+    const retry = document.createElement('button');
+    retry.className = 'secondary-button';
+    retry.type = 'button';
+    retry.textContent = `Retentar somente consultas que falharam (${integerFormat.format(failed.length)})`;
+    retry.addEventListener('click', () => void executeCatalogQueries(failed, system, fileType, true));
+    panel.append(retry);
+  }
+  catalogResults.append(panel);
+}
+
+function renderCatalogSearchBatch(
+  result: CatalogSearchBatch,
+  system: string,
+  fileType: string,
+  queries: readonly DatasusSearchQuery[],
+): void {
+  const files = result.files;
+  const auxiliaryQuery = queries[0];
+  if (!auxiliaryQuery) throw new Error('Selecione ao menos um período e uma cobertura para consultar o catálogo.');
+  renderAvailabilityManifest(result.availability, result.batch);
+  renderSourceManifestDownload(result.availability, system, fileType, files, auxiliaryQuery);
+  renderLookupBatchActions(result.batch, system, fileType);
+  if (!files.length) {
+    if (result.batch.cancelled) setCatalogStatus('Consulta cancelada; o manifesto preserva o que já foi verificado.');
+    else if (result.batch.failed) setCatalogStatus('Nenhum arquivo foi resolvido; consulte o manifesto e tente apenas as falhas.', true);
+    else setCatalogStatus('Nenhum arquivo encontrado. Essas combinações não retornaram publicação no catálogo oficial.');
+    return;
+  }
+  setCatalogStatus(`${integerFormat.format(files.length)} arquivo(s) encontrado(s); ${integerFormat.format(result.batch.failed)} consulta(s) falharam sem impedir as seguintes.`);
+  if (files.length > 1) {
+    const openAll = document.createElement('button');
+    openAll.className = 'secondary-button';
+    openAll.type = 'button';
+    openAll.textContent = 'Baixar e combinar todos';
+    openAll.title = 'O primeiro sucesso inicia um conjunto novo; os demais só entram se o esquema for compatível';
+    openAll.addEventListener('click', async () => {
+      openAll.disabled = true;
+      try {
+        await openOfficialFileBatch(files, auxiliaryQuery);
+      } finally {
+        openAll.disabled = false;
+      }
+    });
+    catalogResults.append(openAll);
+  }
+  for (const remote of files) {
+    const item = document.createElement('div');
+    item.className = 'catalog-result';
+    const details = document.createElement('div');
+    const name = document.createElement('b');
+    const meta = document.createElement('small');
+    name.textContent = remote.name;
+    meta.textContent = `${remote.source} · ${remote.modality} · ${remote.resolver === 'microdatasus-compatible' ? 'fallback rastreável' : 'catálogo principal'}`;
+    details.append(name, meta);
+    const button = document.createElement('button');
+    button.className = 'secondary-button';
+    button.type = 'button';
+    button.textContent = 'Baixar e abrir';
+    button.addEventListener('click', () => void openOfficialFile(remote, remote.catalogQuery ?? auxiliaryQuery));
+    item.append(details, button);
+    catalogResults.append(item);
+  }
+}
+
+async function executeCatalogQueries(
+  queries: readonly DatasusSearchQuery[],
+  system: string,
+  fileType: string,
+  retryOnly = false,
+): Promise<void> {
   catalogResults.replaceChildren();
   clearManualAuxiliaryPicker();
-  setCatalogStatus('Consultando o catálogo oficial…');
+  setCatalogStatus(retryOnly ? 'Retentando somente as consultas que falharam…' : 'Consultando o catálogo oficial…');
   const controller = new AbortController();
   activeCatalogController = controller;
   setCatalogBusy(true);
-  let timedOut = false;
-  const timer = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, 60_000);
   try {
-    const queries = expandDatasusSearchSelection(selection);
-    const batch = await searchOfficialCatalogBatch(queries, controller.signal);
-    const files = batch.files;
-    renderAvailabilityManifest(batch.availability);
-    const auxiliaryQuery = queries[0];
-    if (!auxiliaryQuery) throw new Error('Selecione ao menos um período e uma cobertura para consultar o catálogo.');
-    renderSourceManifestDownload(batch.availability, selection.system, selection.fileType, files, auxiliaryQuery);
-    if (!files.length) {
-      setCatalogStatus('Nenhum arquivo encontrado para essa combinação. O período pode ainda não ter sido publicado.');
-      return;
-    }
-    setCatalogStatus(`${integerFormat.format(files.length)} arquivo(s) encontrado(s) em ${integerFormat.format(batch.availability.availableQueries)} de ${integerFormat.format(batch.availability.requestedQueries)} combinação(ões).`);
-    if (files.length > 1) {
-      const openAll = document.createElement('button');
-      openAll.className = 'secondary-button';
-      openAll.type = 'button';
-      openAll.textContent = 'Baixar e combinar todos';
-      openAll.title = 'O primeiro arquivo inicia um conjunto novo; os demais só entram se o esquema for compatível';
-      openAll.addEventListener('click', async () => {
-        openAll.disabled = true;
-        try {
-          await openOfficialFileBatch(files, auxiliaryQuery);
-        } finally {
-          openAll.disabled = false;
-        }
-      });
-      catalogResults.append(openAll);
-    }
-    for (const remote of files) {
-      const item = document.createElement('div');
-      item.className = 'catalog-result';
-      const details = document.createElement('div');
-      const name = document.createElement('b');
-      const meta = document.createElement('small');
-      name.textContent = remote.name;
-      meta.textContent = `${remote.source} · ${remote.modality}`;
-      details.append(name, meta);
-      const button = document.createElement('button');
-      button.className = 'secondary-button';
-      button.type = 'button';
-      button.textContent = 'Baixar e abrir';
-      button.addEventListener('click', () => void openOfficialFile(remote, remote.catalogQuery ?? auxiliaryQuery));
-      item.append(details, button);
-      catalogResults.append(item);
-    }
+    renderCatalogSearchBatch(await searchOfficialCatalogBatch(queries, controller.signal), system, fileType, queries);
   } catch (error) {
     const message = isAbortError(error)
-      ? timedOut ? 'O catálogo DATASUS demorou para responder. Tente novamente.' : 'Consulta cancelada.'
+      ? 'Consulta cancelada.'
       : error instanceof Error ? error.message : String(error);
-    setCatalogStatus(message, !isAbortError(error) || timedOut);
+    setCatalogStatus(message, !isAbortError(error));
   } finally {
-    window.clearTimeout(timer);
     if (activeCatalogController === controller) activeCatalogController = null;
     setCatalogBusy(false);
+  }
+}
+
+async function searchCatalog(): Promise<void> {
+  const type = fileTypesForSystem(catalogSystem.value).find((item) => item.code === catalogFileType.value);
+  if (!type) return;
+  const system = catalogSystem.value;
+  const fileType = catalogFileType.value;
+  try {
+    const queries = expandDatasusSearchSelection({
+      system,
+      fileType,
+      years: selectedCatalogValues(catalogYear),
+      ...(!systemIsAnnual(system)
+        ? { months: selectedCatalogValues(catalogMonth) }
+        : { annual: true }),
+      ...(selectedCatalogValues(catalogUf).length ? { ufs: selectedCatalogValues(catalogUf) } : {}),
+    });
+    await executeCatalogQueries(queries, system, fileType);
+  } catch (error) {
+    setCatalogStatus(error instanceof Error ? error.message : String(error), true);
   }
 }
 
@@ -6620,7 +6883,11 @@ function saveRecipe(): void {
     // would replay `spec` against the untransformed file and rebuild a
     // different table than the one saved - while its own source fingerprints
     // still asserted a match.
-    ...(transformSteps.length ? { transformSteps: transformSteps as unknown as RecipeTransformStep[] } : {}),
+    // Save the pipeline that actually produced the active Worker dataset, not
+    // an unapplied draft the user may still be editing in the list.
+    ...(appliedTransformSteps.length
+      ? { transformSteps: appliedTransformSteps as unknown as RecipeTransformStep[] }
+      : {}),
     ...(tableOperations.length ? { resultOperations: tableOperations } : {}),
     view: {
       chartType: chartType.value as ChartType,
@@ -6652,7 +6919,7 @@ function saveRecipe(): void {
         ? { mapManualBreaks: parsedManualMapBreaks() }
         : {}),
       mapPalette: mapPalette.value as MapPalette,
-      statisticsOperation: statisticsOperation.value as 'descriptive' | 'correlation' | 'regression' | 'histogram',
+      statisticsOperation: statisticsOperation.value as 'descriptive' | 'correlation' | 'regression' | 'histogram' | 'epidemiology',
       ...(currentResult?.columns[Number(statisticsX.value)]?.key
         ? { statisticsXColumnKey: currentResult.columns[Number(statisticsX.value)]!.key }
         : {}),
@@ -6660,6 +6927,17 @@ function saveRecipe(): void {
         ? { statisticsYColumnKey: currentResult.columns[Number(statisticsY.value)]!.key }
         : {}),
       histogramBins: Math.min(50, Math.max(1, Math.round(Number(histogramBins.value) || 8))),
+      histogramGaussian: histogramGaussian.checked,
+      epidemiologyMethod: epiMethod.value as 'direct' | 'indirect',
+      epidemiologyPer: Number(epiPer.value) as 1000 | 10000 | 100000,
+      // Por chave: a ordem das colunas pode mudar entre salvar e reabrir, e um
+      // índice apontaria em silêncio para a série errada.
+      ...(epiStandard.value !== '' && currentResult?.columns[Number(epiStandard.value)]?.key
+        ? { epidemiologyStandardColumnKey: currentResult.columns[Number(epiStandard.value)]!.key }
+        : {}),
+      ...(epiReference.value !== '' && currentResult?.columns[Number(epiReference.value)]?.key
+        ? { epidemiologyReferenceColumnKey: currentResult.columns[Number(epiReference.value)]!.key }
+        : {}),
       tableSortColumnKey: tableSortColumn.value,
       tableSortDirection: tableSortDirection.value as 'original' | 'ascending' | 'descending',
       tableDecimalPlaces: Number(tableDecimals.value),
@@ -6743,6 +7021,7 @@ async function openPortableTable(file: File): Promise<void> {
   lastInvestigateResult = null;
   dismissedInvestigateSignalIds.clear();
   transformSteps = [];
+  appliedTransformSteps = [];
   transformRecodeRows = [{ from: '', to: '' }];
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -6824,7 +7103,8 @@ async function openRecipe(file: File): Promise<void> {
     recipe.spec.rows.field,
     recipe.spec.columns?.field,
     recipe.spec.measure.field,
-    ...(recipe.spec.measures ?? []).map((measure) => measure.field),
+    recipe.spec.measure.weightField,
+    ...(recipe.spec.measures ?? []).flatMap((measure) => [measure.field, measure.weightField]),
     ...recipe.spec.filters.map((filter) => filter.field),
     ...(recipe.spec.crossFieldRules ?? []).flatMap((rule) => rule.conditions.map((condition) => condition.field)),
   ].filter((field): field is string => Boolean(field));
@@ -6834,15 +7114,19 @@ async function openRecipe(file: File): Promise<void> {
   // required to exist. A step that no longer fits the current file is exactly
   // the schema drift this replay has to surface, and applyTransformPipeline
   // names the offending step.
-  transformSteps = (recipe.transformSteps ?? []) as unknown as TransformStep[];
+  transformSteps = structuredClone((recipe.transformSteps ?? []) as unknown as TransformStep[]);
   renderTransformSteps();
   if (transformSteps.length) {
     try {
-      await runTransformPipeline();
+      await runTransformPipeline({ rethrow: true, rerunAnalysis: false });
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(`A receita traz ${transformSteps.length} etapa(s) de transformação que não puderam ser aplicadas a este arquivo: ${detail}`);
     }
+  } else if (appliedTransformSteps.length) {
+    // A recipe without a pipeline means the original source. Do not replay it
+    // over a transformed dataset left active by the previous analysis.
+    await restoreOriginalDatasetForPipeline('Restauração da fonte para a receita');
   }
 
   const currentFields = new Set((dbfHeader?.fields ?? []).map((field) => field.name));
@@ -6887,6 +7171,9 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
   if (recipe.view?.statisticsOperation) statisticsOperation.value = recipe.view.statisticsOperation;
   if (recipe.view?.histogramBins) histogramBins.value = String(recipe.view.histogramBins);
+  if (recipe.view?.histogramGaussian !== undefined) histogramGaussian.checked = recipe.view.histogramGaussian;
+  if (recipe.view?.epidemiologyMethod) epiMethod.value = recipe.view.epidemiologyMethod;
+  if (recipe.view?.epidemiologyPer !== undefined) epiPer.value = String(recipe.view.epidemiologyPer);
   if (recipe.view?.tableSortDirection) tableSortDirection.value = recipe.view.tableSortDirection;
   if (recipe.view?.tableDecimalPlaces !== undefined) tableDecimals.value = String(recipe.view.tableDecimalPlaces);
   if (recipe.view?.tableKeyVisible !== undefined) tableKeyVisible.checked = recipe.view.tableKeyVisible;
@@ -6925,7 +7212,9 @@ async function openRecipe(file: File): Promise<void> {
   renderCrossFieldRules();
   updateMeasureControls();
   updateColumnControls();
-  await runAnalysis();
+  if (!await runAnalysis(recipe.spec.measure)) {
+    throw new Error('A receita não conseguiu produzir uma tabela com o conjunto atual');
+  }
   if (recipe.view?.tableTitle !== undefined) {
     tableTitle.value = recipe.view.tableTitle;
     resultTitle.textContent = recipe.view.tableTitle || activeRowLabel();
@@ -6948,6 +7237,14 @@ async function openRecipe(file: File): Promise<void> {
     const yIndex = currentResult.columns.findIndex((column) => column.key === recipe.view?.statisticsYColumnKey);
     if (xIndex >= 0) statisticsX.value = String(xIndex);
     if (yIndex >= 0) statisticsY.value = String(yIndex);
+    const standardIndex = currentResult.columns.findIndex(
+      (column) => column.key === recipe.view?.epidemiologyStandardColumnKey,
+    );
+    const referenceIndex = currentResult.columns.findIndex(
+      (column) => column.key === recipe.view?.epidemiologyReferenceColumnKey,
+    );
+    if (standardIndex >= 0) epiStandard.value = String(standardIndex);
+    if (referenceIndex >= 0) epiReference.value = String(referenceIndex);
     if (recipe.view?.chartXColumnKey
       && [...chartXBinding.options].some((option) => option.value === recipe.view?.chartXColumnKey)) {
       chartXBinding.value = recipe.view.chartXColumnKey;

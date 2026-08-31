@@ -124,7 +124,12 @@ export function directlyStandardizedRate(
 
   for (const stratum of strata) {
     const { events, population, standardWeight } = stratum;
-    if (!Number.isFinite(events) || events < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid events`);
+    if (!Number.isFinite(events) || events < 0 || !Number.isInteger(events)) {
+      throw new Error(
+        `stratum ${stratum.label ?? ''} has invalid events: o intervalo de Poisson exige contagem inteira. `
+        + 'Arredondar aqui inventaria uma observação que não foi feita.',
+      );
+    }
     if (!Number.isFinite(population) || population < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid population`);
     if (!Number.isFinite(standardWeight) || standardWeight < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid standard weight`);
 
@@ -209,7 +214,12 @@ export function indirectlyStandardizedRatio(
 
   for (const stratum of strata) {
     const { events, population, referenceRate } = stratum;
-    if (!Number.isFinite(events) || events < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid events`);
+    if (!Number.isFinite(events) || events < 0 || !Number.isInteger(events)) {
+      throw new Error(
+        `stratum ${stratum.label ?? ''} has invalid events: o intervalo de Poisson exige contagem inteira. `
+        + 'Arredondar aqui inventaria uma observação que não foi feita.',
+      );
+    }
     if (!Number.isFinite(population) || population < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid population`);
     if (!Number.isFinite(referenceRate) || referenceRate < 0) throw new Error(`stratum ${stratum.label ?? ''} has invalid reference rate`);
 
@@ -223,7 +233,12 @@ export function indirectlyStandardizedRatio(
     return { smr: null, lower: null, upper: null, observed, expected, strataUsed: used, strataSkipped: skipped };
   }
   // Byar's interval on the observed count, scaled by the expected count.
-  const countInterval = crudeRateInterval(Math.round(observed), 1, 1);
+  // `observed` é soma de contagens inteiras, então é inteiro por construção -
+  // o guard acima garante isso. Antes havia um Math.round aqui, e o efeito não
+  // era só "arredondar": o SMR usava `observed` cru enquanto o intervalo usava
+  // o valor arredondado, de modo que estimativa pontual e IC saíam de números
+  // diferentes.
+  const countInterval = crudeRateInterval(observed, 1, 1);
   return {
     smr: observed / expected,
     lower: (countInterval.lower ?? 0) / expected,

@@ -111,6 +111,7 @@ test('no usable stratum yields a null standardized rate, and the crude rate stil
 
 test('standardization rejects invalid strata', () => {
   assert.throws(() => directlyStandardizedRate([{ events: -1, population: 100, standardWeight: 1 }]), /invalid events/);
+  assert.throws(() => directlyStandardizedRate([{ events: 1.5, population: 100, standardWeight: 1 }]), /contagem inteira/);
   assert.throws(() => directlyStandardizedRate([{ events: 1, population: -1, standardWeight: 1 }]), /invalid population/);
   assert.throws(() => directlyStandardizedRate([{ events: 1, population: 1, standardWeight: -1 }]), /invalid standard weight/);
 });
@@ -171,6 +172,7 @@ test('nothing expected means no SMR at all - null, never a division by zero', ()
 
 test('indirect standardization rejects invalid strata', () => {
   assert.throws(() => indirectlyStandardizedRatio([{ events: -1, population: 1, referenceRate: 0.1 }]), /invalid events/);
+  assert.throws(() => indirectlyStandardizedRatio([{ events: 1.5, population: 1, referenceRate: 0.1 }]), /contagem inteira/);
   assert.throws(() => indirectlyStandardizedRatio([{ events: 1, population: -1, referenceRate: 0.1 }]), /invalid population/);
   assert.throws(() => indirectlyStandardizedRatio([{ events: 1, population: 1, referenceRate: -0.1 }]), /invalid reference rate/);
 });

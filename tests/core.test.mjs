@@ -144,6 +144,38 @@ test('analysis recipe serialization is deterministic and round-trippable', () =>
   assert.equal(parseRecipe(a).sourceHints[0].modality, 'Dados - Preliminares');
 });
 
+test('analysis recipe preserves epidemiology and histogram view state by column key', () => {
+  const recipe = {
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'FAIXA' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [],
+    view: {
+      statisticsOperation: 'epidemiology',
+      statisticsXColumnKey: 'events',
+      statisticsYColumnKey: 'population',
+      histogramGaussian: true,
+      epidemiologyMethod: 'indirect',
+      epidemiologyPer: 100000,
+      epidemiologyStandardColumnKey: 'standard',
+      epidemiologyReferenceColumnKey: 'reference',
+    },
+  };
+  assert.deepEqual(parseRecipe(serializeRecipe(recipe)).view, recipe.view);
+});
+
+test('analysis recipe rejects epidemiology state that the UI cannot reproduce', () => {
+  const base = {
+    schema: 'tabwin-web.recipe', version: 1,
+    spec: { compatibilityProfile: 'tabwin-4.15', rows: { field: 'UF' }, measure: { kind: 'count' }, filters: [] },
+    conversions: [], sourceHints: [],
+  };
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { epidemiologyMethod: 'magic' } })), /invalid epidemiology method/);
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { epidemiologyPer: 12345 } })), /invalid epidemiology rate scale/);
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { histogramGaussian: 'yes' } })), /invalid histogram gaussian/);
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { epidemiologyStandardColumnKey: '' } })), /invalid epidemiologyStandardColumnKey/);
+  assert.throws(() => parseRecipe(JSON.stringify({ ...base, view: { epidemiologyReferenceColumnKey: '   ' } })), /invalid epidemiologyReferenceColumnKey/);
+});
+
 test('manual map recipe requires finite strictly increasing breaks', () => {
   const base = {
     schema: 'tabwin-web.recipe', version: 1,
