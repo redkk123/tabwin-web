@@ -71,7 +71,12 @@ import { tabulationToCsv, tabulationToJson, tabulationToXml } from '../../../pac
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import {
+  describeSkippedEntries,
+  type SkippedArchiveEntry,
+} from '../../../packages/acquisition/src/archive-limits.ts';
+import {
   chooseVerifiedAuxiliaryBundle,
+  extractSupportedArchive,
   extractSupportedArchiveFiles,
   fetchOfficialArchive,
   prepareOfficialDownload,
@@ -196,6 +201,8 @@ interface OfficialArchiveProvenance {
 
 interface DownloadedArchive {
   files: ExtractedArchiveFile[];
+  /** Entries the size guard left out. Reported, never hidden. */
+  skipped: SkippedArchiveEntry[];
   provenance: OfficialArchiveProvenance;
 }
 
@@ -5765,6 +5772,18 @@ function setCatalogStatus(message: string, isError = false): void {
   catalogStatus.classList.toggle('error', isError);
 }
 
+/**
+ * A standing notice above the auxiliary list - for facts the user needs to
+ * keep seeing while they work through the results, unlike the status line,
+ * which the next step overwrites.
+ */
+function renderCatalogNotice(message: string): void {
+  const notice = document.createElement('p');
+  notice.className = 'catalog-notice';
+  notice.textContent = message;
+  catalogAuxiliaryResults.prepend(notice);
+}
+
 function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
@@ -6009,8 +6028,10 @@ async function downloadCatalogEntries(
     };
   }
   const archiveSha256 = summary?.sha256 || await sha256(archive);
+  const extracted = extractSupportedArchive(archive);
   return {
-    files: extractSupportedArchiveFiles(archive),
+    files: extracted.files,
+    skipped: extracted.skipped,
     provenance: {
       cacheKey,
       cacheHit,
@@ -6087,10 +6108,16 @@ async function inspectManualAuxiliaryBundle(bundle: DatasusRemoteFile, catalogQu
     const downloaded = await downloadCatalogEntries([bundle], controller.signal, 7 * 24 * 60 * 60 * 1000, 'auxiliary');
     const candidates = downloaded.files.filter((entry) => ['DEF', 'CNV'].includes(extensionOf(entry.name)));
     catalogAuxiliaryResults.replaceChildren();
+    // An oversized member no longer costs the whole bundle, but the user still
+    // has to be told which file was left out - otherwise a label that silently
+    // falls back to a code looks like a defect rather than a stated limit.
+    const skippedNotice = describeSkippedEntries(downloaded.skipped);
     if (!candidates.length) {
-      setCatalogStatus(`${bundle.name} não contém arquivos DEF ou CNV reconhecidos.`, true);
+      const detail = skippedNotice ? ` ${skippedNotice}` : '';
+      setCatalogStatus(`${bundle.name} não contém arquivos DEF ou CNV reconhecidos.${detail}`, true);
       return;
     }
+    if (skippedNotice) renderCatalogNotice(skippedNotice);
     for (const entry of candidates) {
       const item = document.createElement('div');
       item.className = 'catalog-result';

@@ -15,17 +15,26 @@ import {
   type DatasusCatalogQueryResult,
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
+import {
+  ARCHIVE_LIMITS,
+  classifyArchiveEntry,
+  createArchiveBudget,
+  type SkippedArchiveEntry,
+} from '../../../packages/acquisition/src/archive-limits.ts';
 
 export interface ExtractedArchiveFile {
   name: string;
   bytes: Uint8Array;
 }
 
+export interface ExtractedArchive {
+  files: ExtractedArchiveFile[];
+  /** Entries left out, so the interface can name them instead of hiding them. */
+  skipped: SkippedArchiveEntry[];
+}
+
 const SUPPORTED_EXTENSIONS = new Set(['DBC', 'DBF', 'DEF', 'CNV', 'MAP']);
-const MAX_ARCHIVE_ENTRIES = 5_000;
-const MAX_ARCHIVE_BYTES = 512 * 1024 * 1024;
-const MAX_EXPANDED_BYTES = 512 * 1024 * 1024;
-const MAX_FILE_BYTES = 256 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = ARCHIVE_LIMITS.maxArchiveBytes;
 const DATASUS_PROXY_BASE = (import.meta.env.VITE_DATASUS_PROXY_BASE as string | undefined)?.replace(/\/$/, '') ?? '';
 
 function endpointFor(endpoint: string): string {
@@ -159,25 +168,27 @@ export async function fetchOfficialArchive(
   return archive;
 }
 
-export function extractSupportedArchiveFiles(archive: Uint8Array): ExtractedArchiveFile[] {
+/**
+ * Expands an official archive, keeping every supported file it can.
+ *
+ * A single entry past the per-file limit is skipped and reported rather than
+ * aborting the whole archive: an auxiliary bundle's DEF and CNV files are
+ * small and are the reason to open it, and losing them because one lookup
+ * table is oversized helps nobody. Aggregate breaches remain fatal - see
+ * `packages/acquisition/src/archive-limits.ts`.
+ */
+export function extractSupportedArchive(archive: Uint8Array): ExtractedArchive {
   const output: ExtractedArchiveFile[] = [];
-  let entryCount = 0;
-  let expandedBytes = 0;
+  const budget = createArchiveBudget();
+  const isWanted = (name: string): boolean => {
+    const extension = extensionOf(name);
+    return extension === 'ZIP' || SUPPORTED_EXTENSIONS.has(extension);
+  };
 
   const visit = (bytes: Uint8Array, depth: number): void => {
-    if (depth > 2) throw new Error('ZIP aninhado além do limite suportado');
+    if (depth > ARCHIVE_LIMITS.maxDepth) throw new Error('ZIP aninhado além do limite suportado');
     const entries = unzipSync(bytes, {
-      filter: (entry) => {
-        entryCount++;
-        if (entryCount > MAX_ARCHIVE_ENTRIES) throw new Error('ZIP contém arquivos demais');
-        const extension = extensionOf(entry.name);
-        const wanted = extension === 'ZIP' || SUPPORTED_EXTENSIONS.has(extension);
-        if (!wanted) return false;
-        if (entry.originalSize > MAX_FILE_BYTES) throw new Error(`${entry.name}: arquivo expandido grande demais`);
-        expandedBytes += entry.originalSize;
-        if (expandedBytes > MAX_EXPANDED_BYTES) throw new Error('ZIP excede o limite total expandido');
-        return true;
-      },
+      filter: (entry) => classifyArchiveEntry(entry, budget, isWanted).action === 'take',
     });
     for (const [name, content] of Object.entries(entries)) {
       if (extensionOf(name) === 'ZIP') visit(content, depth + 1);
@@ -186,7 +197,12 @@ export function extractSupportedArchiveFiles(archive: Uint8Array): ExtractedArch
   };
 
   visit(archive, 0);
-  return output;
+  return { files: output, skipped: budget.skipped };
+}
+
+/** Files only, for callers with nothing to report. */
+export function extractSupportedArchiveFiles(archive: Uint8Array): ExtractedArchiveFile[] {
+  return extractSupportedArchive(archive).files;
 }
 
 export function chooseVerifiedAuxiliaryBundle(
