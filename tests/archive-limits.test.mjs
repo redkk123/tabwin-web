@@ -17,6 +17,16 @@ test('an ordinary entry is taken and counted against the total', () => {
   assert.equal(budget.skipped.length, 0);
 });
 
+test('the real UNIDTOTAL.DBF now fits - it was refused by three megabytes', () => {
+  // Measured from a real run against the official TAB_SINANNET package: 259 MB,
+  // rejected by a 256 MB per-file cap. The cap now sits at the overall budget,
+  // so a file that fits in the tab is admissible.
+  const budget = createArchiveBudget();
+  const measured = 259 * 1024 * 1024;
+  assert.equal(classifyArchiveEntry({ name: 'TAB_SINANNET/UNIDTOTAL.DBF', originalSize: measured }, budget, wantEverything).action, 'take');
+  assert.equal(budget.skipped.length, 0);
+});
+
 test('one oversized member is skipped, and the rest of the bundle still comes through', () => {
   // The case that exposed this: TAB_SINANNET carries the DEF and CNV files
   // that make a SINAN tabulation legible plus UNIDTOTAL.DBF, a very large
@@ -85,11 +95,14 @@ test('a zip bomb of oversized members is still refused, by the total it never ge
 
 test('the notice names the file and its size, so the omission is legible', () => {
   const message = describeSkippedEntries([
-    { name: 'TAB_SINANNET/UNIDTOTAL.DBF', bytes: 300 * MB, reason: 'too-large' },
+    { name: 'TAB_SINANNET/UNIDTOTAL.DBF', bytes: 600 * MB, reason: 'too-large' },
   ]);
   assert.match(message, /UNIDTOTAL\.DBF/);
-  assert.match(message, /300 MB/);
-  assert.match(message, /256 MB/, 'the limit itself must be stated, not just the breach');
+  assert.match(message, /600 MB/);
+  // Derived from the limit itself: a hardcoded number here silently went stale
+  // the moment the cap moved, which is how this assertion first broke.
+  const statedLimit = `${Math.round(ARCHIVE_LIMITS.maxFileBytes / MB)} MB`;
+  assert.ok(message.includes(statedLimit), `the limit itself must be stated, not just the breach: ${statedLimit}`);
   assert.match(message, /restante do pacote foi aberto/);
   assert.match(message, /pelo código em vez do nome/, 'the user should know what the consequence looks like');
 });
@@ -100,7 +113,7 @@ test('nothing skipped means nothing to report, not an empty notice', () => {
 
 test('several skipped files are counted and all named', () => {
   const message = describeSkippedEntries([
-    { name: 'A.DBF', bytes: 300 * MB, reason: 'too-large' },
+    { name: 'A.DBF', bytes: 600 * MB, reason: 'too-large' },
     { name: 'B.DBF', bytes: 2 * 1024 * MB, reason: 'too-large' },
   ]);
   assert.match(message, /2 arquivos/);

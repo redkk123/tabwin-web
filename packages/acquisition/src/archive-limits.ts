@@ -28,10 +28,25 @@
 export const ARCHIVE_LIMITS = {
   /** Bytes accepted from the network for one archive. */
   maxArchiveBytes: 512 * 1024 * 1024,
-  /** Total expanded bytes across every kept entry. */
-  maxExpandedBytes: 512 * 1024 * 1024,
-  /** Expanded bytes accepted for any single entry. */
-  maxFileBytes: 256 * 1024 * 1024,
+  /**
+   * Total expanded bytes across every kept entry - the real constraint, since
+   * this all has to fit in a browser tab alongside the data being tabulated.
+   */
+  maxExpandedBytes: 768 * 1024 * 1024,
+  /**
+   * Expanded bytes accepted for any single entry.
+   *
+   * This was 256 MB and rejected `TAB_SINANNET/UNIDTOTAL.DBF`, an official
+   * SINAN lookup table measured at **259 MB** - refused by three megabytes.
+   * A per-file cap below the overall budget was only ever a heuristic, and it
+   * turned out to be one that excluded real public data, so it now sits at the
+   * budget itself: any single file that fits in the tab is admissible.
+   *
+   * A file larger than the whole budget still cannot be expanded here - the
+   * browser has nowhere to put it - which is what the download escape hatch in
+   * the interface is for.
+   */
+  maxFileBytes: 512 * 1024 * 1024,
   /** Entries examined before the archive is judged unusable. */
   maxEntries: 5_000,
   /** Nested ZIP depth. */
@@ -115,6 +130,8 @@ export function describeSkippedEntries(skipped: readonly SkippedArchiveEntry[]):
     .join(', ');
   const subject = skipped.length === 1 ? 'Um arquivo do pacote foi' : `${skipped.length} arquivos do pacote foram`;
   return `${subject} deixado(s) de fora por passar do limite de ${limit} por arquivo: ${named}. `
-    + 'O restante do pacote foi aberto normalmente. Se algum rótulo depender '
-    + 'justamente dessa tabela, ele aparecerá pelo código em vez do nome.';
+    + 'O restante do pacote foi aberto normalmente. Um arquivo desse tamanho '
+    + 'não cabe na memória da aba junto com os dados, mas você pode baixá-lo '
+    + 'para usar fora do navegador. Se algum rótulo depender justamente dessa '
+    + 'tabela, ele aparecerá pelo código em vez do nome.';
 }

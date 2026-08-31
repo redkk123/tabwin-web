@@ -205,6 +205,36 @@ export function extractSupportedArchiveFiles(archive: Uint8Array): ExtractedArch
   return extractSupportedArchive(archive).files;
 }
 
+/**
+ * Expands exactly one named entry, ignoring the per-file eager limit.
+ *
+ * The limit exists so a huge member is not expanded *automatically* into a tab
+ * that also has to hold the data being tabulated. It is not a claim that the
+ * file must never be read. When the user asks for that specific file by name -
+ * to save it and use it outside the browser - the cost is theirs to accept and
+ * the guard has already done its job.
+ *
+ * Everything else still holds: only this entry is expanded, and the archive it
+ * comes from was already bounded on download.
+ */
+export function extractOneArchiveEntry(archive: Uint8Array, wantedName: string): Uint8Array {
+  let found: Uint8Array | null = null;
+  const visit = (bytes: Uint8Array, depth: number): void => {
+    if (found || depth > ARCHIVE_LIMITS.maxDepth) return;
+    const entries = unzipSync(bytes, {
+      filter: (entry) => entry.name === wantedName
+        || (extensionOf(entry.name) === 'ZIP' && !found),
+    });
+    for (const [name, content] of Object.entries(entries)) {
+      if (name === wantedName) { found = content; return; }
+      if (extensionOf(name) === 'ZIP') visit(content, depth + 1);
+    }
+  };
+  visit(archive, 0);
+  if (!found) throw new Error(`${wantedName} não foi encontrado no pacote`);
+  return found;
+}
+
 export function chooseVerifiedAuxiliaryBundle(
   files: readonly DatasusRemoteFile[],
   system: string,

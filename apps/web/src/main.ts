@@ -76,6 +76,7 @@ import {
 } from '../../../packages/acquisition/src/archive-limits.ts';
 import {
   chooseVerifiedAuxiliaryBundle,
+  extractOneArchiveEntry,
   extractSupportedArchive,
   extractSupportedArchiveFiles,
   fetchOfficialArchive,
@@ -6099,6 +6100,108 @@ function markAuxiliarySource(
   source.catalogQuery = catalogQuery;
 }
 
+/**
+ * A row for an entry the size guard left out, offering the one thing still
+ * possible with it: saving it to disk. Expanding it happens only on this
+ * click, for this file, never as part of opening the package.
+ */
+function skippedEntryRow(
+  skipped: SkippedArchiveEntry,
+  downloaded: DownloadedArchive,
+): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'catalog-result catalog-result-skipped';
+  const details = document.createElement('div');
+  const name = document.createElement('b');
+  const meta = document.createElement('small');
+  name.textContent = displayBaseName(skipped.name);
+  meta.textContent = `${formatBytes(skipped.bytes)} · grande demais para abrir na aba`;
+  details.append(name, meta);
+
+  const save = document.createElement('button');
+  save.className = 'secondary-button';
+  save.type = 'button';
+  save.textContent = 'Baixar arquivo';
+  save.addEventListener('click', () => {
+    save.disabled = true;
+    save.textContent = 'Extraindo…';
+    // Deferred to a task so the button repaints before the extraction blocks
+    // the thread; a file this size takes visible time.
+    setTimeout(() => {
+      void (async () => {
+        try {
+          const cached = await readCachedArchive(downloaded.provenance.cacheKey, Number.POSITIVE_INFINITY);
+          if (!cached) throw new Error('O pacote não está mais no cache deste aparelho; procure novamente.');
+          const bytes = extractOneArchiveEntry(cached.bytes, skipped.name);
+          downloadBlob(new Blob([bytes as BlobPart], { type: 'application/octet-stream' }), displayBaseName(skipped.name));
+          setCatalogStatus(`${displayBaseName(skipped.name)} salvo neste aparelho.`);
+        } catch (error) {
+          setCatalogStatus(error instanceof Error ? error.message : String(error), true);
+        } finally {
+          save.disabled = false;
+          save.textContent = 'Baixar arquivo';
+        }
+      })();
+    }, 0);
+  });
+  item.append(details, save);
+  return item;
+}
+
+/**
+ * Opens every DEF and CNV in the package in one go.
+ *
+ * Each file is still loaded through the same path a single click uses, and a
+ * failure on one does not stop the others - the count at the end says exactly
+ * how many went in and how many did not, rather than implying success.
+ */
+function openAllAuxiliariesRow(
+  candidates: readonly ExtractedArchiveFile[],
+  bundle: DatasusRemoteFile,
+  downloaded: DownloadedArchive,
+  catalogQuery?: DatasusSearchQuery,
+): HTMLElement {
+  const item = document.createElement('div');
+  item.className = 'catalog-result catalog-result-bulk';
+  const details = document.createElement('div');
+  const name = document.createElement('b');
+  const meta = document.createElement('small');
+  name.textContent = `Abrir todos os ${integerFormat.format(candidates.length)} auxiliares`;
+  meta.textContent = `DEF e CNV de ${bundle.name}`;
+  details.append(name, meta);
+
+  const open = document.createElement('button');
+  open.className = 'primary-button';
+  open.type = 'button';
+  open.textContent = 'Abrir todos';
+  open.addEventListener('click', () => {
+    open.disabled = true;
+    void (async () => {
+      let opened = 0;
+      const failed: string[] = [];
+      for (const [index, entry] of candidates.entries()) {
+        setCatalogStatus(`Abrindo auxiliares… ${index + 1} de ${candidates.length}`);
+        try {
+          await loadFile(archiveFile(entry));
+          markAuxiliarySource(entry, bundle, downloaded, catalogQuery);
+          opened++;
+        } catch {
+          // One unreadable auxiliary must not cost the other 199.
+          failed.push(displayBaseName(entry.name));
+        }
+      }
+      renderAudit();
+      open.disabled = false;
+      const problem = failed.length
+        ? ` ${failed.length} não abriu(ram): ${failed.slice(0, 5).join(', ')}${failed.length > 5 ? '…' : ''}.`
+        : '';
+      setCatalogStatus(`${integerFormat.format(opened)} de ${candidates.length} auxiliar(es) aberto(s).${problem}`, failed.length > 0);
+    })();
+  });
+  item.append(details, open);
+  return item;
+}
+
 async function inspectManualAuxiliaryBundle(bundle: DatasusRemoteFile, catalogQuery?: DatasusSearchQuery): Promise<void> {
   const controller = new AbortController();
   activeCatalogController = controller;
@@ -6118,6 +6221,14 @@ async function inspectManualAuxiliaryBundle(bundle: DatasusRemoteFile, catalogQu
       return;
     }
     if (skippedNotice) renderCatalogNotice(skippedNotice);
+    // A file too big to hold in the tab is not a file the user has to give up
+    // on: it is expanded on demand, one entry only, and handed over to disk.
+    for (const skipped of downloaded.skipped) {
+      catalogAuxiliaryResults.append(skippedEntryRow(skipped, downloaded));
+    }
+    // Opening 200 CNVs one click at a time is not a workflow. The list stays,
+    // because sometimes only one file is wanted.
+    catalogAuxiliaryResults.append(openAllAuxiliariesRow(candidates, bundle, downloaded, catalogQuery));
     for (const entry of candidates) {
       const item = document.createElement('div');
       item.className = 'catalog-result';

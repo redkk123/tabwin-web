@@ -188,6 +188,12 @@ select:disabled, input:disabled { color: #898d92; background: #f5f5f6; }
 .transform-history-detail { margin-top: 4px; color: #595f66; font-size: 12px; line-height: 1.5; }
 .catalog-capabilities { padding: 9px 11px; border-radius: 6px; color: #525962; background: #f0f2f5; font-size: 12px; line-height: 1.5; }
 /* A stated limit, not an error: the bundle opened, one member did not. */
+/* The bulk action leads the list; the deferred file sits apart from the
+   things that opened normally, so neither is mistaken for the other. */
+.catalog-result-bulk { border: 1px solid var(--brand-line); background: var(--brand-soft); }
+.catalog-result-bulk .primary-button { min-height: 38px; margin: 0; }
+.catalog-result-skipped { border: 1px solid #d9c9a8; background: #fbf6ec; }
+.catalog-result-skipped small { color: var(--warn); }
 .catalog-notice { margin: 0 0 9px; padding: 9px 11px; border: 1px solid #d9c9a8; border-radius: 6px; color: var(--warn); background: #fbf6ec; font-size: 12px; line-height: 1.5; }
 .catalog-availability { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid #dbdee2; border-radius: 6px; color: #47505a; background: #f8f9fa; }
 .catalog-availability small { color: #7a7f85; line-height: 1.45; }
