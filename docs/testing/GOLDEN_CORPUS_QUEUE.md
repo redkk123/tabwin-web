@@ -79,7 +79,7 @@ captura em detalhe prematuro.
 | G020 | Tipos diferentes de total (soma/produto/média/inicial/final/mín/máx/pré-calculado) | §4.6.2; já implementado no motor moderno, falta golden contra TabWin 4.15 | N/A — é operação pós-tabela, não do TabWin legado; goldens aqui provam o que o TabWin fazia, não a operação moderna |
 | G021 | Múltiplos arquivos/meses combinados | §8.2 | Precisa de um segundo DBC real (mesmo esquema) |
 | G022 | Encoding/acentuação | §4.4.5; §8.2 | `RDAC2401.dbc` já tem texto acentuado — verificar se algum campo exercita isso |
-| G023 | `.TAB` salvar/reabrir | §4.15; §8.2 | Precisa de artefato `.TAB` real |
+| G023 | `.TAB` salvar/reabrir | §4.15; §8.2 | ✅ **capturado 2026-08-31** — `g002.tab`. Achado: é **texto Windows-1252**, não container binário. Leitura provada contra o G002, capturado por outro caminho de exportação. Escrita segue fora de escopo. |
 
 G020 está marcado à parte de propósito: não é comportamento do TabWin 4.15
 legado, é a suíte de operações pós-tabela que **já existe e já tem testes

@@ -1,0 +1,114 @@
+{
+ "schema": "tabwin-web.golden-table",
+ "version": 1,
+ "id": "G023",
+ "source": {
+  "referenceEngine": "TabWin 4.15",
+  "notes": "Parsed from the plain-text .TAB saved in the same run as G002. Cross-checked against G002, captured through the independent BIFF export path. TabWin’s own Total row/column are recorded as evidence, not compared."
+ },
+ "format": {
+  "encoding": "windows-1252",
+  "lineEndings": "crlf",
+  "byteOrderMark": false,
+  "openingMarker": "NEW",
+  "sections": [
+   "Opções",
+   "Arquivos"
+  ],
+  "optionKeys": [
+   "DEF",
+   "PATH",
+   "Linha",
+   "Coluna",
+   "Incremento",
+   "Suprime_Linhas_Zeradas",
+   "Suprime_Colunas_Zeradas",
+   "Não_Classificados"
+  ]
+ },
+ "rows": [
+  {
+   "label": "Atenção Básica"
+  },
+  {
+   "label": "Média complexidade"
+  },
+  {
+   "label": "Alta complexidade"
+  },
+  {
+   "label": "Não se aplica"
+  }
+ ],
+ "columns": [
+  {
+   "label": "Eletivo"
+  },
+  {
+   "label": "Urgência"
+  },
+  {
+   "label": "Acid local trab"
+  },
+  {
+   "label": "Acid trajeto"
+  },
+  {
+   "label": "Outros ac trab"
+  },
+  {
+   "label": "Outras caus ext"
+  }
+ ],
+ "cells": [
+  [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   1968,
+   2185,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   124,
+   38,
+   0,
+   0,
+   0,
+   0
+  ],
+  [
+   0,
+   0,
+   0,
+   0,
+   0,
+   0
+  ]
+ ],
+ "tabwinTotals": {
+  "columns": [
+   2092,
+   2223,
+   0,
+   0,
+   0,
+   0
+  ],
+  "rows": [
+   0,
+   4153,
+   162,
+   0
+  ],
+  "grand": 4315
+ }
+}

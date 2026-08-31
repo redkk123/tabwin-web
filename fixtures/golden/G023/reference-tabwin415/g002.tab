@@ -1,0 +1,21 @@
+NEW
+Titulo2=Freqüência por Caráter atendimento segundo Complexidade do Procedimento
+[Opções]
+DEF=C:\projetos\tabwin-private\oracle\tabwin415\app\G001\RD2008.DEF
+PATH=C:\projetos\tabwin-private\oracle\tabwin415\app\G001\RD*.DBC
+Linha=Complexidade do Procedimento
+Coluna=Caráter atendimento
+Incremento=Freqüência
+Suprime_Linhas_Zeradas=false
+Suprime_Colunas_Zeradas=false
+Não_Classificados=0
+[Arquivos]
+RDAC2401.dbc
+Registros_Processados= 4315
+Tempo_Decorrido= 0:00
+"Complexidade do Procedimento";"Eletivo";"Urgência";"Acid local trab";"Acid trajeto";"Outros ac trab";"Outras caus ext";"Total"
+"Atenção Básica";0;0;0;0;0;0;0
+"Média complexidade";1968;2185;0;0;0;0;4153
+"Alta complexidade";124;38;0;0;0;0;162
+"Não se aplica";0;0;0;0;0;0;0
+"Total";2092;2223;0;0;0;0;4315

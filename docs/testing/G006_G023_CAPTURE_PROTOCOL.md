@@ -35,9 +35,12 @@ de arquivo real — não por falta de esforço.
 | **G020** | tipos de total | 🚫 **fora de escopo por decisão** — ver §5 |
 | G021 | múltiplos meses combinados | **CAPTURAR** — destravado por `RDAC2402.dbc` |
 | **G022** | encoding / acentuação | ✅ **já provado, não capturar** — ver §2 |
-| G023 | `.TAB` salvar/reabrir | **CAPTURAR** — um clique a mais, ver §6 |
+| G023 | `.TAB` salvar/reabrir | ✅ **capturado 2026-08-31** — texto puro, não binário; leitura provada contra G002 |
 
-**10 para capturar.** Não precisa ser tudo de uma vez — cada um é
+**A bateria fechou.** Todos os 10 que estavam para capturar foram capturados;
+o último, G023, chegou em 2026-08-31 e está registrado em §6.
+
+~~10 para capturar.~~ Não precisa ser tudo de uma vez — cada um é
 independente. Se puder fazer só alguns, siga a ordem da §7.
 
 ---
@@ -100,6 +103,16 @@ fila se aparecer evidência de que o 4.15 tinha essas mesmas políticas.
 ---
 
 ## 6. G023 — um clique a mais em qualquer caso
+
+> **✅ Fechado em 2026-08-31.** Você salvou `g002.tab` e ele está em
+> `fixtures/golden/G023/`. O achado: **o `.TAB` é texto puro
+> Windows-1252**, não container binário — o que corrige a hipótese sob a qual
+> `legacy-tab.ts` foi escrito. Como o arquivo veio da mesma execução do
+> G002, a leitura pôde ser provada contra um golden capturado por outro
+> caminho de exportação, e bate célula por célula. Leitor em
+> `packages/formats/src/tab-file.ts`; escrita segue fora de escopo até
+> haver vários artefatos, não um.
+
 
 **Correção:** eu tinha deduzido que você já tinha `.TAB` salvos, porque o
 cabeçalho dos exports da primeira bateria mostra

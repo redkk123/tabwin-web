@@ -1,0 +1,52 @@
+{
+ "schema": "tabwin-web.golden-manifest",
+ "version": 1,
+ "id": "G023",
+ "capturedAt": "2026-08-31",
+ "semantic": ".TAB saved-table format (read-only)",
+ "referenceEngine": {
+  "name": "TabWin 4.15",
+  "executable": "TabWin415.exe"
+ },
+ "externalInputs": [
+  {
+   "name": "RDAC2401.dbc",
+   "note": "the analysis behind the saved table; already fingerprinted in G002"
+  }
+ ],
+ "committedEvidence": [
+  {
+   "path": "reference-tabwin415/g002.tab",
+   "bytes": 788,
+   "sha256": "D2456989E60A2A9E114A9AA40463646D5F053CB8EC6A3208B9799917DDAFCAF5"
+  },
+  {
+   "path": "reference-tabwin415/capture-notes.md",
+   "bytes": 3181,
+   "sha256": "3E2E3B268F758D6897D1F8BA45D8F0256A0C95F467C8CA41C0996911027C6047"
+  },
+  {
+   "path": "expected/golden-table.json",
+   "bytes": 1448,
+   "sha256": "8B18648FE3F7A44A2ED8EB9C5DBC0DBE31941F6A68F0735D50FA44527BA53388"
+  },
+  {
+   "path": "README.md",
+   "bytes": 1850,
+   "sha256": "346748313AC89F932F3E6DC6934E4D0D717C111908EEE3DDCA0322C5AF23FBBE"
+  }
+ ],
+ "comparison": {
+  "tolerance": 0,
+  "comparedAtDecimalPlaces": null,
+  "crossCheckedAgainst": "G002",
+  "recordsDeclared": 4315,
+  "recordsProcessedPerTabFile": 4315,
+  "rowLabelsMatch": true,
+  "columnLabelsMatch": true,
+  "shapeMatch": true,
+  "cellDiffCount": 0,
+  "parserWarnings": 0,
+  "pass": true
+ }
+}
