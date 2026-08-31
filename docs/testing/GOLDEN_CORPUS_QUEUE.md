@@ -96,6 +96,31 @@ conforme `CHECKPOINT_MASTER.md` §8.3. Fixtures pequenas e aleatórias rodadas
 nos dois motores; toda divergência interessante vira golden permanente
 imutável, nunca se "conserta" o golden pra passar o teste.
 
+### 4.1 Gerador (metade que não depende do oracle) — pronto
+
+`scripts/differential-seed.mjs` (`npm run seed:differential -- --seeds 1-20
+--out .seed-cases`) gera, para cada seed, um caso que é **função pura da
+seed**: o `.dbf` real (data de atualização fixada no cabeçalho, senão os bytes
+mudariam de um dia pro outro), o `.cnv` quando o plano usa conversão, o plano
+normalizado e o resultado **deste** motor. A mesma seed produz os mesmos bytes
+em qualquer máquina — é isso que garante que os dois motores recebem o mesmo
+caso, e não dois casos parecidos.
+
+As quatro formas de plano miram nos cantos onde a divergência é plausível, não
+em dados uniformemente fáceis:
+
+| seed % 4 | o que exercita |
+| --- | --- |
+| 0 | contagem por UF com supressão de linhas zeradas |
+| 1 | CNV que não cobre todo o domínio, não classificados omitidos |
+| 2 | soma com decimais, cruzando UF por SEXO |
+| 3 | CNV parcial com não classificados discriminados, sob filtro de faixa |
+
+O gerador **não** decide quem está certo, e nada aqui vira golden sozinho.
+A outra metade — abrir o mesmo `.dbf` no TabWin 4.15 e capturar o resultado —
+depende de quem tem o programa instalado, e segue `G001_CAPTURE_PROTOCOL.md`.
+Cobertura em `tests/differential-seed.test.mjs`.
+
 ## 5. Regra que vale para tudo isto
 
 `docs/testing/G001_CAPTURE_PROTOCOL.md` §8 (classificação de falha) e a regra

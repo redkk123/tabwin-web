@@ -21,3 +21,6 @@ playwright/.cache/
 
 # Pacotes de handoff nunca entram no repositório.
 *.zip
+
+# Saída do gerador diferencial por seed (regenerável a partir da seed)
+.seed-cases/
