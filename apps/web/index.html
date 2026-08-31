@@ -59,6 +59,11 @@
           <button class="secondary-button" id="cnv-editor-button" type="button">Editor de CNV</button>
           <button class="secondary-button" id="def-inspector-button" type="button" disabled>Inspetor de DEF</button>
         </div>
+        <label class="def-picker" id="def-picker" hidden>
+          <span>Definição (DEF) ativa</span>
+          <select id="def-active"><option value="">Sem DEF — nomes técnicos do arquivo</option></select>
+          <small id="def-active-note">O DEF nomeia campos e conteúdos; sem ele, valem os nomes técnicos do microdado.</small>
+        </label>
 
         <div class="recipe-actions" aria-label="Análise reproduzível">
           <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>

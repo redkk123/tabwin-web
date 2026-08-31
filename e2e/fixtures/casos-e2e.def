@@ -1,0 +1,11 @@
+;Casos confirmados por local
+;
+ADADOSCASO*.DBC
+;
+; Variaveis de incremento
+;
+ICasos confirmados            ,CASOS
+;
+; Opcoes de linha e coluna
+;
+LUF de notificacao            ,UF        ,1 ,CNVr_uf.cnv

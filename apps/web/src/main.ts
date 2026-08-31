@@ -467,6 +467,9 @@ const cnvEditorPreviewResult = element<HTMLElement>('#cnv-editor-preview-result'
 const cnvEditorDownload = element<HTMLButtonElement>('#cnv-editor-download');
 const cnvEditorApply = element<HTMLButtonElement>('#cnv-editor-apply');
 const defInspectorButton = element<HTMLButtonElement>('#def-inspector-button');
+const defPicker = element<HTMLElement>('#def-picker');
+const defActive = element<HTMLSelectElement>('#def-active');
+const defActiveNote = element<HTMLElement>('#def-active-note');
 const defInspectorDialog = element<HTMLDialogElement>('#def-inspector-dialog');
 const defInspectorClose = element<HTMLButtonElement>('#def-inspector-close');
 const defInspectorBody = element<HTMLElement>('#def-inspector-body');
@@ -601,6 +604,12 @@ let currentDatasetFile: File | null = null;
 let currentCompatibilityProfile: 'tabwin-4.15' | 'modern' = 'tabwin-4.15';
 let datasetName = '';
 let datasetFingerprint: LoadedSource | null = null;
+/**
+ * Every DEF loaded this session, by file name. A DEF is authoritative for the
+ * file it describes, so which one is in force has to be a visible choice -
+ * loading a second one used to overwrite the first in silence.
+ */
+const defByName = new Map<string, DefDefinition>();
 let activeDef: DefDefinition | null = null;
 let activeMap: TabwinMapDefinition | null = null;
 let activeMapSource = '';
@@ -2257,6 +2266,34 @@ function createRuleFromCombination(profile: FieldCombinationProfile, values: Arr
   void runAnalysis();
 }
 
+/**
+ * Rebuilds the DEF picker and puts `select` (or the previous choice) in
+ * force. Everything that reads `activeDef` - field labels, increment names,
+ * row/column options - follows from this one selection.
+ */
+function populateDefPicker(select?: string): void {
+  const previous = defActive.value;
+  defActive.replaceChildren(new Option('Sem DEF — nomes técnicos do arquivo', ''));
+  for (const name of [...defByName.keys()].sort((a, b) => a.localeCompare(b))) {
+    const definition = defByName.get(name)!;
+    defActive.add(new Option(`${name} · ${definition.options.length} opções`, name));
+  }
+  const wanted = select ?? previous;
+  defActive.value = defByName.has(wanted) ? wanted : '';
+  applyActiveDef();
+  defPicker.hidden = defByName.size === 0;
+}
+
+/** Puts the picked DEF in force and refreshes everything that reads it. */
+function applyActiveDef(): void {
+  activeDef = defByName.get(defActive.value) ?? null;
+  defInspectorButton.disabled = !activeDef;
+  defActiveNote.textContent = activeDef
+    ? (activeDef.description?.trim() || `${activeDef.options.length} opções de análise, ${activeDef.increments.length} conteúdo(s).`)
+    : 'O DEF nomeia campos e conteúdos; sem ele, valem os nomes técnicos do microdado.';
+  if (dbfHeader) populateControls(rowField.value);
+}
+
 function populateConversions(): void {
   const previousRow = rowConversion.value;
   const previousColumn = columnConversion.value;
@@ -2780,10 +2817,10 @@ async function loadFile(file: File): Promise<void> {
     return;
   }
   if (extension === 'DEF') {
-    activeDef = parseDef(textDecoder.decode(bytes));
-    defInspectorButton.disabled = false;
-    if (dbfHeader) populateControls(rowField.value);
-    showToast(`${file.name}: ${activeDef.options.length} opções de análise encontradas`);
+    const definition = parseDef(textDecoder.decode(bytes));
+    defByName.set(file.name, definition);
+    populateDefPicker(file.name);
+    showToast(`${file.name}: ${definition.options.length} opções de análise encontradas`);
     return;
   }
   activeMap = parseTabwinMap(bytes);
@@ -6567,6 +6604,8 @@ async function openPortableTable(file: File): Promise<void> {
   renderExtraMeasures();
   clearCombinationProfile();
   activeDef = null;
+  defByName.clear();
+  populateDefPicker('');
   defInspectorButton.disabled = true;
   activeMap = null;
   mapNameByGeocode.clear();
@@ -7400,6 +7439,11 @@ cnvEditorAddCategory.addEventListener('click', () => {
 cnvEditorPreviewButton.addEventListener('click', () => { void updateCnvEditorPreview(); });
 cnvEditorApply.addEventListener('click', applyCnvEditor);
 cnvEditorDownload.addEventListener('click', downloadCnvEditorFile);
+defActive.addEventListener('change', () => {
+  applyActiveDef();
+  showToast(activeDef ? `DEF ativo: ${defActive.value}` : 'Nenhum DEF ativo; os nomes técnicos do arquivo voltam a valer');
+  if (currentResult) void runAnalysis();
+});
 defInspectorButton.addEventListener('click', () => {
   renderDefInspector();
   defInspectorDialog.showModal();

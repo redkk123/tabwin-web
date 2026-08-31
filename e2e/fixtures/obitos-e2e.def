@@ -1,0 +1,9 @@
+;Obitos por local
+;
+ADADOSOBI*.DBC
+;
+; Variaveis de incremento
+;
+IObitos registrados           ,CASOS
+;
+LUnidade federada             ,UF        ,1 ,CNVr_uf.cnv

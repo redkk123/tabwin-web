@@ -971,3 +971,41 @@ test('a raw DATASUS file reads as prose, without hiding the technical field name
   await page.locator('#analysis-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
   await expect(body).toContainText('2024');
 });
+
+test('several DEFs can be loaded at once, and which one is in force is a visible choice', async ({ page }) => {
+  await page.goto('/');
+  // The picker only exists once there is something to pick.
+  await expect(page.locator('#def-picker')).toBeHidden();
+  await expect(page.locator('#def-inspector-button')).toBeDisabled();
+
+  await page.locator('#file-input').setInputFiles([
+    'e2e/fixtures/def-dados-e2e.csv',
+    'e2e/fixtures/casos-e2e.def',
+    'e2e/fixtures/obitos-e2e.def',
+  ]);
+  await expect(page.locator('#def-picker')).toBeVisible();
+
+  // Both DEFs are held; loading the second no longer overwrites the first.
+  const picker = page.locator('#def-active');
+  await expect(picker).toContainText('casos-e2e.def');
+  await expect(picker).toContainText('obitos-e2e.def');
+
+  // The active DEF names the measure: this is the difference between TabNet's
+  // "Casos confirmados" and the bare "Freqüência" a raw file gets.
+  await picker.selectOption('casos-e2e.def');
+  await expect(page.locator('#def-active-note')).toContainText('Casos confirmados por local');
+  await expect(page.locator('#measure-field')).toContainText('Casos confirmados');
+
+  // Switching DEF re-labels the same underlying field.
+  await picker.selectOption('obitos-e2e.def');
+  await expect(page.locator('#def-active-note')).toContainText('Obitos por local');
+  await expect(page.locator('#measure-field')).toContainText('Obitos registrados');
+
+  // "Sem DEF" is a real choice, not just an absence: it puts the technical
+  // names back and disables the inspector.
+  await picker.selectOption('');
+  await expect(page.locator('#def-active-note')).toContainText('nomes técnicos');
+  await expect(page.locator('#def-inspector-button')).toBeDisabled();
+  await expect(page.locator('#measure-field')).not.toContainText('Casos confirmados');
+  await expect(page.locator('#measure-field')).toContainText('CASOS');
+});
