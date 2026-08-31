@@ -20,13 +20,23 @@ export function conversionIdForDefOption(option: DefConversionOption): string {
   return option.conversionFile;
 }
 
-function requireConversion(option: DefOption): DefConversionOption {
+/**
+ * Narrows to a conversion option, refusing the others with a message that says
+ * what is actually missing.
+ *
+ * A DBF lookup can serve as a *dimension* - {@link lookupDefinitionFromDefOption}
+ * builds its axis - but not yet as a *filter*, because a filter selects by
+ * category sequence and a lookup axis has codes, not sequences. An external
+ * lookup points at a resource file outside the DEF, so nothing can execute it
+ * without that file in hand.
+ */
+function requireConversion(option: DefOption, use: string): DefConversionOption {
   if (option.kind !== 'conversion') {
     const detail = option.kind === 'dbf-lookup'
-      ? `DBF lookup ${option.lookupFile}`
-      : `external lookup ${option.resourceFile}`;
+      ? `uma tabela DBF (${option.lookupFile})`
+      : `um recurso externo (${option.resourceFile})`;
     throw new UnsupportedDefFeatureError(
-      `DEF option "${option.label}" uses ${detail}; lookup execution is not implemented in R01`,
+      `A opção "${option.label}" do DEF usa ${detail}, que ainda não pode ser usada como ${use}.`,
     );
   }
   return option;
@@ -36,7 +46,7 @@ export function dimensionFromDefOption(option: DefOption): DimensionSpec {
   if (option.kind === 'dbf-lookup') {
     return { field: option.field, lookupId: option.lookupFile };
   }
-  const conversion = requireConversion(option);
+  const conversion = requireConversion(option, 'dimensão');
   return {
     field: conversion.field,
     conversionId: conversionIdForDefOption(conversion),
@@ -74,7 +84,7 @@ export function filterFromDefOption(
   option: DefOption,
   acceptedCategorySequences: Array<string | number>,
 ): FilterSpec {
-  const conversion = requireConversion(option);
+  const conversion = requireConversion(option, 'filtro');
   return {
     field: conversion.field,
     conversionId: conversionIdForDefOption(conversion),

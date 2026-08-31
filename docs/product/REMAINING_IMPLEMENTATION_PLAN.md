@@ -4,6 +4,21 @@
 **Purpose:** turn the complete TabWin 4.15 inventory into ordered, verifiable
 delivery blocks without confusing modern replacements with legacy equivalence.
 
+> **Aviso de defasagem (2026-08-31, R12.4).** Este documento não foi
+> reconciliado desde a baseline R05.1. Vários blocos abaixo sem a marca
+> `COMPLETE` **foram entregues** entre R06 e R12 (entre outros: editor de
+> gráficos, mapas temáticos, autoria DEF/CNV, workers para arquivos grandes,
+> exportação moderna). A ausência de `COMPLETE` aqui, portanto, **não é
+> evidência de que falta implementar** — é evidência de que o documento ficou
+> para trás.
+>
+> Não use esta lista como inventário do que falta até a reconciliação
+> bloco a bloco, agendada para a varredura completa. O estado que vale hoje
+> é `docs/legacy/checkpoints/CHECKPOINT_MASTER.md` mais os relatórios de
+> release. Marcar `COMPLETE` aqui exige a mesma evidência de sempre — plano
+> normalizado, teste e golden quando houver oracle — e não a memória de
+> quem escreve.
+
 ## Status rules
 
 - **Web** means the outcome is usable in the browser.
