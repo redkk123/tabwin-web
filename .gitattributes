@@ -1,0 +1,10 @@
+# Evidência de golden é captura byte a byte do TabWin 4.15 real. Um golden que
+# o git reescreve não é um golden: o `.TAB` do G023 foi commitado com os CR
+# removidos pela normalização automática, e no Linux o arquivo deixava de ser
+# o que o programa gravou — o SHA-256 do manifesto não batia mais.
+#
+# Nada aqui dentro pode ser normalizado, em nenhuma direção.
+fixtures/golden/** -text
+
+# Fixtures em geral existem para serem lidas como bytes, não como texto.
+fixtures/** -text

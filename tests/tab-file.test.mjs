@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import test from 'node:test';
 import { parseTabFile, tabFileNumber, tabFileValue } from '../dist/packages/formats/src/tab-file.js';
@@ -9,6 +10,24 @@ function realDocument() {
   const bytes = fs.readFileSync(TAB_PATH);
   return parseTabFile(new TextDecoder('windows-1252').decode(bytes));
 }
+
+test('G023: the committed golden is byte-identical to the capture', () => {
+  // Not ceremony. This file was once committed with its CR bytes stripped by
+  // git's automatic line-ending normalization: on Linux it stopped being what
+  // TabWin wrote, and the manifest's own hash no longer matched. A golden the
+  // version control system rewrites is not a golden, so the recorded hash is
+  // checked here rather than trusted.
+  const manifest = JSON.parse(fs.readFileSync('fixtures/golden/G023/manifest.json', 'utf8'));
+  const recorded = manifest.committedEvidence
+    .find((entry) => entry.path === 'reference-tabwin415/g002.tab');
+  const bytes = fs.readFileSync(TAB_PATH);
+  assert.equal(bytes.length, recorded.bytes);
+  assert.equal(
+    crypto.createHash('sha256').update(bytes).digest('hex').toUpperCase(),
+    recorded.sha256.toUpperCase(),
+    'the golden on disk is not the capture the manifest records',
+  );
+});
 
 test('G023: the real .TAB is plain Windows-1252 text with CRLF and no BOM', () => {
   // This is the finding the capture settled, so it is asserted on the bytes
