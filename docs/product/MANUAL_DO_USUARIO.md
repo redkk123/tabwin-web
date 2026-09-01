@@ -273,6 +273,20 @@ haver artefatos reais suficientes para provar quais campos são estáveis.
 
 ---
 
+## 10.1 Onde ficam as ações secundárias
+
+Para a barra lateral não ser uma pilha de botões de peso igual, as ações que
+não fazem parte do fluxo principal ficam em seções recolhíveis:
+
+- **Exportar o arquivo** — extrair o DBF original, salvar a seleção em DBF,
+  CSV para o `microdatasus`;
+- **Metadados** — Editor de CNV e Inspetor de DEF;
+- **Análises e tabelas salvas** — abrir e salvar receitas e tabelas.
+
+Nada foi removido; tudo está a um clique no cabeçalho da seção.
+
+---
+
 ## 11. Editor de CNV e Inspetor de DEF
 
 **Editor de CNV** cria e edita conversões com validação: categoria sem regra,

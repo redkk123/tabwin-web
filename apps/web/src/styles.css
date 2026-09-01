@@ -98,6 +98,14 @@ h1, h2, h3, p { margin-top: 0; }
 .recipe-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
 .source-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 10px; }
 
+/* Ações secundárias agrupadas: antes eram oito botões de peso igual disputando
+   a mesma atenção que o fluxo principal (abrir arquivo, montar tabela). */
+.sidebar-group { margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.sidebar-group > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; color: var(--ink); font-size: 12px; font-weight: 600; cursor: pointer; }
+.sidebar-group > summary span { color: var(--muted); font-size: 11px; font-weight: 400; }
+.sidebar-group[open] > summary { border-bottom: 1px solid var(--line); }
+.sidebar-group > *:not(summary) { padding: 11px 12px; }
+.sidebar-group .source-actions, .sidebar-group .recipe-actions { margin-top: 0; }
 .analysis-form { display: grid; gap: 13px; margin-top: 21px; }
 .analysis-form label > span:first-child { display: block; margin: 0 0 6px 2px; color: #4b535c; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
 select, input[type="number"], input[type="search"], input[type="text"] { width: 100%; min-height: 43px; padding: 0 12px; border: 1px solid #cdd1d4; border-radius: 6px; color: var(--ink); background: white; }
@@ -195,6 +203,16 @@ select:disabled, input:disabled { color: #898d92; background: #f5f5f6; }
 .catalog-result-skipped { border: 1px solid #d9c9a8; background: #fbf6ec; }
 .catalog-result-skipped small { color: var(--warn); }
 .dialog-link { color: var(--brand); font-weight: 600; }
+/* A barra de lote lidera a lista; a caixa por arquivo fica antes do nome,
+   onde o olho procura por seleção. */
+.catalog-batch-bar { flex-wrap: wrap; gap: 10px; border: 1px solid var(--brand-line); background: var(--brand-soft); }
+.catalog-batch-bar > div:first-child { display: flex; align-items: center; gap: 10px; }
+.catalog-batch-bar small { color: var(--muted); }
+.catalog-batch-bar-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.catalog-result-check { flex: 0 0 auto; width: 16px; height: 16px; margin-right: 4px; accent-color: var(--brand); }
+.select-all-button { margin-left: 7px; padding: 1px 7px; border: 1px solid var(--brand-line); border-radius: 3px; color: var(--brand); background: var(--brand-soft); font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: 0; cursor: pointer; }
+.select-all-button:hover:not(:disabled) { background: #dbe6f1; }
+.select-all-button:disabled { opacity: .45; cursor: not-allowed; }
 .catalog-notice { margin: 0 0 9px; padding: 9px 11px; border: 1px solid #d9c9a8; border-radius: 6px; color: var(--warn); background: #fbf6ec; font-size: 12px; line-height: 1.5; }
 .catalog-availability { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid #dbdee2; border-radius: 6px; color: #47505a; background: #f8f9fa; }
 .catalog-availability small { color: #7a7f85; line-height: 1.45; }

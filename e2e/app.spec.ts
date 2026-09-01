@@ -10,6 +10,22 @@ async function tabulateFixture(page: Page): Promise<void> {
   await expect(page.locator('#result-table tbody')).toBeVisible();
 }
 
+
+/**
+ * Abre uma seção recolhível da barra lateral.
+ *
+ * As ações secundárias ficam agrupadas para a barra não ser oito botões de
+ * peso igual. O teste faz o mesmo caminho de quem usa - clicar no cabeçalho -
+ * em vez de forçar `open` por script, senão deixaria de exercitar a interface
+ * que existe de verdade.
+ */
+async function openSidebarGroup(page: Page, group: 'export' | 'metadata' | 'saved'): Promise<void> {
+  const details = page.locator(`#group-${group}`);
+  if (await details.evaluate((element: HTMLDetailsElement) => element.open)) return;
+  await details.locator('summary').click();
+  await expect(details).toHaveAttribute('open', '');
+}
+
 test('abre CSV local, passa pelo Worker e produz uma tabulação', async ({ page }) => {
   await tabulateFixture(page);
   const body = page.locator('#result-table tbody');
@@ -215,6 +231,7 @@ test('a receita leva o estilo do gráfico e o traz de volta', async ({ page }) =
   await page.locator('#chart-show-legend').selectOption('on');
 
   const download = page.waitForEvent('download');
+  await openSidebarGroup(page, 'saved');
   await page.locator('#save-recipe-button').click();
   const file = await (await download).path();
 
@@ -280,9 +297,11 @@ test('a distância só aparece depois de escolher o modelo', async ({ page }) =>
 
 test('o CSV do Microdatasus traz exatamente os registros aceitos pela tabulação', async ({ page }) => {
   await tabulateFixture(page);
+  await openSidebarGroup(page, 'export');
   await expect(page.locator('#microdatasus-csv-button')).toBeEnabled();
 
   const download = page.waitForEvent('download');
+  await openSidebarGroup(page, 'export');
   await page.locator('#microdatasus-csv-button').click();
   const file = await (await download).path();
   const csv = (await import('node:fs/promises')).readFile;
@@ -314,6 +333,7 @@ test('um filtro na tabulação chega ao CSV do Microdatasus', async ({ page }) =
   await expect(page.locator('#result-table tbody')).not.toContainText('AM');
 
   const download = page.waitForEvent('download');
+  await openSidebarGroup(page, 'export');
   await page.locator('#microdatasus-csv-button').click();
   const file = await (await download).path();
   const text = await (await import('node:fs/promises')).readFile(file, 'utf8');
@@ -372,6 +392,7 @@ test('a comparação de tabelas alinha por chave, reporta o que não casou e nã
   await expect(page.locator('#result-table tbody')).toBeVisible();
 
   const saveDownload = page.waitForEvent('download');
+  await openSidebarGroup(page, 'saved');
   await page.locator('#save-table-button').click();
   const tableBFile = await (await saveDownload).path();
 
@@ -583,6 +604,7 @@ test('recipes save the applied pipeline, failures stop replay, and an empty tran
   await page.locator('#transform-add-step').click();
   await expect(page.locator('#transform-count')).toContainText('2 etapa');
   const download = page.waitForEvent('download');
+  await openSidebarGroup(page, 'saved');
   await page.locator('#save-recipe-button').click();
   const recipeFile = await (await download).path();
   if (!recipeFile) throw new Error('the browser did not expose the saved recipe path');
@@ -1047,6 +1069,7 @@ test('an epidemiology recipe restores method, scale and column bindings by key',
   await expect(page.locator('#statistics-result')).toContainText('SMR');
 
   const download = page.waitForEvent('download');
+  await openSidebarGroup(page, 'saved');
   await page.locator('#save-recipe-button').click();
   const recipeFile = await (await download).path();
   if (!recipeFile) throw new Error('the browser did not expose the saved recipe path');
@@ -1158,6 +1181,7 @@ test('several DEFs can be loaded at once, and which one is in force is a visible
   await page.goto('/');
   // The picker only exists once there is something to pick.
   await expect(page.locator('#def-picker')).toBeHidden();
+  await openSidebarGroup(page, 'metadata');
   await expect(page.locator('#def-inspector-button')).toBeDisabled();
 
   await page.locator('#file-input').setInputFiles([
@@ -1187,6 +1211,7 @@ test('several DEFs can be loaded at once, and which one is in force is a visible
   // names back and disables the inspector.
   await picker.selectOption('');
   await expect(page.locator('#def-active-note')).toContainText('nomes técnicos');
+  await openSidebarGroup(page, 'metadata');
   await expect(page.locator('#def-inspector-button')).toBeDisabled();
   await expect(page.locator('#measure-field')).not.toContainText('Casos confirmados');
   await expect(page.locator('#measure-field')).toContainText('CASOS');
@@ -1217,6 +1242,7 @@ test('a saved recipe replays its transform pipeline, so it rebuilds the same tab
   const savedTable = await body.innerText();
 
   const download = page.waitForEvent('download');
+  await openSidebarGroup(page, 'saved');
   await page.locator('#save-recipe-button').click();
   const recipeFile = await (await download).path();
 
@@ -1232,4 +1258,66 @@ test('a saved recipe replays its transform pipeline, so it rebuilds the same tab
   await expect(page.locator('#transform-count')).toContainText('1 etapa');
   await expect(page.locator('#result-table tbody')).toContainText('2024');
   expect(await page.locator('#result-table tbody').innerText()).toBe(savedTable);
+});
+
+test('as ações em lote agem sobre a escolha, e "todos" continua a um clique', async ({ page }) => {
+  // O catálogo é simulado: o objetivo aqui é a seleção, não a rede. Sem isso a
+  // barra de lote só existiria em produção, onde ninguém a testa.
+  await page.route('https://datasus.saude.gov.br/wp-content/ftp.php', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify([2021, 2022, 2023].map((year) => ({
+        arquivo: `DENGBR${String(year).slice(2)}.dbc`,
+        endereco: `ftp://ftp.datasus.gov.br/dissemin/publicos/SINAN/DADOS/FINAIS/DENGBR${String(year).slice(2)}.dbc`,
+        fonte: 'SINAN',
+        modalidade: 'Dados - Finais',
+      }))),
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINAN');
+  await page.locator('#catalog-file-type').selectOption('DENG');
+
+  // "todos" nos anos: um clique cobre quem quer a série inteira.
+  const years = page.locator('#catalog-year');
+  const yearsAll = page.locator('#catalog-year-all');
+  await expect(yearsAll).toHaveText('todos');
+  await yearsAll.click();
+  await expect(yearsAll).toHaveText('limpar');
+  const selectedYears = await years.evaluate((el: HTMLSelectElement) => el.selectedOptions.length);
+  expect(selectedYears).toBeGreaterThan(1);
+  // O botão não pode mentir sobre o que o próximo clique faz.
+  await yearsAll.click();
+  await expect(yearsAll).toHaveText('todos');
+  await years.selectOption(['2023', '2022', '2021']);
+
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  const bar = page.locator('.catalog-batch-bar');
+  await expect(bar).toBeVisible();
+  // Tudo marcado por padrão: quem quer o lote inteiro não precisa clicar em nada.
+  await expect(bar).toContainText('3 de 3 selecionado(s)');
+  await expect(page.locator('.catalog-batch-bar-actions button').first()).toContainText('(3)');
+  await expect(page.locator('.catalog-batch-bar-actions button').nth(1)).toContainText('.zip (3)');
+
+  // Desmarcar um arquivo tem que refletir nas duas ações, não só na contagem.
+  await page.locator('.catalog-result-check').first().uncheck();
+  await expect(bar).toContainText('2 de 3 selecionado(s)');
+  await expect(page.locator('.catalog-batch-bar-actions button').first()).toContainText('(2)');
+  await expect(page.locator('.catalog-batch-bar-actions button').nth(1)).toContainText('.zip (2)');
+
+  // Sem nada escolhido, as ações em lote ficam indisponíveis em vez de rodar vazias.
+  for (const box of await page.locator('.catalog-result-check').all()) await box.uncheck();
+  await expect(bar).toContainText('0 de 3 selecionado(s)');
+  await expect(page.locator('.catalog-batch-bar-actions button').first()).toBeDisabled();
+  await expect(page.locator('.catalog-batch-bar-actions button').nth(1)).toBeDisabled();
+
+  // E o "selecionar todos" da barra devolve o lote inteiro num clique.
+  await bar.locator('.select-all-button').click();
+  await expect(bar).toContainText('3 de 3 selecionado(s)');
+  await expect(page.locator('.catalog-batch-bar-actions button').first()).toBeEnabled();
 });

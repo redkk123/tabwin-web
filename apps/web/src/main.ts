@@ -1,3 +1,4 @@
+import { zip } from 'fflate';
 import {
   readDbfHeader,
   readDbfRecords,
@@ -6550,6 +6551,112 @@ async function openOfficialFileBatch(files: readonly DatasusRemoteFile[], fallba
   }
 }
 
+/**
+ * Baixa vários arquivos oficiais e entrega um `.zip` para o usuário guardar,
+ * sem abrir nem combinar nada.
+ *
+ * Existe porque "abrir e combinar" e "quero os arquivos" são vontades
+ * diferentes: quem vai levar os dados para o R, para o Python ou para outra
+ * máquina não precisa que o navegador monte uma tabulação primeiro — e
+ * combinar 40 anos de DBC numa aba não é realista de qualquer forma.
+ *
+ * Segue a mesma política do resto da aquisição: uma falha não derruba o lote,
+ * o que falhou é nomeado, e o pacote sai com o que deu certo em vez de sair
+ * vazio. O `.zip` leva um manifesto com origem, hash e hora de obtenção de
+ * cada arquivo, porque um pacote de microdados sem procedência é um problema
+ * para quem for citá-lo depois.
+ */
+async function packageOfficialFileBatch(
+  files: readonly DatasusRemoteFile[],
+  fallbackQuery: DatasusSearchQuery,
+): Promise<void> {
+  const controller = new AbortController();
+  activeCatalogController = controller;
+  setCatalogBusy(true);
+  const contents: Record<string, [Uint8Array, { level: 0 }]> = {};
+  const manifest: Array<Record<string, unknown>> = [];
+  let bytesCollected = 0;
+  try {
+    const batch = await runDatasusBatch<DatasusRemoteFile, true>(files, async (remote, index) => {
+      setCatalogStatus(
+        `Baixando para empacotar… ${index + 1} de ${files.length}`
+        + ` (${formatBytes(bytesCollected)} até agora)`,
+      );
+      const downloaded = await downloadCatalogEntries([remote], controller.signal, 24 * 60 * 60 * 1000, 'data');
+      const wanted = downloaded.files.filter((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
+      if (!wanted.length) throw new Error(`${remote.name} não trouxe DBC ou DBF`);
+      for (const entry of wanted) {
+        const name = displayBaseName(entry.name);
+        // Nomes repetidos entre pacotes não podem se sobrescrever em silêncio.
+        const unique = contents[name] ? `${index + 1}_${name}` : name;
+        // Nível 0: DBC já é comprimido. Recomprimir gastaria tempo e memória
+        // para não ganhar quase nada.
+        contents[unique] = [entry.bytes, { level: 0 }];
+        bytesCollected += entry.bytes.byteLength;
+        manifest.push({
+          arquivo: unique,
+          origem: remote.address,
+          sistema: remote.source,
+          modalidade: remote.modality,
+          bytes: entry.bytes.byteLength,
+          obtidoEm: downloaded.provenance.retrievedAt,
+          sha256DoPacote: downloaded.provenance.archiveSha256,
+          resolvedor: downloaded.provenance.resolver,
+        });
+      }
+      return { status: 'FOUND', value: true, resolver: downloaded.provenance.resolver, attempts: downloaded.provenance.attempts };
+    }, { failureStatus: 'DOWNLOAD_FAILED', signal: controller.signal });
+
+    const collected = Object.keys(contents).length;
+    if (!collected) {
+      setCatalogStatus('Nenhum arquivo pôde ser baixado; nada a empacotar.', true);
+      return;
+    }
+
+    contents['MANIFESTO.json'] = [
+      new TextEncoder().encode(JSON.stringify({
+        schema: 'tabwin-web.package-manifest',
+        version: 1,
+        criadoEm: new Date().toISOString(),
+        solicitados: files.length,
+        empacotados: collected,
+        falhas: batch.failed,
+        cancelado: batch.cancelled,
+        arquivos: manifest,
+        observacao: 'Microdados públicos do DATASUS/Ministério da Saúde. '
+          + 'Este pacote foi montado pelo TabWin Web, que não é afiliado ao órgão.',
+      }, null, 2)),
+      { level: 0 },
+    ];
+
+    setCatalogStatus(`Compactando ${integerFormat.format(collected)} arquivo(s)… ${formatBytes(bytesCollected)}`);
+    const archive = await new Promise<Uint8Array>((resolve, reject) => {
+      zip(contents, { level: 0 }, (error, data) => (error ? reject(error) : resolve(data)));
+    });
+    const stamp = new Date().toISOString().slice(0, 10);
+    downloadBlob(new Blob([archive as BlobPart], { type: 'application/zip' }), `datasus-${stamp}.zip`);
+
+    const problem = batch.failed
+      ? ` ${integerFormat.format(batch.failed)} falharam e ficaram de fora.`
+      : '';
+    setCatalogStatus(
+      `Pacote com ${integerFormat.format(collected)} arquivo(s), ${formatBytes(archive.byteLength)}.${problem}`,
+      batch.failed > 0,
+    );
+    renderDownloadBatchActions(batch, fallbackQuery);
+  } catch (error) {
+    setCatalogStatus(
+      isAbortError(error)
+        ? 'Empacotamento cancelado; nada foi salvo.'
+        : `Não foi possível empacotar: ${error instanceof Error ? error.message : String(error)}`,
+      true,
+    );
+  } finally {
+    if (activeCatalogController === controller) activeCatalogController = null;
+    setCatalogBusy(false);
+  }
+}
+
 function renderDownloadBatchActions(
   batch: DatasusBatchResult<DatasusRemoteFile, true>,
   fallbackQuery: DatasusSearchQuery,
@@ -6623,11 +6730,28 @@ async function openRecentArchive(summary: CachedArchiveSummary): Promise<void> {
   }
 }
 
+/**
+ * Guarda contra renderizações concorrentes da lista de downloads.
+ *
+ * Num lote, cada arquivo que termina dispara uma renderização. Como a função
+ * é assíncrona, várias ficam em voo ao mesmo tempo e terminam fora de ordem —
+ * uma chamada antiga concluindo depois sobrescrevia o que uma mais nova já
+ * tinha desenhado. O efeito para quem usava era o arquivo ter sido baixado e
+ * a lista não mostrar, até que uma renderização rodasse sozinha (por exemplo
+ * depois de cancelar o lote) e finalmente pintasse o estado real.
+ */
+let recentArchivesGeneration = 0;
+
 async function renderRecentArchives(): Promise<void> {
-  catalogRecentList.replaceChildren();
+  const generation = ++recentArchivesGeneration;
   catalogRecentSummary.textContent = 'Verificando o armazenamento local…';
   try {
     const archives = await listCachedArchives();
+    // Uma renderização mais nova já começou: esta não tem mais nada a dizer.
+    if (generation !== recentArchivesGeneration) return;
+    // Só limpa quando os dados estão em mãos, senão a lista pisca vazia a
+    // cada arquivo do lote.
+    catalogRecentList.replaceChildren();
     const totalBytes = archives.reduce((sum, archive) => sum + archive.size, 0);
     const dataCount = archives.filter((archive) => archive.role === 'data').length;
     catalogRecentSummary.textContent = archives.length
@@ -6671,6 +6795,8 @@ async function renderRecentArchives(): Promise<void> {
       catalogRecentList.append(item);
     }
   } catch (error) {
+    if (generation !== recentArchivesGeneration) return;
+    catalogRecentList.replaceChildren();
     catalogRecentSummary.textContent = 'O armazenamento local não está disponível neste navegador.';
     catalogCacheClear.disabled = true;
     setCatalogStatus(error instanceof Error ? error.message : String(error), true);
@@ -6733,25 +6859,98 @@ function renderCatalogSearchBatch(
     return;
   }
   setCatalogStatus(`${integerFormat.format(files.length)} arquivo(s) encontrado(s); ${integerFormat.format(result.batch.failed)} consulta(s) falharam sem impedir as seguintes.`);
+  // Uma caixa por arquivo, para as ações em lote agirem sobre a escolha e não
+  // sobre a lista inteira. "Todos" continua a um clique, então quem quer tudo
+  // não paga por essa flexibilidade.
+  const checkboxes = new Map<DatasusRemoteFile, HTMLInputElement>();
+  const selectedFiles = (): DatasusRemoteFile[] =>
+    files.filter((remote) => checkboxes.get(remote)?.checked);
+
+  let syncSelection = (): void => {};
+
   if (files.length > 1) {
-    const openAll = document.createElement('button');
-    openAll.className = 'secondary-button';
-    openAll.type = 'button';
-    openAll.textContent = 'Baixar e combinar todos';
-    openAll.title = 'O primeiro sucesso inicia um conjunto novo; os demais só entram se o esquema for compatível';
-    openAll.addEventListener('click', async () => {
-      openAll.disabled = true;
+    const bar = document.createElement('div');
+    bar.className = 'catalog-result catalog-batch-bar';
+
+    const toggle = document.createElement('button');
+    toggle.className = 'select-all-button';
+    toggle.type = 'button';
+
+    const count = document.createElement('small');
+
+    const openSelected = document.createElement('button');
+    openSelected.className = 'secondary-button';
+    openSelected.type = 'button';
+    openSelected.title = 'O primeiro sucesso inicia um conjunto novo; os demais só entram se o esquema for compatível';
+
+    const packageSelected = document.createElement('button');
+    packageSelected.className = 'secondary-button';
+    packageSelected.type = 'button';
+    packageSelected.title = 'Baixa os escolhidos e entrega um .zip com os DBC e um manifesto de procedência, sem abrir nem combinar';
+
+    syncSelection = (): void => {
+      const chosen = selectedFiles().length;
+      const everything = chosen === files.length;
+      toggle.textContent = everything ? 'limpar seleção' : 'selecionar todos';
+      count.textContent = `${integerFormat.format(chosen)} de ${integerFormat.format(files.length)} selecionado(s)`;
+      openSelected.textContent = `Baixar e combinar (${integerFormat.format(chosen)})`;
+      packageSelected.textContent = `Baixar e empacotar .zip (${integerFormat.format(chosen)})`;
+      openSelected.disabled = chosen === 0;
+      packageSelected.disabled = chosen === 0;
+    };
+
+    toggle.addEventListener('click', () => {
+      const everything = selectedFiles().length === files.length;
+      for (const box of checkboxes.values()) box.checked = !everything;
+      syncSelection();
+    });
+
+    openSelected.addEventListener('click', async () => {
+      const chosen = selectedFiles();
+      if (!chosen.length) return;
+      openSelected.disabled = true;
       try {
-        await openOfficialFileBatch(files, auxiliaryQuery);
+        await openOfficialFileBatch(chosen, auxiliaryQuery);
       } finally {
-        openAll.disabled = false;
+        syncSelection();
       }
     });
-    catalogResults.append(openAll);
+
+    packageSelected.addEventListener('click', async () => {
+      const chosen = selectedFiles();
+      if (!chosen.length) return;
+      packageSelected.disabled = true;
+      try {
+        await packageOfficialFileBatch(chosen, auxiliaryQuery);
+      } finally {
+        syncSelection();
+      }
+    });
+
+    const heading = document.createElement('div');
+    heading.append(toggle, count);
+    const actions = document.createElement('div');
+    actions.className = 'catalog-batch-bar-actions';
+    actions.append(openSelected, packageSelected);
+    bar.append(heading, actions);
+    catalogResults.append(bar);
   }
+
   for (const remote of files) {
     const item = document.createElement('div');
     item.className = 'catalog-result';
+
+    if (files.length > 1) {
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'catalog-result-check';
+      box.checked = true;
+      box.setAttribute('aria-label', `Incluir ${remote.name} nas ações em lote`);
+      box.addEventListener('change', () => syncSelection());
+      checkboxes.set(remote, box);
+      item.append(box);
+    }
+
     const details = document.createElement('div');
     const name = document.createElement('b');
     const meta = document.createElement('small');
@@ -6766,6 +6965,7 @@ function renderCatalogSearchBatch(
     item.append(details, button);
     catalogResults.append(item);
   }
+  syncSelection();
 }
 
 async function executeCatalogQueries(
@@ -7918,6 +8118,37 @@ element<HTMLButtonElement>('#catalog-close').addEventListener('click', () => cat
 catalogDialog.addEventListener('click', (event) => {
   if (event.target === catalogDialog) catalogDialog.close();
 });
+/**
+ * Liga um botão "todos" a um <select multiple>.
+ *
+ * Alterna: se já está tudo marcado, o clique limpa. O rótulo acompanha, para
+ * o botão nunca mentir sobre o que o próximo clique faz. Dispara `change`
+ * porque o resumo de combinações depende dele.
+ */
+function wireSelectAll(button: HTMLButtonElement, select: HTMLSelectElement, allLabel: string): void {
+  const sync = (): void => {
+    const options = [...select.options];
+    const everything = options.length > 0 && options.every((option) => option.selected);
+    button.textContent = everything ? 'limpar' : allLabel;
+    button.disabled = options.length === 0;
+  };
+  button.addEventListener('click', () => {
+    const options = [...select.options];
+    const everything = options.length > 0 && options.every((option) => option.selected);
+    for (const option of options) option.selected = !everything;
+    select.dispatchEvent(new Event('change', { bubbles: true }));
+    sync();
+  });
+  select.addEventListener('change', sync);
+  // A lista é repovoada quando o sistema ou o tipo de dado muda.
+  new MutationObserver(sync).observe(select, { childList: true });
+  sync();
+}
+
+wireSelectAll(element<HTMLButtonElement>('#catalog-year-all'), catalogYear, 'todos');
+wireSelectAll(element<HTMLButtonElement>('#catalog-month-all'), catalogMonth, 'todos');
+wireSelectAll(element<HTMLButtonElement>('#catalog-uf-all'), catalogUf, 'todas');
+
 catalogSystem.addEventListener('change', populateCatalogFileTypes);
 catalogFileType.addEventListener('change', updateCatalogGeography);
 for (const control of [catalogYear, catalogMonth, catalogUf]) control.addEventListener('change', renderCatalogCapabilities);

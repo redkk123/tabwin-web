@@ -44,27 +44,36 @@
 
         <div class="file-list" id="file-list" aria-live="polite"></div>
 
-        <div class="source-actions">
-          <button class="secondary-button" id="source-dbf-button" type="button" disabled>Extrair DBF original</button>
-          <button class="secondary-button" id="selected-dbf-button" type="button" disabled>Salvar seleção em DBF</button>
-          <button class="secondary-button" id="microdatasus-csv-button" type="button" disabled>Microdatasus filtrado CSV</button>
-          <button class="secondary-button danger-button" id="decode-cancel-button" type="button" hidden>Cancelar leitura</button>
-        </div>
+        <button class="secondary-button danger-button" id="decode-cancel-button" type="button" hidden>Cancelar leitura</button>
         <label class="check-label source-combine">
           <input id="combine-compatible-files" type="checkbox" />
           <span>Combinar próximos DBC/DBF somente quando o esquema for compatível</span>
         </label>
 
-        <div class="source-actions">
-          <button class="secondary-button" id="cnv-editor-button" type="button">Editor de CNV</button>
-          <button class="secondary-button" id="def-inspector-button" type="button" disabled>Inspetor de DEF</button>
-        </div>
+        <details class="sidebar-group" id="group-export">
+          <summary>Exportar o arquivo <span>DBF, CSV</span></summary>
+          <div class="source-actions">
+            <button class="secondary-button" id="source-dbf-button" type="button" disabled>Extrair DBF original</button>
+            <button class="secondary-button" id="selected-dbf-button" type="button" disabled>Salvar seleção em DBF</button>
+            <button class="secondary-button" id="microdatasus-csv-button" type="button" disabled>Microdatasus filtrado CSV</button>
+          </div>
+        </details>
+
+        <details class="sidebar-group" id="group-metadata">
+          <summary>Metadados <span>DEF e CNV</span></summary>
+          <div class="source-actions">
+            <button class="secondary-button" id="cnv-editor-button" type="button">Editor de CNV</button>
+            <button class="secondary-button" id="def-inspector-button" type="button" disabled>Inspetor de DEF</button>
+          </div>
+        </details>
         <label class="def-picker" id="def-picker" hidden>
           <span>Definição (DEF) ativa</span>
           <select id="def-active"><option value="">Sem DEF — nomes técnicos do arquivo</option></select>
           <small id="def-active-note">O DEF nomeia campos e conteúdos; sem ele, valem os nomes técnicos do microdado.</small>
         </label>
 
+        <details class="sidebar-group" id="group-saved">
+          <summary>Análises e tabelas salvas <span>abrir, salvar</span></summary>
         <div class="recipe-actions" aria-label="Análise reproduzível">
           <button class="secondary-button" id="open-recipe-button" type="button">Abrir análise</button>
           <button class="secondary-button" id="save-recipe-button" type="button" disabled>Salvar análise</button>
@@ -75,6 +84,7 @@
           <input id="table-input" type="file" accept=".twtable" hidden />
           <input id="include-table-input" type="file" accept=".twtable" hidden />
         </div>
+        </details>
 
         <form id="analysis-form" class="analysis-form">
           <label>
@@ -887,9 +897,9 @@
         <label><span>Tipo de dados</span><select id="catalog-file-type"></select></label>
         <div class="catalog-capabilities" id="catalog-capabilities"></div>
         <div class="catalog-grid">
-          <label><span>Ano <small>(Ctrl/Cmd para múltiplos)</small></span><select id="catalog-year" multiple size="4"></select></label>
-          <label id="catalog-month-label"><span>Mês <small>(Ctrl/Cmd para múltiplos)</small></span><select id="catalog-month" multiple size="4"></select></label>
-          <label id="catalog-uf-label"><span>UF <small>(Ctrl/Cmd para múltiplos)</small></span><select id="catalog-uf" multiple size="5"></select></label>
+          <label><span>Ano <button type="button" class="select-all-button" id="catalog-year-all">todos</button></span><select id="catalog-year" multiple size="4"></select></label>
+          <label id="catalog-month-label"><span>Mês <button type="button" class="select-all-button" id="catalog-month-all">todos</button></span><select id="catalog-month" multiple size="4"></select></label>
+          <label id="catalog-uf-label"><span>UF <button type="button" class="select-all-button" id="catalog-uf-all">todas</button></span><select id="catalog-uf" multiple size="5"></select></label>
           <p class="catalog-national-note" id="catalog-national-note" hidden>Arquivo nacional — a UF se escolhe depois de abrir os dados, no filtro. Em SINAN, por exemplo, existe UF de residência e UF de notificação, e são coisas diferentes.</p>
         </div>
         <label class="catalog-check"><input id="catalog-auxiliary" type="checkbox" checked /><span>Carregar auxiliares: automático só com regra verificada; caso contrário, oferecer escolha manual</span></label>
