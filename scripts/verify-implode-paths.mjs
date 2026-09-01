@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Confere que o caminho rápido e o caminho lento do descompressor DCL
- * produzem exatamente os mesmos bytes, sobre DBC reais.
+ * Confere que os três modos do descompressor DCL — caminho rápido, caminho
+ * lento e entrega por vista da janela — produzem exatamente os mesmos bytes,
+ * sobre DBC reais.
  *
  * Por que é um script e não um teste: exige arquivos `.dbc` reais, que não
  * entram neste repositório. É o mesmo motivo — e o mesmo padrão — dos outros
@@ -33,7 +34,7 @@ function collect(directory) {
   return found;
 }
 
-function digest(dbc, forceSlowPath) {
+function digest(dbc, forceSlowPath, reuseWindowBuffer = false) {
   const metadata = readDbcMetadata(dbc);
   const header = readDbfHeader(dbc.subarray(0, metadata.headerSize));
   const hash = createHash('sha256');
@@ -42,7 +43,7 @@ function digest(dbc, forceSlowPath) {
     dbc.subarray(metadata.headerSize + 4),
     header.recordCount * header.recordLength + 1,
     (chunk) => { bytes += chunk.byteLength; hash.update(chunk); },
-    { allowMissingFinalByte: true, forceSlowPath },
+    { allowMissingFinalByte: true, forceSlowPath, reuseWindowBuffer },
   );
   return { bytes, sha256: hash.digest('hex') };
 }
@@ -55,7 +56,12 @@ for (const file of files) {
   const dbc = new Uint8Array(fs.readFileSync(file));
   const rapido = digest(dbc, false);
   const lento = digest(dbc, true);
-  const igual = rapido.sha256 === lento.sha256 && rapido.bytes === lento.bytes;
+  // A vista da janela vale só durante a chamada, e aqui o consumidor é o
+  // próprio hash, que termina antes de devolver. Sobre arquivo real, com
+  // centenas de milhares de janelas, é onde um erro de aliasing apareceria.
+  const vista = digest(dbc, false, true);
+  const igual = rapido.sha256 === lento.sha256 && rapido.bytes === lento.bytes
+    && rapido.sha256 === vista.sha256 && rapido.bytes === vista.bytes;
   if (!igual) divergentes++;
   console.log(
     `${igual ? 'IGUAL   ' : 'DIVERGIU'}  ${path.basename(file).padEnd(18)}`

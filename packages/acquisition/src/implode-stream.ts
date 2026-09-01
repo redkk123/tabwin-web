@@ -3,14 +3,27 @@
  *
  * Algorithm adapted from @precisa-saude/datasus-dbc (Apache-2.0), itself a
  * TypeScript port of Mark Adler's blast.c. Unlike that package's materialized
- * API, this implementation emits copies of the 4 KiB sliding window and never
+ * API, this implementation emits the 4 KiB sliding window as it fills and never
  * allocates an output buffer proportional to the decoded file size.
+ *
+ * Por padrão cada janela sai como CÓPIA, que o consumidor pode guardar; quem
+ * consome na hora pode pedir a vista com `reuseWindowBuffer` e economizar a
+ * cópia. Ver a opção para o que isso exige de quem recebe.
  */
 
 const MAX_BITS = 13;
 const WINDOW_SIZE = 4096;
 const END_CODE = 519;
 const DEFAULT_MAX_STREAMED_OUTPUT_BYTES = 4 * 1024 * 1024 * 1024;
+
+/**
+ * A partir de quantos bytes vale chamar `copyWithin` em vez de copiar na mão.
+ *
+ * Medido nesta máquina, copiando dentro de uma janela de 4 KiB: 2 bytes 0,37x
+ * (a chamada custa mais que o laço), 16 bytes 0,90x, 24 bytes 1,76x, 64 bytes
+ * 4,2x, 256 bytes 16,5x. O ponto de virada fica em torno de 20.
+ */
+const NATIVE_COPY_MIN_BYTES = 20;
 
 const LITERAL_LENGTHS = [
   11, 124, 8, 7, 28, 7, 188, 13, 76, 4, 10, 8, 12, 10, 12, 10, 8, 23, 8, 9, 7, 6, 7, 8, 7, 6, 55, 8,
@@ -152,6 +165,19 @@ export interface ImplodeStreamOptions {
    * quando rodava, saía de alinhamento.
    */
   forceSlowPath?: boolean;
+  /**
+   * Entrega o bloco como VISTA da janela interna, em vez de uma cópia.
+   *
+   * A cópia de 4 KiB por janela custava 19% do tempo de descompressão (medido
+   * em perfil sobre SPAC2401) e não servia a ninguém que consome o bloco na
+   * hora. Com a vista, quem recebe precisa ter terminado com os bytes ANTES de
+   * devolver: a janela é reescrita na sequência.
+   *
+   * Fica desligado por padrão porque o modo de falha é o pior que existe —
+   * dado silenciosamente errado, e só em arquivo grande o bastante para dar a
+   * volta na janela. Quem liga precisa saber que consome na hora.
+   */
+  reuseWindowBuffer?: boolean;
 }
 
 export type ImplodeChunkConsumer = (chunk: Uint8Array, decodedOffset: number) => void;
@@ -171,6 +197,7 @@ class ImplodeStreamDecoder {
     private readonly consume: ImplodeChunkConsumer,
     private readonly allowMissingFinalByte: boolean,
     private readonly forceSlowPath = false,
+    private readonly reuseWindowBuffer = false,
   ) {}
 
   private inputByte(): number {
@@ -264,9 +291,12 @@ class ImplodeStreamDecoder {
   private flush(): void {
     if (!this.next) return;
     if (this.produced + this.next > this.expectedLength) throw new Error('DCL Implode: saída excedeu o tamanho declarado');
-    const chunk = this.window.slice(0, this.next);
+    const length = this.next;
+    const chunk = this.reuseWindowBuffer
+      ? this.window.subarray(0, length)
+      : this.window.slice(0, length);
     this.consume(chunk, this.produced);
-    this.produced += chunk.length;
+    this.produced += length;
     this.next = 0;
     this.firstWindow = false;
   }
@@ -299,7 +329,21 @@ class ImplodeStreamDecoder {
           if (copy > length) copy = length;
           length -= copy;
           this.next += copy;
-          do this.window[destination++] = this.window[source++]!; while (--copy);
+          // Medido em DBC reais: 97% dos bytes de saída vêm de casamento, e só
+          // 0,6% dos casamentos são auto-referentes — aqueles em que a
+          // distância é menor que o comprimento e o laço precisa ler o que
+          // acabou de escrever (uma corrida de espaços, por exemplo). Fora
+          // desse caso isto é um memmove, e `copyWithin` copia por palavra.
+          //
+          // `gap <= 0` é a janela circular: a origem ficou ACIMA do destino,
+          // então nenhuma escrita alcança um byte que ainda será lido.
+          // `gap >= copy` é o caso sem sobreposição alguma.
+          const gap = destination - source;
+          if (copy >= NATIVE_COPY_MIN_BYTES && (gap <= 0 || gap >= copy)) {
+            this.window.copyWithin(destination, source, source + copy);
+          } else {
+            do this.window[destination++] = this.window[source++]!; while (--copy);
+          }
           if (this.next === WINDOW_SIZE) this.flush();
         } while (length !== 0);
       } else {
@@ -333,5 +377,6 @@ export function implodeDecompressChunks(
     consume,
     options.allowMissingFinalByte ?? false,
     options.forceSlowPath ?? false,
+    options.reuseWindowBuffer ?? false,
   ).run();
 }

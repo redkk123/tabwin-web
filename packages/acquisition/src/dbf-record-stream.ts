@@ -399,7 +399,14 @@ export function streamDbcRecords(
   return streamRecordsFromChunks(
     header,
     (onChunk) => {
-      implodeDecompressChunks(compressed, expectedRecordBytes, onChunk, { allowMissingFinalByte: true });
+      implodeDecompressChunks(compressed, expectedRecordBytes, onChunk, {
+        allowMissingFinalByte: true,
+        // `onChunk` termina com os bytes antes de devolver: decodifica cada
+        // registro em primitivos ali mesmo e COPIA a sobra para `carry`. Nada
+        // guarda a vista, então a cópia da janela era trabalho puro — 19% do
+        // tempo de descompressão em perfil.
+        reuseWindowBuffer: true,
+      });
     },
     consume,
     options,
