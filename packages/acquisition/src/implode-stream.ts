@@ -56,9 +56,88 @@ function construct(encodedLengths: readonly number[]): HuffmanTable {
   return { count: Int32Array.from(count), symbol: Int32Array.from(symbols) };
 }
 
-const LITERAL_CODE = construct(LITERAL_LENGTHS);
-const RUN_CODE = construct(RUN_LENGTHS);
-const DISTANCE_CODE = construct(DISTANCE_LENGTHS);
+/**
+ * Quantos bits a tabela rápida resolve de uma vez.
+ *
+ * Nove cobre a esmagadora maioria dos símbolos do DCL num acesso só. Subir
+ * dobra a memória da tabela a cada bit e rende cada vez menos; descer joga
+ * mais símbolos no caminho lento.
+ */
+const FAST_BITS = 9;
+const FAST_SIZE = 1 << FAST_BITS;
+
+interface FastHuffmanTable extends HuffmanTable {
+  /** Símbolo para cada padrão de `FAST_BITS` bits, ou -1 quando não resolve. */
+  fastSymbol: Int32Array;
+  /** Quantos bits consumir naquele acerto. */
+  fastLength: Int32Array;
+}
+
+/**
+ * Caminha a árvore canônica bit a bit, exatamente como `decode` faz.
+ *
+ * Existe só para alimentar a tabela rápida. É a MESMA lógica do caminho lento,
+ * escrita uma vez aqui — por isso a tabela não pode divergir dele: ela é
+ * literalmente a resposta que ele daria.
+ */
+function walkCanonical(table: HuffmanTable, pattern: number, available: number): { symbol: number; length: number } | null {
+  let code = 0;
+  let first = 0;
+  let index = 0;
+  let nextIndex = 1;
+  for (let length = 1; length <= available; length++) {
+    code |= ((pattern >> (length - 1)) & 1) ^ 1;
+    const count = table.count[nextIndex++]!;
+    if (code < first + count) {
+      return { symbol: table.symbol[index + code - first]!, length };
+    }
+    index += count;
+    first = (first + count) << 1;
+    code <<= 1;
+  }
+  return null;
+}
+
+/**
+ * Tabela indexada pelos próximos `FAST_BITS` bits.
+ *
+ * A ideia é a mesma do `inflate_fast` do zlib: em vez de descer a árvore um
+ * bit por vez — e a descompressão DCL era 95% do tempo de abrir um arquivo —,
+ * olha vários bits de uma vez e resolve o símbolo num acesso.
+ *
+ * A tabela é construída EXECUTANDO o percurso canônico sobre todos os padrões
+ * possíveis, em vez de re-derivar os códigos. Assim ela não pode discordar do
+ * caminho lento: ela é o que o caminho lento responderia. Padrões que exigem
+ * mais bits ficam com -1 e caem no caminho lento, que continua ali intacto.
+ */
+function withFastTable(table: HuffmanTable): FastHuffmanTable {
+  const fastSymbol = new Int32Array(FAST_SIZE).fill(-1);
+  const fastLength = new Int32Array(FAST_SIZE);
+  for (let pattern = 0; pattern < FAST_SIZE; pattern++) {
+    const hit = walkCanonical(table, pattern, FAST_BITS);
+    if (!hit) continue;
+    fastSymbol[pattern] = hit.symbol;
+    fastLength[pattern] = hit.length;
+  }
+  return { ...table, fastSymbol, fastLength };
+}
+
+const LITERAL_CODE = withFastTable(construct(LITERAL_LENGTHS));
+const RUN_CODE = withFastTable(construct(RUN_LENGTHS));
+const DISTANCE_CODE = withFastTable(construct(DISTANCE_LENGTHS));
+
+/**
+ * As tabelas, expostas para o teste conferir contra o percurso da árvore.
+ *
+ * Elas são construídas a partir do caminho lento, então a igualdade é por
+ * construção — e é exatamente por isso que vale conferir: "por construção" já
+ * deu errado neste projeto antes.
+ */
+export const __huffmanTablesForTest = {
+  literal: LITERAL_CODE,
+  run: RUN_CODE,
+  distance: DISTANCE_CODE,
+} as const;
 
 export interface ImplodeStreamOptions {
   maxOutputBytes?: number;
@@ -101,7 +180,43 @@ class ImplodeStreamDecoder {
     return value & ((1 << needed) - 1);
   }
 
-  private decode(table: HuffmanTable): number {
+  /**
+   * Enche o buffer de bits sem consumir, para a tabela rápida poder espiar.
+   *
+   * Devolve quantos bits estão disponíveis. Perto do fim do fluxo pode haver
+   * menos que o pedido, e aí o caminho lento assume — ele é quem sabe tratar
+   * o fim do arquivo.
+   */
+  private peekBits(wanted: number): number {
+    while (this.bitCount < wanted) {
+      const value = this.compressed[this.inputOffset];
+      if (value === undefined) return this.bitCount;
+      this.inputOffset++;
+      this.bitBuffer |= value << this.bitCount;
+      this.bitCount += 8;
+    }
+    return this.bitCount;
+  }
+
+  private decode(table: FastHuffmanTable): number {
+    // Caminho rápido: um acesso resolve o símbolo, em vez de descer a árvore
+    // um bit por vez. A tabela foi construída a partir do caminho lento
+    // abaixo, então as duas respostas são a mesma por construção.
+    if (this.peekBits(FAST_BITS) >= FAST_BITS) {
+      const pattern = this.bitBuffer & (FAST_SIZE - 1);
+      const symbol = table.fastSymbol[pattern]!;
+      if (symbol >= 0) {
+        const length = table.fastLength[pattern]!;
+        this.bitBuffer >>>= length;
+        this.bitCount -= length;
+        return symbol;
+      }
+    }
+    return this.decodeSlow(table);
+  }
+
+  /** O percurso canônico bit a bit. Continua sendo a referência. */
+  private decodeSlow(table: HuffmanTable): number {
     let bitBuffer = this.bitBuffer;
     let left = this.bitCount;
     let code = 0;
