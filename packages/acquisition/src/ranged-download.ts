@@ -27,10 +27,30 @@
  * montagem só é aceita se os bytes conferirem com o tamanho declarado.
  */
 
-/** Abaixo disto, paralelizar custa mais em requisição do que economiza. */
+/**
+ * Abaixo disto, paralelizar custa mais em requisição do que economiza.
+ *
+ * Medido contra o DATASUS real: um arquivo de 3,2 MB baixou em 1.172 ms por
+ * uma conexão e em 2.842 ms em quatro partes — **2,4x mais lento**. O custo de
+ * abrir quatro conexões domina quando há pouco byte para dividir. O limite
+ * existe por causa dessa medição, não por precaução genérica.
+ */
 export const MIN_BYTES_FOR_RANGED_DOWNLOAD = 8 * 1024 * 1024;
 
-/** Teto de partes simultâneas. Pequeno de propósito: o servidor oscila. */
+/**
+ * Teto de partes simultâneas.
+ *
+ * Medido contra o DATASUS real, com um arquivo de 25,5 MB:
+ *
+ * | conexão única | 4.245 ms |
+ * | 2 partes      | 3.455 ms |
+ * | 4 partes      | 3.397 ms |
+ * | 8 partes      | 5.013 ms |
+ *
+ * Quatro é o ponto de melhor retorno, e **oito é pior que não paralelizar** —
+ * o servidor deixa de colaborar com conexões demais. Subir este número sem
+ * repetir a medição seria trocar ganho por perda.
+ */
 export const MAX_RANGE_PARTS = 4;
 
 /** Nenhuma parte menor que isto, para não trocar banda por ida e volta. */
