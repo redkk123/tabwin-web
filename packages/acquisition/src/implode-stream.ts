@@ -24,8 +24,8 @@ const BASE = [3, 2, 4, 5, 6, 7, 8, 9, 10, 12, 16, 24, 40, 72, 136, 264] as const
 const EXTRA = [0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8] as const;
 
 interface HuffmanTable {
-  count: number[];
-  symbol: number[];
+  count: Int32Array;
+  symbol: Int32Array;
 }
 
 function construct(encodedLengths: readonly number[]): HuffmanTable {
@@ -50,7 +50,10 @@ function construct(encodedLengths: readonly number[]): HuffmanTable {
     const length = lengths[symbol]!;
     if (length) symbols[offsets[length]!] = symbol, offsets[length]!++;
   }
-  return { count, symbol: symbols };
+  // Typed arrays: estas duas tabelas são lidas A CADA BIT do fluxo. Com
+  // Array comum, o motor precisa checar tipo e buraco em cada acesso; com
+  // Int32Array ele sabe o formato de antemão.
+  return { count: Int32Array.from(count), symbol: Int32Array.from(symbols) };
 }
 
 const LITERAL_CODE = construct(LITERAL_LENGTHS);
