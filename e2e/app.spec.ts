@@ -1533,3 +1533,83 @@ test('a busca mostra o que já achou, sem esperar o lote inteiro', async ({ page
   // E ninguém precisou cancelar para ver.
   await expect(page.locator('#catalog-cancel-button')).toBeEnabled();
 });
+
+test('aconselha o arquivo nacional quando várias UFs foram marcadas', async ({ page }) => {
+  // O caso que custou vinte minutos de espera: no SINASC, "todas as UFs" em
+  // vários anos são centenas de downloads quando o arquivo nacional do mesmo
+  // ano já traz as 27 — e a UF vira um filtro depois de abrir. A dica já
+  // existia na tela, mas só aparecia para quem já tinha escolhido o nacional.
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINASC');
+  await page.locator('#catalog-file-type').selectOption('DN');
+
+  const conselho = page.locator('#catalog-national-advice');
+  await page.locator('#catalog-year').selectOption(['2022', '2021']);
+
+  // Duas UFs ainda podem ser deliberadas e baratas: aviso que aparece sempre
+  // vira ruído e some da atenção junto com os que importam.
+  await page.locator('#catalog-uf').selectOption(['SP', 'RJ']);
+  await expect(conselho).toBeHidden();
+
+  await page.locator('#catalog-uf').selectOption(['SP', 'RJ', 'MG', 'BA']);
+  await expect(conselho).toBeVisible();
+  await expect(conselho).toContainText('4 UFs');
+  await expect(conselho).toContainText('2 download(s) em vez de 8');
+
+  // E resolver o conselho é um clique, não uma lição de casa.
+  await page.locator('#catalog-use-national').click();
+  await expect(page.locator('#catalog-uf')).toHaveValue('BR');
+  await expect(conselho).toBeHidden();
+  // Os anos escolhidos continuam de pé: o botão troca a geografia, nada mais.
+  const anos = await page.locator('#catalog-year').evaluate(
+    (el: HTMLSelectElement) => [...el.selectedOptions].map((option) => option.value));
+  expect(anos).toEqual(['2022', '2021']);
+});
+
+test('uma seleção enorme pede confirmação antes de começar a espera', async ({ page }) => {
+  // Uma busca de centenas de combinações pode ser exatamente o que a pessoa
+  // quer. O que não pode é a espera começar sem ela ter visto o tamanho.
+  let consultas = 0;
+  await page.route('**/wp-content/ftp.php', async (route) => {
+    consultas += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: '[]',
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINASC');
+  await page.locator('#catalog-file-type').selectOption('DN');
+  // Oito anos por 28 opções de geografia passam do limite de 200 sem precisar
+  // de mil requisições falsas para provar o ponto.
+  await page.locator('#catalog-year').selectOption(
+    ['2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017']);
+  await page.locator('#catalog-uf-all').click();
+
+  // O resumo diz o tamanho antes mesmo de clicar em procurar.
+  await expect(page.locator('#catalog-capabilities')).toContainText('só para consultar');
+
+  const perguntas: string[] = [];
+  // Registrar um ouvinte desliga a recusa automática do Playwright: quem escuta
+  // precisa responder, senão o diálogo fica aberto e trava a página.
+  page.on('dialog', (dialog) => { perguntas.push(dialog.message()); void dialog.dismiss(); });
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  await expect(page.locator('#catalog-status')).toContainText('Busca não iniciada');
+  expect(perguntas.join('\n')).toMatch(/combinação\(ões\)/);
+  // E recusar significa recusar: nenhuma ida ao servidor foi disparada.
+  expect(consultas).toBe(0);
+
+  // Confirmar também precisa funcionar: a seleção grande pode ser exatamente a
+  // série que a pessoa quer, e o aviso não pode virar um bloqueio.
+  page.removeAllListeners('dialog');
+  page.on('dialog', (dialog) => { void dialog.accept(); });
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#catalog-status')).not.toContainText('Busca não iniciada', { timeout: 60_000 });
+  expect(consultas).toBeGreaterThan(0);
+});

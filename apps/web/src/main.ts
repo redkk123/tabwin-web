@@ -79,6 +79,10 @@ import {
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import { describeDownloadStrategy } from '../../../packages/acquisition/src/ranged-download.ts';
 import {
+  adviseNationalFile,
+  describeSelectionCost,
+} from '../../../packages/acquisition/src/selection-advice.ts';
+import {
   bridgeWouldHelp,
   cancelBridgeDownload,
   describeBridgeProbe,
@@ -649,6 +653,9 @@ const catalogUf = element<HTMLSelectElement>('#catalog-uf');
 const catalogMonthLabel = element<HTMLElement>('#catalog-month-label');
 const catalogUfLabel = element<HTMLElement>('#catalog-uf-label');
 const catalogNationalNote = element<HTMLElement>('#catalog-national-note');
+const catalogNationalAdvice = element<HTMLElement>('#catalog-national-advice');
+const catalogNationalAdviceText = element<HTMLElement>('#catalog-national-advice-text');
+const catalogUseNational = element<HTMLButtonElement>('#catalog-use-national');
 const catalogCapabilitiesOutput = element<HTMLElement>('#catalog-capabilities');
 const catalogAuxiliary = element<HTMLInputElement>('#catalog-auxiliary');
 const catalogSearchButton = element<HTMLButtonElement>('#catalog-search-button');
@@ -6199,28 +6206,40 @@ function renderCatalogCapabilities(): void {
   const auxiliary = capabilities.auxiliaryResolution === 'verified-automatic'
     ? 'auxiliares automáticos verificados' : 'auxiliares por escolha manual';
   let requestCount = '';
+  let advice: ReturnType<typeof adviseNationalFile> = null;
   try {
+    const years = selectedCatalogValues(catalogYear);
+    const months = selectedCatalogValues(catalogMonth);
+    const ufs = selectedCatalogValues(catalogUf);
     const queries = expandDatasusSearchSelection({
       system: catalogSystem.value,
       fileType: catalogFileType.value,
-      years: selectedCatalogValues(catalogYear),
-      months: selectedCatalogValues(catalogMonth),
-      ufs: selectedCatalogValues(catalogUf),
+      years,
+      months,
+      ufs,
       annual,
     });
     // Um número sozinho não avisa nada: "868 combinações" só assusta quem já
     // sabe que cada uma é uma ida ao servidor. O tempo estimado é o que faz a
     // pessoa decidir antes de esperar — e ela pode reduzir a seleção.
-    const estimativaSegundos = Math.round((queries.length * 0.35) / 6);
-    const aviso = queries.length > 60
-      ? ` — leva cerca de ${estimativaSegundos >= 60
-        ? `${Math.round(estimativaSegundos / 60)} min`
-        : `${estimativaSegundos}s`}; reduza anos ou UFs se for demais`
-      : '';
-    requestCount = ` · ${integerFormat.format(queries.length)} combinação(ões) a consultar${aviso}`;
+    const cost = describeSelectionCost(queries.length);
+    requestCount = ` · ${integerFormat.format(cost.queries)} combinação(ões) a consultar`
+      + (queries.length > 60
+        ? ` — cerca de ${cost.duration} só para consultar; o download vem depois e demora bem mais`
+        : '');
+    // Um arquivo com cobertura BOTH existe nas duas formas: o nacional traz as
+    // 27 UFs de uma vez. A dica sobre isso já estava na tela para quem escolhe
+    // o nacional; quem escolhe muitas UFs nunca a via.
+    advice = adviseNationalFile({
+      nationalAvailable: capabilities.geographies.includes('BR') && capabilities.multipleUfs,
+      selectedUfs: ufs,
+      periods: years.length * (annual ? 1 : months.length),
+    });
   } catch {
     requestCount = ' · selecione ao menos um período';
   }
+  catalogNationalAdvice.hidden = advice === null;
+  if (advice) catalogNationalAdviceText.textContent = advice.message;
   catalogCapabilitiesOutput.textContent = `${annual ? 'Anual' : 'Mensal'} · ${geography} · múltiplos períodos${capabilities.multipleUfs ? ' e UFs' : ''} · ${auxiliary}${requestCount}. A existência de cada arquivo é confirmada somente ao consultar o catálogo oficial.`;
 }
 
@@ -7412,6 +7431,17 @@ async function searchCatalog(): Promise<void> {
         : { annual: true }),
       ...(selectedCatalogValues(catalogUf).length ? { ufs: selectedCatalogValues(catalogUf) } : {}),
     });
+    // Uma seleção grande é legítima — pode ser exatamente a série que a pessoa
+    // quer. O que não pode é a espera começar sem ela ter visto o tamanho.
+    // A confirmação é o último ponto em que dá para reduzir sem perder nada.
+    const cost = describeSelectionCost(queries.length);
+    if (cost.needsConfirmation
+      && !window.confirm(`Você pediu ${cost.summary}
+
+Começar mesmo assim?`)) {
+      setCatalogStatus('Busca não iniciada. Reduza os anos, meses ou UFs — ou use o arquivo nacional, quando existir.');
+      return;
+    }
     await executeCatalogQueries(queries, system, fileType);
   } catch (error) {
     setCatalogStatus(error instanceof Error ? error.message : String(error), true);
@@ -8654,6 +8684,14 @@ wireSelectAll(element<HTMLButtonElement>('#catalog-year-all'), catalogYear, 'tod
 wireSelectAll(element<HTMLButtonElement>('#catalog-month-all'), catalogMonth, 'todos');
 wireSelectAll(element<HTMLButtonElement>('#catalog-uf-all'), catalogUf, 'todas');
 
+// O conselho vale pouco se resolvê-lo der trabalho: aqui ele troca as UFs
+// marcadas pelo arquivo nacional do mesmo período, sem mexer em anos ou meses.
+catalogUseNational.addEventListener('click', () => {
+  for (const option of catalogUf.options) option.selected = option.value === 'BR';
+  // O evento já refaz o resumo e o rótulo do "todas/limpar"; chamar de novo
+  // só duplicaria o trabalho.
+  catalogUf.dispatchEvent(new Event('change', { bubbles: true }));
+});
 catalogSystem.addEventListener('change', populateCatalogFileTypes);
 catalogFileType.addEventListener('change', updateCatalogGeography);
 for (const control of [catalogYear, catalogMonth, catalogUf]) control.addEventListener('change', renderCatalogCapabilities);

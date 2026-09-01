@@ -65,6 +65,15 @@ Alguns pontos que economizam tempo:
   Brasil; nesses, a UF se escolhe *depois*, no filtro, e não na busca. Em
   SINAN, atenção: existe UF de residência **e** UF de notificação, e são coisas
   diferentes.
+- **Quando existem as duas formas** (SINASC/DN e SIM/DO), marcar três UFs ou
+  mais faz aparecer um aviso com o botão **Usar o arquivo nacional**: são
+  aproximadamente os mesmos dados em um download por período em vez de um por
+  UF. Escolher por UF continua legítimo — o arquivo estadual é bem menor, e
+  quem só quer uma UF não deve baixar o país.
+- **Seleções muito grandes pedem confirmação.** Acima de 200 combinações o
+  programa mostra o tamanho e o tempo estimado *só da consulta* antes de
+  começar; o download vem depois e demora bem mais. Recusar não faz nada: dá
+  para reduzir anos, meses ou UFs e pedir de novo.
 - **A existência do arquivo só é confirmada ao consultar.** O programa não
   adivinha se um período existe; ele pergunta ao catálogo.
 - **Salvar manifesto da consulta** grava o que foi pedido e o que foi
