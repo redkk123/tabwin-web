@@ -1467,3 +1467,29 @@ test('o arquivo guardado pode ser baixado sem precisar abrir a análise', async 
   // Sai o DBC que a pessoa reconhece, não o .zip como veio da rede.
   expect(file.suggestedFilename()).toBe('GUARDADO01.dbc');
 });
+
+test('um .TAB salvo pelo TabWin 4.15 abre aqui, somente para leitura', async ({ page }) => {
+  // O leitor era provado contra o golden G023 e não estava ligado: a
+  // biblioteca lia o formato, o aplicativo não abria o arquivo. Esta fixture é
+  // o próprio golden — o .TAB que o TabWin gravou.
+  await page.goto('/');
+  await openSidebarGroup(page, 'saved');
+  await page.locator('#table-input').setInputFiles('e2e/fixtures/tabwin-legado.tab');
+
+  const body = page.locator('#result-table tbody');
+  await expect(body).toContainText('Média complexidade');
+  await expect(body).toContainText('1.968');
+  await expect(body).toContainText('Alta complexidade');
+
+  // O título vem do próprio arquivo, não é inventado.
+  await expect(page.locator('#result-title')).toContainText('Complexidade do Procedimento');
+  // E a procedência que o arquivo declara é mostrada sem tradução.
+  const origin = page.locator('#legacy-tab-origin');
+  await expect(origin).toBeVisible();
+  await expect(origin).toContainText('RD2008.DEF');
+  await expect(origin).toContainText('Não_Classificados');
+
+  // É leitura, não reexecução: sem microdados, não há o que salvar como receita.
+  await expect(page.locator('#save-recipe-button')).toBeDisabled();
+  await expect(page.locator('#save-table-button')).toBeEnabled();
+});

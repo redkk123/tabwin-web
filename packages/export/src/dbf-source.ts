@@ -1,4 +1,5 @@
-import { dbcToDbf, readDbfHeader, type DbfHeader } from '@precisa-saude/datasus-dbc';
+import { dbcToDbf, readDbcMetadata, readDbfHeader, type DbfHeader } from '@precisa-saude/datasus-dbc';
+import { assertMaterializedDbfFits } from '../../acquisition/src/decode-limits.js';
 
 export interface DbfExtraction {
   bytes: Uint8Array;
@@ -24,6 +25,14 @@ export function extractedDbfName(sourceName: string): string {
 export function extractSourceDbf(source: Uint8Array, sourceName: string): DbfExtraction {
   const kind = extension(sourceName);
   if (kind !== 'DBC' && kind !== 'DBF') throw new Error('DBF extraction requires a .dbc or .dbf source');
+  if (kind === 'DBC') {
+    // Este é o único caminho que ainda materializa o DBF inteiro: tabular
+    // streama, mas extrair o arquivo original precisa dele todo de uma vez.
+    // Sem esta checagem, um DBC grande derrubava a aba sem explicação — e o
+    // guard que dizia exatamente de quantos MiB se precisaria existia,
+    // testado, sem ninguém chamar.
+    assertMaterializedDbfFits(readDbcMetadata(source), sourceName);
+  }
   const bytes = kind === 'DBC' ? dbcToDbf(source) : source.slice();
   const header = readDbfHeader(bytes);
   return { bytes, filename: extractedDbfName(sourceName), header, decompressed: kind === 'DBC' };

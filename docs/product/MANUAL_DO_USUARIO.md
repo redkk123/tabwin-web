@@ -26,11 +26,11 @@ está aberto.
 - Se você precisa de compatibilidade byte a byte com um recurso do TabWin 4.15
   que ainda não foi verificado contra o programa real. A seção 12 explica como
   saber quais são.
-- Se o arquivo é maior do que a memória do aparelho aguenta. Nesse caso o
-  programa avisa **antes** de tentar, dizendo de quantos MiB precisaria — e
-  deixa explícito que o arquivo **não** foi tratado como corrompido e que
-  nenhum conjunto já aberto foi alterado. Um arquivo assim precisa de
-  processamento em blocos para abrir com segurança.
+- Se o arquivo é maior do que a memória do aparelho aguenta. **Tabular** lê em
+  blocos e não tem essa parede; quem tem é **Extrair DBF original**, que
+  precisa do arquivo inteiro de uma vez. Nesse caso o programa avisa **antes**
+  de tentar, dizendo de quantos MiB precisaria, e deixa explícito que o arquivo
+  **não** foi tratado como corrompido e que nada já aberto foi alterado.
 
 ---
 
@@ -334,9 +334,25 @@ citada.
 Célula vazia significa **ausente**. Nenhum zero é fabricado para preencher
 lacuna — nem na exportação, nem na leitura do outro lado.
 
-O formato **`.TAB`** do TabWin 4.15 é **lido**, não escrito. A leitura foi
-verificada contra uma captura real do programa. A escrita fica de fora até
-haver artefatos reais suficientes para provar quais campos são estáveis.
+### Abrir um `.TAB` do TabWin 4.15
+
+**Abrir tabela** aceita tanto o `.twtable` deste aplicativo quanto um `.TAB`
+salvo pelo TabWin 4.15. A leitura foi verificada contra uma captura real do
+programa (golden G023).
+
+O `.TAB` abre **somente para leitura**, e a razão importa: ele traz o
+*resultado* que o TabWin calculou, não os microdados. Dá para ver, formatar e
+exportar a tabela — mas **Salvar análise** fica desligado, porque uma receita
+que não reconstrói nada seria uma promessa falsa. A procedência que o próprio
+arquivo declara (DEF, arquivos, seleções) aparece acima da tabela, sem
+tradução: um código como `Não_Classificados=0` continua um código, porque uma
+amostra não basta para mapeá-lo.
+
+Se alguma célula estiver ilegível, o arquivo é **recusado** dizendo qual —
+preencher com zero inventaria um número que ninguém observou.
+
+**Escrever `.TAB` continua fora de escopo**, até haver artefatos reais
+suficientes para provar quais campos são estáveis.
 
 ---
 

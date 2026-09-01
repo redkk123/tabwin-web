@@ -71,6 +71,7 @@ import {
 } from '../../../packages/acquisition/src/datasus.ts';
 import { tabulationToCsv, tabulationToJson, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
+import { parseTabFile, tabFileNumber, tabFileValue } from '../../../packages/formats/src/tab-file.ts';
 import {
   labPackageEntries,
   labPackageFilename,
@@ -7634,6 +7635,96 @@ async function openPortableTable(file: File): Promise<void> {
   showToast(`${file.name}: tabela aberta sem precisar do DBC original`);
 }
 
+/**
+ * Abre um `.TAB` salvo pelo TabWin 4.15.
+ *
+ * O leitor era provado contra o golden G023 e não estava ligado em lugar
+ * nenhum: a biblioteca lia o formato, o aplicativo não abria o arquivo. Quem
+ * tem `.TAB` guardado do TabWin não conseguia trazê-lo para cá.
+ *
+ * É leitura, não reexecução: o `.TAB` traz o resultado que o TabWin calculou,
+ * não os microdados. Por isso a tabela abre somente para leitura, e o que o
+ * arquivo diz sobre a origem (DEF, arquivos, seleções) é mostrado como
+ * procedência em vez de virar um plano que este motor executaria.
+ */
+async function openLegacyTabFile(file: File): Promise<void> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const tab = parseTabFile(textDecoder.decode(bytes));
+  if (!tab.matrix) throw new Error(`${file.name}: não traz matriz de resultado`);
+  const matrix = tab.matrix;
+
+  const cells: number[][] = matrix.cells.map((row, rowIndex) => row.map((cell, columnIndex) => {
+    const value = tabFileNumber(cell);
+    if (value === null) {
+      // Recusa em vez de inventar zero: uma célula ilegível é um desconhecido,
+      // e preenchê-la produziria um número que ninguém observou.
+      const rowLabel = matrix.rowLabels[rowIndex] ?? `linha ${rowIndex + 1}`;
+      const columnLabel = matrix.columnLabels[columnIndex] ?? `coluna ${columnIndex + 1}`;
+      throw new Error(`${file.name}: valor ilegível em "${rowLabel}" × "${columnLabel}" (${cell || 'vazio'})`);
+    }
+    return value;
+  }));
+
+  const processed = tabFileNumber(tabFileValue(tab, 'Registros_Processados') ?? '') ?? 0;
+  currentResult = {
+    rows: matrix.rowLabels.map((label, index) => ({ key: `r${index}`, label, source: 'raw' as const })),
+    columns: matrix.columnLabels.map((label, index) => ({ key: `c${index}`, label, source: 'raw' as const })),
+    cells,
+    warnings: tab.warnings,
+    recordsSeen: processed,
+    recordsAccepted: processed,
+  };
+  // A tela precisa de um plano para desenhar, mas um .TAB não traz um: ele é
+  // o RESULTADO que o TabWin calculou, não a receita para recalculá-lo. O
+  // plano abaixo descreve o que está em tela e nada mais — ele nunca roda,
+  // porque não há microdados aqui. Por isso "Salvar análise" fica desligado:
+  // uma receita que não reconstrói nada seria uma promessa falsa.
+  currentPlan = {
+    version: 1,
+    spec: {
+      compatibilityProfile: 'tabwin-4.15',
+      rows: { field: matrix.cornerLabel },
+      measure: { kind: 'count' },
+      filters: [],
+    },
+    warnings: [`Plano descritivo de um .TAB aberto para leitura; ${file.name} não traz os microdados.`],
+  };
+  tableOperations = [];
+  currentRowLabel = matrix.cornerLabel;
+  rowField.replaceChildren(new Option(matrix.cornerLabel, ''));
+  columnField.replaceChildren(new Option(tabFileValue(tab, 'Coluna') ?? 'Resultado salvo', ''));
+  resultKicker.textContent = `${file.name} · tabela do TabWin 4.15`;
+  const title = tabFileValue(tab, 'Titulo2') ?? tabFileValue(tab, 'Titulo1') ?? file.name;
+  resultTitle.textContent = title;
+  tableTitle.value = title;
+  renderResult();
+
+  setControlsEnabled(false);
+  saveRecipeButton.disabled = true;
+  saveTableButton.disabled = false;
+  labPackageButton.disabled = false;
+  for (const button of [exportCsvButton, exportJsonButton, exportXlsxButton, exportXmlButton]) {
+    button.disabled = false;
+  }
+
+  // A procedência que o próprio arquivo declara, sem tradução: o código
+  // `Não_Classificados=0` continua um código, porque uma amostra não basta
+  // para mapeá-lo nas políticas deste motor.
+  const origin = ['DEF', 'PATH', 'Linha', 'Coluna', 'Incremento', 'Não_Classificados']
+    .map((key) => [key, tabFileValue(tab, key)] as const)
+    .filter((pair): pair is readonly [string, string] => Boolean(pair[1]))
+    .map(([key, value]) => `${key}: ${value}`);
+  document.querySelector('#legacy-tab-origin')?.remove();
+  if (origin.length) {
+    const note = document.createElement('p');
+    note.className = 'compatibility-note';
+    note.id = 'legacy-tab-origin';
+    note.textContent = `Procedência declarada no próprio arquivo — ${origin.join(' · ')}`;
+    element<HTMLElement>('#table-view').prepend(note);
+  }
+  showToast(`${file.name}: tabela do TabWin aberta somente para leitura.`);
+}
+
 async function includePortableTable(file: File): Promise<void> {
   if (!currentResult) throw new Error('Gere ou abra uma tabela antes de incluir outra');
   const table = parsePortableTable(await file.text());
@@ -8139,7 +8230,9 @@ saveTableButton.addEventListener('click', () => {
 tableInput.addEventListener('change', () => {
   const file = tableInput.files?.[0];
   if (!file) return;
-  void openPortableTable(file).catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
+  // .TAB é do TabWin 4.15 e não traz plano; .twtable é nosso e traz.
+  const open = extensionOf(file.name) === 'TAB' ? openLegacyTabFile(file) : openPortableTable(file);
+  void open.catch((error) => showToast(error instanceof Error ? error.message : String(error), true));
   tableInput.value = '';
 });
 includeTableInput.addEventListener('change', () => {

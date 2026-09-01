@@ -36,3 +36,29 @@ test('DBF extraction names are local and unsupported extensions are rejected', (
   assert.equal(extractedDbfName('sem-extensao'), 'sem-extensao.dbf');
   assert.throws(() => extractSourceDbf(minimalDbf(), 'dados.csv'), /requires a \.dbc or \.dbf/);
 });
+
+test('extrair um DBC grande demais avisa antes, em vez de derrubar a aba', async () => {
+  // Tabular streama e não tem essa parede; extrair o DBF original precisa dele
+  // inteiro de uma vez. O guard existia, testado, e não era chamado por
+  // ninguém — então a aba morria sem explicação, e o manual prometia um aviso
+  // que nunca aparecia.
+  const { MAX_MATERIALIZED_DBF_BYTES } = await import('../dist/packages/acquisition/src/decode-limits.js');
+
+  // Cabeçalho DBC mínimo declarando um DBF acima do teto de materialização.
+  const recordSize = 1024;
+  const recordCount = Math.ceil((MAX_MATERIALIZED_DBF_BYTES + 1) / recordSize);
+  const header = new Uint8Array(40);
+  const view = new DataView(header.buffer);
+  header[0] = 0x03;
+  view.setUint32(4, recordCount, true);
+  view.setUint16(8, 33, true);
+  view.setUint16(10, recordSize, true);
+
+  assert.throws(
+    () => extractSourceDbf(header, 'GIGANTE.dbc'),
+    (error) => /arquivo oficial grande/.test(error.message)
+      && /MiB/.test(error.message)
+      && /não foi tratado como corrompido/.test(error.message),
+    'o aviso precisa dizer o tamanho e deixar claro que o arquivo não está corrompido',
+  );
+});
