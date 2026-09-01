@@ -1,4 +1,4 @@
-import { unzipSync } from 'fflate';
+import { unzip, unzipSync } from 'fflate';
 import {
   DATASUS_DOWNLOAD_ENDPOINT,
   DATASUS_TRANSFER_ENDPOINT,
@@ -162,14 +162,32 @@ export async function searchOfficialFilesBatch(
   return (await searchOfficialCatalogBatch(queries, signal)).files;
 }
 
+export interface CatalogSearchProgress {
+  completed: number;
+  total: number;
+  /** Arquivos encontrados até agora, na ordem em que apareceram. */
+  files: DatasusRemoteFile[];
+}
+
+/**
+ * Consulta o catálogo, avisando a cada combinação resolvida.
+ *
+ * O `onProgress` existe por um defeito de uso real: antes o resultado só era
+ * desenhado quando o lote INTEIRO terminava. Com dezenas de combinações num
+ * servidor que oscila, isso podia levar minutos — e cancelar fazia o lote
+ * devolver o parcial, então os arquivos "só apareciam quando você cancelava".
+ * Quem via isso concluía, com razão, que a busca estava quebrada.
+ */
 export async function searchOfficialCatalogBatch(
   queries: readonly DatasusSearchQuery[],
   signal?: AbortSignal,
+  onProgress?: (progress: CatalogSearchProgress) => void,
 ): Promise<{
   files: DatasusRemoteFile[];
   availability: DatasusAvailabilityManifest;
   batch: DatasusBatchResult<DatasusSearchQuery, DatasusRemoteFile[]>;
 }> {
+  const found: DatasusRemoteFile[] = [];
   const batch = await runDatasusBatch<DatasusSearchQuery, DatasusRemoteFile[]>(queries, async (query) => {
     try {
       const primary = await searchOfficialFilesDetailed(query, signal);
@@ -228,7 +246,24 @@ export async function searchOfficialCatalogBatch(
         error: readableError(lastError),
       };
     }
-  }, { ...(signal ? { signal } : {}), failureStatus: 'LOOKUP_FAILED' });
+  }, {
+    ...(signal ? { signal } : {}),
+    failureStatus: 'LOOKUP_FAILED',
+    // Consultar catálogo é POST pequeno; baixar arquivo continua em fila.
+    // Seis é comedido: o servidor oscila, e a intenção é sair da fila, não
+    // transformar uma busca em ataque.
+    concurrency: 6,
+    ...(onProgress
+      ? {
+        onProgress: (progress) => {
+          if (progress.item.status === 'FOUND') found.push(...(progress.item.value ?? []));
+          // Uma cópia: quem desenha não pode segurar referência para um vetor
+          // que ainda vai crescer por baixo dele.
+          onProgress({ completed: progress.completed, total: progress.total, files: [...found] });
+        },
+      }
+      : {}),
+  });
 
   const results: DatasusCatalogQueryResult[] = batch.items.flatMap((item) => {
     if (item.status !== 'FOUND' && item.status !== 'NOT_PUBLISHED') return [];
@@ -473,6 +508,41 @@ export function extractSupportedArchive(archive: Uint8Array): ExtractedArchive {
 
   visit(archive, 0);
   return { files: output, skipped: budget.skipped };
+}
+
+/**
+ * A mesma expansão, sem travar a interface.
+ *
+ * `unzipSync` roda na thread principal: medido, um pacote de 25 MB congelava a
+ * tela por ~600 ms em dois blocos. O total nem era o pior — tela morta parece
+ * defeito mesmo quando o número é aceitável. A versão assíncrona do fflate faz
+ * o trabalho fora da thread.
+ *
+ * A política de limites é a MESMA função, então nada afrouxa por ser assíncrono.
+ */
+export function extractSupportedArchiveAsync(archive: Uint8Array): Promise<ExtractedArchive> {
+  const budget = createArchiveBudget();
+  const isWanted = (name: string): boolean => {
+    const extension = extensionOf(name);
+    return extension === 'ZIP' || SUPPORTED_EXTENSIONS.has(extension);
+  };
+  return new Promise((resolve, reject) => {
+    unzip(archive, {
+      filter: (entry) => classifyArchiveEntry(entry, budget, isWanted).action === 'take',
+    }, (error, entries) => {
+      if (error) { reject(error); return; }
+      const output: ExtractedArchiveFile[] = [];
+      try {
+        for (const [name, content] of Object.entries(entries)) {
+          // ZIP aninhado é raro e pequeno; resolver aqui de forma síncrona
+          // evita uma cascata de callbacks para um caso que não pesa.
+          if (extensionOf(name) === 'ZIP') output.push(...extractSupportedArchive(content).files);
+          else output.push({ name, bytes: content });
+        }
+      } catch (nested) { reject(nested); return; }
+      resolve({ files: output, skipped: budget.skipped });
+    });
+  });
 }
 
 /** Files only, for callers with nothing to report. */

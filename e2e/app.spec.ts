@@ -1494,3 +1494,42 @@ test('um .TAB salvo pelo TabWin 4.15 abre aqui, somente para leitura', async ({ 
   await expect(page.locator('#save-table-button')).toBeEnabled();
 });
 
+
+test('a busca mostra o que já achou, sem esperar o lote inteiro', async ({ page }) => {
+  // O defeito relatado: com muitas combinações num servidor lento, os arquivos
+  // "só apareciam quando você cancelava" — porque cancelar era a única forma de
+  // o lote devolver o parcial. Quem via isso concluía que a busca não
+  // funcionava, e desistia.
+  let respondidas = 0;
+  await page.route(/(catalog|ftp\.php)/, async (route) => {
+    respondidas++;
+    // A primeira responde na hora; as seguintes demoram, como o DATASUS ruim.
+    if (respondidas > 1) await new Promise((resolve) => setTimeout(resolve, 4000));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify([{
+        arquivo: `ACHADO${respondidas}.dbc`,
+        endereco: 'ftp://ftp.datasus.gov.br/dissemin/publicos/SINAN/DADOS/FINAIS/X.dbc',
+        fonte: 'SINAN',
+        modalidade: 'Dados - Finais',
+      }]),
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINAN');
+  await page.locator('#catalog-file-type').selectOption('DENG');
+  await page.locator('#catalog-year').selectOption(['2024', '2023', '2022', '2021']);
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  // Enquanto o lote ainda roda, a tela já diz o que encontrou até agora.
+  const parcial = page.locator('#catalog-results').getByText(/encontrado\(s\) até agora/);
+  await expect(parcial).toBeVisible({ timeout: 8000 });
+  await expect(parcial).toContainText('de 4');
+
+  // E ninguém precisou cancelar para ver.
+  await expect(page.locator('#catalog-cancel-button')).toBeEnabled();
+});

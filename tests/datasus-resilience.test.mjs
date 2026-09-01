@@ -127,3 +127,55 @@ test('the operational manifest records every request and failure deterministical
   assert.match(serialized, /LOOKUP_FAILED/);
   assert.match(serialized, /microdatasus-compatible/);
 });
+
+test('o lote paralelo preserva a ordem, o cancelamento e o isolamento de falha', async () => {
+  // Ordem: um manifesto cuja ordem muda a cada execução não serve para
+  // comparar duas rodadas — e comparar rodadas é o motivo de o manifesto
+  // existir.
+  const pedidos = Array.from({ length: 20 }, (_, index) => `q${index}`);
+  const atrasos = pedidos.map((_, index) => (index % 5) * 12);
+
+  const resultado = await runDatasusBatch(pedidos, async (pedido, index) => {
+    await new Promise((resolve) => setTimeout(resolve, atrasos[index]));
+    if (index === 7) throw new Error('esta caiu');
+    return { status: 'FOUND', value: pedido, attempts: 1 };
+  }, { failureStatus: 'LOOKUP_FAILED', concurrency: 6 });
+
+  assert.deepEqual(resultado.items.map((item) => item.request), pedidos, 'a ordem precisa ser a dos pedidos');
+  // Uma falha não derruba as outras.
+  assert.equal(resultado.items[7].status, 'LOOKUP_FAILED');
+  assert.equal(resultado.succeeded, 19);
+  assert.equal(resultado.failed, 1);
+});
+
+test('paralelo é mais rápido que fila, que é a razão de existir', async () => {
+  const pedidos = Array.from({ length: 12 }, (_, index) => index);
+  const medir = async (concurrency) => {
+    const inicio = Date.now();
+    await runDatasusBatch(pedidos, async () => {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      return { status: 'FOUND', value: 1, attempts: 1 };
+    }, { failureStatus: 'LOOKUP_FAILED', concurrency });
+    return Date.now() - inicio;
+  };
+  const fila = await medir(1);
+  const paralelo = await medir(6);
+  assert.ok(paralelo < fila / 2, `paralelo ${paralelo}ms devia ser bem menor que fila ${fila}ms`);
+});
+
+test('cancelar no meio preserva o que terminou e marca o resto', async () => {
+  const controller = new AbortController();
+  const pedidos = Array.from({ length: 30 }, (_, index) => index);
+  let atendidos = 0;
+  const resultado = await runDatasusBatch(pedidos, async () => {
+    atendidos++;
+    if (atendidos === 8) controller.abort();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return { status: 'FOUND', value: 1, attempts: 1 };
+  }, { failureStatus: 'LOOKUP_FAILED', concurrency: 4, signal: controller.signal });
+
+  assert.equal(resultado.items.length, pedidos.length, 'todo pedido precisa aparecer no resultado');
+  assert.ok(resultado.cancelled, 'o lote precisa se declarar cancelado');
+  assert.ok(resultado.succeeded > 0, 'o que já tinha terminado é preservado');
+  assert.ok(resultado.succeeded < pedidos.length, 'e o resto não é dado como feito');
+});

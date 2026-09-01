@@ -41,6 +41,16 @@ interface RunDatasusBatchOptions<TRequest, TValue> {
   signal?: AbortSignal;
   failureStatus: 'LOOKUP_FAILED' | 'DOWNLOAD_FAILED';
   onProgress?: (progress: DatasusBatchProgress<TRequest, TValue>) => void;
+  /**
+   * Quantas operações rodam ao mesmo tempo. O padrão é 1 — uma de cada vez.
+   *
+   * Baixar arquivo continua em 1 de propósito: são dezenas de MB cada, e o
+   * servidor do DATASUS já oscila com uma conexão. Consultar o catálogo é
+   * outra história — são POSTs pequenos, e em sequência ficam insuportáveis:
+   * medido, "todos os anos × todas as UFs" do SINASC/DN dá 868 consultas, o
+   * que em fila levaria cerca de cinco minutos.
+   */
+  concurrency?: number;
 }
 
 const RETRYABLE_FAILURES = new Set<DatasusBatchStatus>([
@@ -72,43 +82,61 @@ export async function runDatasusBatch<TRequest, TValue>(
   worker: (request: TRequest, index: number) => Promise<DatasusOperationOutcome<TValue>>,
   options: RunDatasusBatchOptions<TRequest, TValue>,
 ): Promise<DatasusBatchResult<TRequest, TValue>> {
-  const items: Array<DatasusBatchItem<TRequest, TValue>> = [];
-  for (let index = 0; index < requests.length; index++) {
-    const request = requests[index];
-    if (request === undefined) continue;
-    if (options.signal?.aborted) {
-      for (let rest = index; rest < requests.length; rest++) {
-        const pending = requests[rest];
-        if (pending !== undefined) items.push(cancelledItem<TRequest, TValue>(pending));
-      }
-      break;
-    }
-    let item: DatasusBatchItem<TRequest, TValue>;
-    try {
-      const outcome = await worker(request, index);
-      item = { request, ...outcome };
-    } catch (error) {
-      if (isAbortErrorLike(error) || options.signal?.aborted) {
-        item = cancelledItem<TRequest, TValue>(request);
-      } else {
-        item = {
-          request,
-          status: options.failureStatus,
-          attempts: retryAttempts(error),
-          error: errorMessage(error),
-        };
+  // Os resultados são guardados POR ÍNDICE e ordenados no fim: com mais de uma
+  // operação em voo, a ordem de chegada é a do acaso, e um manifesto cuja
+  // ordem muda a cada execução não serve para comparar duas rodadas.
+  const slots = new Array<DatasusBatchItem<TRequest, TValue> | undefined>(requests.length);
+  const workers = Math.max(1, Math.min(options.concurrency ?? 1, 8));
+  let next = 0;
+  let stopped = false;
+  let completed = 0;
+
+  const markRemainingCancelled = (): void => {
+    for (let index = 0; index < requests.length; index++) {
+      const pending = requests[index];
+      if (slots[index] === undefined && pending !== undefined) {
+        slots[index] = cancelledItem<TRequest, TValue>(pending);
       }
     }
-    items.push(item);
-    options.onProgress?.({ completed: items.length, total: requests.length, item });
-    if (item.status === 'CANCELLED') {
-      for (let rest = index + 1; rest < requests.length; rest++) {
-        const pending = requests[rest];
-        if (pending !== undefined) items.push(cancelledItem<TRequest, TValue>(pending));
+  };
+
+  const runOne = async (): Promise<void> => {
+    while (!stopped) {
+      const index = next++;
+      if (index >= requests.length) return;
+      const request = requests[index];
+      if (request === undefined) continue;
+      if (options.signal?.aborted) { stopped = true; break; }
+
+      let item: DatasusBatchItem<TRequest, TValue>;
+      try {
+        const outcome = await worker(request, index);
+        item = { request, ...outcome };
+      } catch (error) {
+        if (isAbortErrorLike(error) || options.signal?.aborted) {
+          item = cancelledItem<TRequest, TValue>(request);
+        } else {
+          item = {
+            request,
+            status: options.failureStatus,
+            attempts: retryAttempts(error),
+            error: errorMessage(error),
+          };
+        }
       }
-      break;
+      slots[index] = item;
+      completed++;
+      options.onProgress?.({ completed, total: requests.length, item });
+      // Cancelamento interrompe o lote inteiro, como antes: o que já terminou
+      // é preservado, o resto é marcado como cancelado.
+      if (item.status === 'CANCELLED') { stopped = true; break; }
     }
-  }
+  };
+
+  await Promise.all(Array.from({ length: workers }, () => runOne()));
+  if (stopped) markRemainingCancelled();
+
+  const items = slots.filter((item): item is DatasusBatchItem<TRequest, TValue> => item !== undefined);
   return summarize(items, requests.length);
 }
 

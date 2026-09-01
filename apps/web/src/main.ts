@@ -109,12 +109,14 @@ import {
   chooseVerifiedAuxiliaryBundle,
   extractOneArchiveEntry,
   extractSupportedArchive,
+  extractSupportedArchiveAsync,
   readLastDownloadTransport,
   extractSupportedArchiveFiles,
   fetchOfficialArchiveDetailed,
   prepareOfficialDownloadDetailed,
   searchOfficialAuxiliaries,
   searchOfficialCatalogBatch,
+  type CatalogSearchProgress,
   searchOfficialFiles,
   suggestedDefinitionName,
   type ExtractedArchiveFile,
@@ -6206,7 +6208,16 @@ function renderCatalogCapabilities(): void {
       ufs: selectedCatalogValues(catalogUf),
       annual,
     });
-    requestCount = ` · ${integerFormat.format(queries.length)} combinação(ões) a consultar`;
+    // Um número sozinho não avisa nada: "868 combinações" só assusta quem já
+    // sabe que cada uma é uma ida ao servidor. O tempo estimado é o que faz a
+    // pessoa decidir antes de esperar — e ela pode reduzir a seleção.
+    const estimativaSegundos = Math.round((queries.length * 0.35) / 6);
+    const aviso = queries.length > 60
+      ? ` — leva cerca de ${estimativaSegundos >= 60
+        ? `${Math.round(estimativaSegundos / 60)} min`
+        : `${estimativaSegundos}s`}; reduza anos ou UFs se for demais`
+      : '';
+    requestCount = ` · ${integerFormat.format(queries.length)} combinação(ões) a consultar${aviso}`;
   } catch {
     requestCount = ' · selecione ao menos um período';
   }
@@ -6416,7 +6427,7 @@ async function downloadCatalogEntries(
     };
   }
   const archiveSha256 = summary?.sha256 || await sha256(archive);
-  const extracted = extractSupportedArchive(archive);
+  const extracted = await extractSupportedArchiveAsync(archive);
   return {
     files: extracted.files,
     skipped: extracted.skipped,
@@ -7361,7 +7372,20 @@ async function executeCatalogQueries(
   activeCatalogController = controller;
   setCatalogBusy(true);
   try {
-    renderCatalogSearchBatch(await searchOfficialCatalogBatch(queries, controller.signal), system, fileType, queries);
+    // Mostra o que já chegou, em vez de esperar o lote inteiro. Antes, com
+    // dezenas de combinações, os arquivos "só apareciam quando você cancelava"
+    // — porque cancelar era a única forma de o lote devolver o parcial.
+    const parcial = document.createElement('p');
+    parcial.className = 'filter-info';
+    const renderParcial = (progress: CatalogSearchProgress): void => {
+      parcial.textContent = `Consultando… ${integerFormat.format(progress.completed)} de `
+        + `${integerFormat.format(progress.total)} · `
+        + `${integerFormat.format(progress.files.length)} arquivo(s) encontrado(s) até agora`;
+      if (!parcial.isConnected) catalogResults.prepend(parcial);
+    };
+    const resultado = await searchOfficialCatalogBatch(queries, controller.signal, renderParcial);
+    parcial.remove();
+    renderCatalogSearchBatch(resultado, system, fileType, queries);
   } catch (error) {
     const message = isAbortError(error)
       ? 'Consulta cancelada.'
