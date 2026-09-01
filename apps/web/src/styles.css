@@ -205,6 +205,12 @@ select:disabled, input:disabled { color: #898d92; background: #f5f5f6; }
 .dialog-link { color: var(--brand); font-weight: 600; }
 /* A barra de lote lidera a lista; a caixa por arquivo fica antes do nome,
    onde o olho procura por seleção. */
+.bridge-controls { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; margin-top: 9px; }
+.bridge-controls label > span { display: block; margin: 0 0 5px 2px; color: #4b535c; font-size: 12px; font-weight: 600; }
+.bridge-controls .secondary-button { min-height: 43px; }
+.bridge-verdict-ok { color: var(--ok); }
+.bridge-verdict-off { color: var(--muted); }
+.bridge-verdict-warn { color: var(--warn); }
 .catalog-batch-bar { flex-wrap: wrap; gap: 10px; border: 1px solid var(--brand-line); background: var(--brand-soft); }
 .catalog-batch-bar > div:first-child { display: flex; align-items: center; gap: 10px; }
 .catalog-batch-bar small { color: var(--muted); }

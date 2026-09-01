@@ -1321,3 +1321,67 @@ test('as ações em lote agem sobre a escolha, e "todos" continua a um clique', 
   await expect(bar).toContainText('3 de 3 selecionado(s)');
   await expect(page.locator('.catalog-batch-bar-actions button').first()).toBeEnabled();
 });
+
+test('o downloader local é oferecido, nunca iniciado sozinho, e só depois de verificar', async ({ page }) => {
+  // Uma página não pode executar programa na máquina de ninguém. O que se
+  // prova aqui é justamente o que o aplicativo NÃO faz por conta própria.
+  let probes = 0;
+  await page.route('http://127.0.0.1:8787/health', async (route) => {
+    probes++;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({
+        service: 'tabwin-bridge',
+        protocol: 1,
+        allowlist: ['https://ftp.datasus.gov.br/dissemin/publicos/… — árvore pública'],
+        directory: 'C:/Users/x/Downloads/TabWin',
+      }),
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+
+  // Abrir o catálogo não pode sondar a máquina: um site que varre portas ao
+  // carregar é exatamente o que não queremos ser.
+  await page.waitForTimeout(600);
+  expect(probes).toBe(0);
+
+  await page.locator('#bridge-panel summary').click();
+  const verdict = page.locator('#bridge-verdict');
+  await expect(verdict).toBeHidden();
+
+  // Verificar sem token detecta o auxiliar, mas não o dá por pronto.
+  await page.locator('#bridge-check').click();
+  await expect(verdict).toBeVisible();
+  await expect(verdict).toContainText('falta colar o token');
+  expect(probes).toBe(1);
+
+  // Com token, ele fica disponível e a allowlist aparece para o usuário ler.
+  await page.locator('#bridge-token').fill('token-de-teste');
+  await page.locator('#bridge-check').click();
+  await expect(verdict).toContainText('Downloader local disponível');
+  await expect(verdict).toContainText('ftp.datasus.gov.br');
+  await expect(verdict).toHaveClass(/bridge-verdict-ok/);
+});
+
+test('auxiliar de versão incompatível é recusado em vez de tentar adivinhar', async ({ page }) => {
+  await page.route('http://127.0.0.1:8787/health', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ service: 'tabwin-bridge', protocol: 99, allowlist: [], directory: 'x' }),
+    });
+  });
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#bridge-panel summary').click();
+  await page.locator('#bridge-token').fill('token-de-teste');
+  await page.locator('#bridge-check').click();
+  const verdict = page.locator('#bridge-verdict');
+  await expect(verdict).toContainText('incompatível');
+  await expect(verdict).toHaveClass(/bridge-verdict-warn/);
+});

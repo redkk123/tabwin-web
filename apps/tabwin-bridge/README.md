@@ -5,9 +5,10 @@ um caso específico: downloads do DATASUS que o navegador não consegue concluir
 — CORS, instabilidade do servidor oficial, timeout de proxy, arquivo grande
 demais, conexão que cai no meio de 400 MB.
 
-Estado: **leitura e download implementados e testados; a integração com a
-interface do TabWin Web ainda não está ligada.** Hoje ele se usa por conta
-própria (seção "Usar sem a interface").
+Estado: **implementado, testado e ligado à interface.** No TabWin Web, em
+**Buscar no DATASUS → Downloader local**, você cola o token e clica em
+Verificar. Depois de uma falha de download que ele plausivelmente resolva,
+aparece a oferta de tentar por ele.
 
 ---
 
@@ -97,8 +98,10 @@ apague a pasta do repositório; os arquivos baixados ficam em
 
 ## Limitações conhecidas
 
-- **A integração com a interface não está ligada.** O provider no TabWin Web
-  ainda não existe; este auxiliar hoje se usa por fora.
+- **O arquivo vai para o disco, não para dentro da aba.** Uma página não lê
+  arquivo do disco sem que a pessoa o escolha, então o aplicativo informa onde
+  o arquivo caiu e você o abre pela área "Abra seu arquivo". Não há como isso
+  carregar sozinho sem pedir a pasta ao usuário.
 - **Página HTTPS falando com `127.0.0.1` depende do navegador.** Chrome e
   Firefox tratam `localhost` como origem confiável, então a chamada funciona
   com os cabeçalhos de Private Network Access que o auxiliar já envia. O Safari

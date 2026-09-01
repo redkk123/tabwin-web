@@ -73,6 +73,15 @@ import { tabulationToCsv, tabulationToJson, tabulationToXml } from '../../../pac
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import {
+  bridgeWouldHelp,
+  cancelBridgeDownload,
+  describeBridgeProbe,
+  probeBridge,
+  readBridgeJob,
+  startBridgeDownload,
+  type BridgeJob,
+} from '../../../packages/acquisition/src/bridge-client.ts';
+import {
   describeSkippedEntries,
   type SkippedArchiveEntry,
 } from '../../../packages/acquisition/src/archive-limits.ts';
@@ -5879,6 +5888,142 @@ function archiveFile(entry: ExtractedArchiveFile): File {
   return new File([bytes], displayBaseName(entry.name), { type: 'application/octet-stream' });
 }
 
+const bridgePanel = element<HTMLDetailsElement>('#bridge-panel');
+const bridgeTokenInput = element<HTMLInputElement>('#bridge-token');
+const bridgeCheckButton = element<HTMLButtonElement>('#bridge-check');
+const bridgeVerdict = element<HTMLElement>('#bridge-verdict');
+
+/**
+ * Só fica disponível depois de o usuário verificar e o auxiliar responder.
+ *
+ * Nunca é preenchido sozinho: a página não descobre o auxiliar por conta
+ * própria nem o inicia. Sem isso, um site qualquer poderia sondar portas da
+ * máquina de quem abrisse a página.
+ */
+let bridgeReady: { token: string; directory: string } | null = null;
+
+function setBridgeVerdict(message: string, kind: 'ok' | 'off' | 'warn'): void {
+  bridgeVerdict.hidden = false;
+  bridgeVerdict.textContent = message;
+  bridgeVerdict.className = `filter-info bridge-verdict-${kind}`;
+}
+
+async function checkBridge(): Promise<void> {
+  const token = bridgeTokenInput.value.trim();
+  bridgeCheckButton.disabled = true;
+  setBridgeVerdict('Perguntando ao auxiliar…', 'off');
+  try {
+    const probe = await probeBridge();
+    if (!probe.available) {
+      bridgeReady = null;
+      setBridgeVerdict(describeBridgeProbe(probe), probe.reason === 'offline' ? 'off' : 'warn');
+      return;
+    }
+    if (!token) {
+      bridgeReady = null;
+      setBridgeVerdict(
+        `${describeBridgeProbe(probe)} — falta colar o token que ele imprime ao iniciar.`,
+        'warn',
+      );
+      return;
+    }
+    bridgeReady = { token, directory: probe.health.directory };
+    setBridgeVerdict(
+      `${describeBridgeProbe(probe)}. Endereços que ele pode acessar: ${probe.health.allowlist.join(' | ')}`,
+      'ok',
+    );
+  } finally {
+    bridgeCheckButton.disabled = false;
+  }
+}
+
+bridgeCheckButton.addEventListener('click', () => void checkBridge());
+
+/**
+ * Oferece o auxiliar depois de uma falha que ele plausivelmente resolve.
+ *
+ * O botão só baixa quando clicado, e o arquivo vai para o disco — não para
+ * dentro da aba. Uma página não lê arquivo do disco sem que a pessoa o
+ * escolha, então a interface diz onde ele caiu em vez de fingir que carregou.
+ */
+function offerBridgeAfterFailure(remote: DatasusRemoteFile, error: unknown): void {
+  if (!bridgeWouldHelp(error)) return;
+
+  const panel = document.createElement('div');
+  panel.className = 'catalog-result catalog-result-skipped';
+  const details = document.createElement('div');
+  const name = document.createElement('b');
+  name.textContent = `${remote.name} falhou no navegador`;
+  const meta = document.createElement('small');
+  details.append(name, meta);
+
+  if (!bridgeReady) {
+    meta.textContent = 'Um downloader local pode terminar esse download. Abra "Downloader local", '
+      + 'inicie o auxiliar na sua máquina e clique em Verificar.';
+    panel.append(details);
+    catalogResults.append(panel);
+    return;
+  }
+
+  meta.textContent = `Salvará em ${bridgeReady.directory}`;
+  const run = document.createElement('button');
+  run.className = 'secondary-button';
+  run.type = 'button';
+  run.textContent = 'Baixar com o downloader local';
+  run.addEventListener('click', () => {
+    run.disabled = true;
+    void runBridgeDownload(remote, meta, run);
+  });
+  panel.append(details, run);
+  catalogResults.append(panel);
+}
+
+async function runBridgeDownload(
+  remote: DatasusRemoteFile,
+  meta: HTMLElement,
+  run: HTMLButtonElement,
+): Promise<void> {
+  const ready = bridgeReady;
+  if (!ready) return;
+  const options = { token: ready.token };
+  try {
+    // A URL preparada é a mesma que o navegador usaria; o auxiliar a valida de
+    // novo contra a própria allowlist, então este passo não é confiança cega.
+    const prepared = remote.preparedUrl ?? (await prepareOfficialDownloadDetailed([remote])).value;
+    let job: BridgeJob = await startBridgeDownload(options, prepared);
+    run.textContent = 'Cancelar';
+    run.disabled = false;
+    run.onclick = () => { void cancelBridgeDownload(options, job.id); };
+
+    while (job.status === 'pending' || job.status === 'downloading') {
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      job = await readBridgeJob(options, job.id);
+      meta.textContent = job.totalBytes
+        ? `Baixando pelo downloader local — ${formatBytes(job.receivedBytes)} de ${formatBytes(job.totalBytes)}`
+        : `Baixando pelo downloader local — ${formatBytes(job.receivedBytes)}`;
+    }
+
+    run.onclick = null;
+    if (job.status === 'done') {
+      meta.textContent = `Baixado pelo downloader local em ${job.path}. `
+        + 'Abra o arquivo pela área de "Abra seu arquivo" para analisar aqui.';
+      run.hidden = true;
+      setCatalogStatus(`${remote.name} salvo em disco pelo downloader local.`);
+      return;
+    }
+    meta.textContent = job.status === 'cancelled'
+      ? 'Download cancelado; o pedaço baixado ficou salvo e pode ser retomado.'
+      : `O downloader local também não conseguiu: ${job.error ?? 'motivo não informado'}`;
+    run.textContent = 'Tentar de novo';
+    run.disabled = false;
+    run.onclick = () => { run.disabled = true; void runBridgeDownload(remote, meta, run); };
+  } catch (error) {
+    meta.textContent = error instanceof Error ? error.message : String(error);
+    run.textContent = 'Tentar de novo';
+    run.disabled = false;
+  }
+}
+
 function setCatalogStatus(message: string, isError = false): void {
   catalogStatus.textContent = message;
   catalogStatus.classList.toggle('error', isError);
@@ -6503,6 +6648,7 @@ async function openOfficialFile(
       ? timedOut ? 'O DATASUS demorou mais de 2 minutos para responder. Tente novamente.' : 'Operação cancelada.'
       : cause instanceof Error ? cause.message : String(cause);
     setCatalogStatus(message, !isAbortError(error) || timedOut);
+    if (!isAbortError(error)) offerBridgeAfterFailure(remote, cause);
     return {
       ok: false,
       status: isAbortError(error) && !timedOut

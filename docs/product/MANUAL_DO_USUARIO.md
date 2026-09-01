@@ -111,6 +111,25 @@ com os dados, ele fica de fora — **com aviso, nomeando o arquivo e o tamanho**
 navegador. O resto do pacote abre normalmente. A consequência prática de ficar
 sem ele: algum rótulo pode aparecer pelo código em vez do nome.
 
+### Downloader local (opcional)
+
+Quando o navegador não consegue concluir um download — instabilidade do
+servidor oficial, tempo esgotado, arquivo muito grande, conexão que cai no meio
+— existe um auxiliar que roda na **sua** máquina e termina o trabalho.
+
+Ele é opcional e **você** quem inicia: a página nunca executa nada sozinha, e
+nem sequer verifica se ele está rodando antes de você pedir. Depois de iniciar
+o auxiliar, cole em **Downloader local** o token que ele imprime e clique em
+**Verificar**. A partir daí, uma falha que ele plausivelmente resolva passa a
+oferecer "Baixar com o downloader local".
+
+O arquivo vai para o **disco**, não para dentro da aba: uma página não lê
+arquivo do computador sem que você o escolha. O aplicativo diz onde ele caiu, e
+você o abre normalmente pela área "Abra seu arquivo".
+
+Instalação, endereços que ele pode acessar e modelo de ameaça estão em
+`apps/tabwin-bridge/README.md`.
+
 ---
 
 ## 4. Montar a tabela

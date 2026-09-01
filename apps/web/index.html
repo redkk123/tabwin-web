@@ -930,6 +930,27 @@
           <button class="text-button danger-text-button" id="catalog-cache-clear" type="button" disabled>Limpar cache</button>
         </div>
         <div class="catalog-results" id="catalog-recent-list"></div>
+
+        <details class="sidebar-group" id="bridge-panel">
+          <summary>Downloader local <span>opcional</span></summary>
+          <div>
+            <p class="filter-info">
+              Quando o navegador não consegue concluir um download do DATASUS — instabilidade do
+              servidor, tempo esgotado, arquivo muito grande — um auxiliar rodando na sua máquina
+              pode terminar o trabalho. Ele é opcional, e é você quem o inicia: esta página nunca
+              executa nada sozinha.
+            </p>
+            <div class="bridge-controls">
+              <label>
+                <span>Token da sessão</span>
+                <input id="bridge-token" type="password" autocomplete="off"
+                  placeholder="cole o token que o auxiliar imprime ao iniciar" />
+              </label>
+              <button class="secondary-button" id="bridge-check" type="button">Verificar</button>
+            </div>
+            <p class="filter-info" id="bridge-verdict" hidden></p>
+          </div>
+        </details>
         <p class="catalog-cache-note">Os pacotes ficam somente neste navegador e podem ser reabertos sem internet. Removê-los não apaga arquivos que você salvou fora do aplicativo.</p>
       </section>
       <p class="catalog-source">Catálogo e downloads fornecidos por <a href="https://datasus.saude.gov.br/transferencia-de-arquivos/" target="_blank" rel="noreferrer">DATASUS · Ministério da Saúde</a>.</p>
