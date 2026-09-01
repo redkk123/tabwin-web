@@ -57,8 +57,10 @@ SIM, SINASC, SIH, CNES…), tipo de dado, e ano ou período.
 
 Alguns pontos que economizam tempo:
 
-- **Vários anos de uma vez.** Segure Ctrl (ou Cmd) para selecionar mais de um
-  na lista de anos.
+- **Vários anos de uma vez.** Segure Ctrl (ou Cmd) para selecionar mais de um,
+  ou clique em **todos** ao lado do rótulo — o mesmo vale para mês e UF. O
+  botão vira **limpar** quando tudo já está marcado, então ele nunca mente
+  sobre o que o próximo clique faz.
 - **Arquivo nacional × por UF.** Alguns sistemas publicam um arquivo único do
   Brasil; nesses, a UF se escolhe *depois*, no filtro, e não na busca. Em
   SINAN, atenção: existe UF de residência **e** UF de notificação, e são coisas
@@ -68,6 +70,27 @@ Alguns pontos que economizam tempo:
 - **Salvar manifesto da consulta** grava o que foi pedido e o que foi
   encontrado. **Comparar manifesto anterior** mostra o que apareceu ou sumiu
   desde a última vez — útil para acompanhar publicação de dados preliminares.
+
+### Baixar em lote, e empacotar
+
+Com mais de um resultado aparece uma barra com uma **caixa por arquivo**
+(todas marcadas) e duas ações, que agem sobre **o que estiver escolhido** —
+e há um **selecionar todos** para quem quer a lista inteira num clique:
+
+- **Baixar e combinar** — abre os arquivos e monta um conjunto único. O
+  primeiro sucesso inicia o conjunto; os demais só entram se o esquema for
+  compatível.
+- **Baixar e empacotar .zip** — baixa e entrega um pacote para você guardar,
+  **sem abrir nem combinar**. Serve para levar os dados ao R, ao Python ou a
+  outra máquina. Dentro vai um `MANIFESTO.json` com origem, tamanho, hash e
+  hora de obtenção de cada arquivo: um pacote de microdados sem procedência
+  vira problema na hora de citar.
+
+Com nada marcado as duas ficam indisponíveis, em vez de rodarem vazias.
+
+Em ambas, **uma falha não derruba o lote**: o que falhou é nomeado e você
+pode **retentar somente as falhas**, sem baixar tudo de novo. Os `.dbc`
+entram no pacote sem recompressão, porque já são comprimidos.
 
 ### Arquivos auxiliares (DEF e CNV)
 
