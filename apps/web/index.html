@@ -73,6 +73,11 @@
             <button class="secondary-button" id="cnv-editor-button" type="button">Editor de CNV</button>
             <button class="secondary-button" id="def-inspector-button" type="button" disabled>Inspetor de DEF</button>
           </div>
+          <p class="group-hint">
+            DEF e CNV são o que transforma código em nome legível — <code>1</code> vira
+            <b>Masculino</b>. O <b>Editor de CNV</b> cria e valida conversões; o
+            <b>Inspetor de DEF</b> mostra o que um DEF aberto declara.
+          </p>
         </details>
         <label class="def-picker" id="def-picker" hidden>
           <span>Definição (DEF) ativa</span>
@@ -92,6 +97,12 @@
           <input id="table-input" type="file" accept=".twtable" hidden />
           <input id="include-table-input" type="file" accept=".twtable" hidden />
         </div>
+        <p class="group-hint">
+          <b>Análise</b> (<code>.twrecipe</code>) guarda o plano — variáveis, filtros,
+          conversões e transformações — e reconstrói a tabela ao reabrir.
+          <b>Tabela</b> (<code>.twtable</code>) guarda o resultado já calculado, para
+          reabrir ou comparar depois.
+        </p>
         </details>
 
         <form id="analysis-form" class="analysis-form">
@@ -480,20 +491,29 @@
           </section>
 
           <nav class="view-tabs" aria-label="Visualização do resultado">
-            <button class="active" data-view="table" type="button">Tabela</button>
-            <button data-view="chart" type="button">Gráfico</button>
-            <button data-view="map" type="button">Mapa</button>
-            <button data-view="statistics" type="button">Estatística</button>
-            <button data-view="compare" type="button">Comparar</button>
-            <button data-view="investigate" type="button">Investigar</button>
-            <button data-view="audit" type="button">Auditoria</button>
+            <button class="active" data-view="table" type="button" title="O resultado da tabulação, mais totais, percentuais e formatação">Tabela</button>
+            <button data-view="chart" type="button" title="Barras, linhas e pizza a partir da tabela, com exportação SVG e PNG">Gráfico</button>
+            <button data-view="map" type="button" title="Mapa temático por área, a partir de MAP legado ou GeoJSON">Mapa</button>
+            <button data-view="statistics" type="button" title="Descritivas, correlação, regressão e taxas com padronização">Estatística</button>
+            <button data-view="compare" type="button" title="Alinha duas tabelas por chave e mostra as diferenças">Comparar</button>
+            <button data-view="investigate" type="button" title="Procura estranheza estatística no grupo filtrado, contra o resto">Investigar</button>
+            <button data-view="audit" type="button" title="De onde vieram os dados e o que foi feito com eles">Auditoria</button>
           </nav>
 
           <div class="view-panel active" id="table-view" data-panel="table">
             <div class="empty-state" id="empty-state">
               <span class="empty-orbit" aria-hidden="true"><i></i></span>
-              <h3>Solte um DBC e deixe o resto com a gente</h3>
-              <p>A primeira frequência é calculada automaticamente. Depois você pode trocar linhas, colunas e conversões.</p>
+              <h3>Abra um arquivo para começar</h3>
+              <p>
+                Arraste um <b>.DBC</b> para a área à esquerda, ou use <b>Buscar no DATASUS</b>
+                para baixar um do catálogo oficial. Assim que o arquivo abrir, uma frequência
+                simples é calculada sozinha — é só para você conferir que os números fazem
+                sentido; depois você escolhe linhas, colunas e conversões.
+              </p>
+              <p class="empty-state-note">
+                Os dados ficam neste aparelho: a leitura e o cálculo acontecem no navegador.
+                <a href="./manual.html" target="_blank" rel="noopener">Ler o manual</a>
+              </p>
             </div>
             <section class="table-operations" id="table-operations" hidden aria-label="Operações sobre a tabela">
               <div class="table-operation-heading">

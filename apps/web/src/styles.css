@@ -272,6 +272,10 @@ select:disabled, input:disabled { color: #898d92; background: #f5f5f6; }
 .empty-orbit::before { width: 0; height: 0; }
 .empty-orbit::after { width: 0; height: 0; }
 .empty-orbit i { width: 13px; height: 13px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 22px rgba(81, 113, 149, .5); }
+.empty-state p { max-width: 460px; }
+.empty-state-note { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); color: var(--faint); font-size: 12px; }
+.empty-state-note a { color: var(--brand); font-weight: 600; }
+.group-hint code, .empty-state b { color: var(--ink); }
 .table-wrap { max-height: 470px; overflow: auto; border: 1px solid #e3e4e6; border-radius: 6px; }
 .table-wrap caption { padding: 13px 14px; text-align: left; color: var(--ink); background: #fcfcfd; }
 .table-wrap caption strong,.table-wrap caption span { display: block; }
