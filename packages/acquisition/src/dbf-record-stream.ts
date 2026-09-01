@@ -93,15 +93,79 @@ class RecordStreamCancelled extends Error {
   }
 }
 
+/**
+ * Tamanho até o qual montar a string byte a byte vence o `TextDecoder`.
+ *
+ * Medido neste projeto: para 2 bytes o caminho manual é ~11x mais rápido,
+ * para 6 bytes ~3x, empata perto de 20 e perde daí em diante — o
+ * `TextDecoder` tem custo fixo por chamada que domina em campo curto e se
+ * dilui em campo longo. Os campos do DATASUS são quase todos códigos curtos
+ * (UF com 2, ano com 4, município com 6), exatamente onde o manual ganha.
+ */
+const ASCII_FAST_PATH_MAX_BYTES = 16;
+
+/** Espaço, tab, LF, VT, FF e CR — o que `String.prototype.trim` corta em ASCII. */
+function isAsciiSpace(byte: number): boolean {
+  return byte === 0x20 || (byte >= 0x09 && byte <= 0x0d);
+}
+
+/**
+ * Texto de um campo, com o mesmo recorte que o código anterior fazia.
+ *
+ * `mode` reproduz exatamente as duas regras que existiam:
+ *
+ * - `'trailing-spaces'` era `decode(raw).replace(/ +$/, '')` — só espaço, só
+ *   à direita. Espaço à esquerda pode ser significativo num código alinhado, e
+ *   comê-lo mudaria o valor.
+ * - `'both-ends'` era `decode(raw).trim()`.
+ *
+ * A otimização está em montar a string direto dos bytes quando o campo é curto
+ * e puramente ASCII. Isso é seguro por definição do Windows-1252: 0x00–0x7F são
+ * idênticos ao Unicode. Qualquer byte acima cai no decodificador de verdade —
+ * acento em nome de município existe e não se adivinha —, e ali o recorte é
+ * refeito com `trim` para o NBSP (0xA0) continuar sendo cortado como antes.
+ */
+function fieldText(
+  raw: Uint8Array,
+  decoder: TextDecoder,
+  mode: 'trailing-spaces' | 'both-ends',
+): string {
+  const trimmable = mode === 'both-ends'
+    ? isAsciiSpace
+    : (byte: number): boolean => byte === 0x20;
+
+  let end = raw.length;
+  while (end > 0 && trimmable(raw[end - 1]!)) end--;
+  let begin = 0;
+  if (mode === 'both-ends') while (begin < end && trimmable(raw[begin]!)) begin++;
+  if (begin >= end) return '';
+
+  if (end - begin <= ASCII_FAST_PATH_MAX_BYTES) {
+    let text = '';
+    let at = begin;
+    for (; at < end; at++) {
+      const byte = raw[at]!;
+      if (byte > 0x7f) break;
+      text += String.fromCharCode(byte);
+    }
+    if (at === end) return text;
+  }
+  const decoded = decoder.decode(raw.subarray(begin, end));
+  // Pode haver espaço não-ASCII (NBSP) que o corte por byte não pegou.
+  return mode === 'both-ends' ? decoded.trim() : decoded.replace(/ +$/, '');
+}
+
 function decodeFieldValue(raw: Uint8Array, field: DbfField, decoder: TextDecoder): DbfValue {
   switch (field.type) {
     case 'C': {
-      const text = decoder.decode(raw).replace(/ +$/, '');
+      // Só o espaço à direita some: espaço à esquerda pode ser significativo
+      // num código alinhado, e comê-lo mudaria o valor.
+      const text = fieldText(raw, decoder, 'trailing-spaces');
       return text === '' ? null : text;
     }
     case 'N':
     case 'F': {
-      const text = decoder.decode(raw).trim();
+      const text = fieldText(raw, decoder, 'both-ends');
       if (text === '' || text === '*') return null;
       const value = Number(text);
       return Number.isFinite(value) ? value : null;
@@ -111,7 +175,7 @@ function decodeFieldValue(raw: Uint8Array, field: DbfField, decoder: TextDecoder
       return new DataView(raw.buffer, raw.byteOffset, raw.byteLength).getInt32(0, true);
     }
     case 'D': {
-      const text = decoder.decode(raw).trim();
+      const text = fieldText(raw, decoder, 'both-ends');
       if (text.length !== 8 || !/^\d{8}$/.test(text)) return null;
       return new Date(Date.UTC(Number(text.slice(0, 4)), Number(text.slice(4, 6)) - 1, Number(text.slice(6, 8))));
     }

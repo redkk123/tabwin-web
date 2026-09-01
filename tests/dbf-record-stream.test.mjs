@@ -263,3 +263,66 @@ test('projection rejects a field the DBF does not declare', () => {
     /Campo inexistente no DBF: INEXISTENTE/,
   );
 });
+
+test('o caminho rápido de ASCII decodifica exatamente como o TextDecoder decodificava', () => {
+  // A otimização veio de observar que o tabcgi.exe do TabNet não paga custo de
+  // decodificador por campo curto. Ela só vale se produzir o MESMO valor: um
+  // caractere trocado em silêncio contaminaria toda tabulação feita por cima.
+  //
+  // O teste monta um DBF de verdade com os bytes difíceis e lê pelo caminho
+  // real, em vez de expor a função interna só para poder ser testada.
+  const decoder = new TextDecoder('windows-1252');
+  const cp1252 = (text) => {
+    const bytes = new Uint8Array(text.length);
+    for (let index = 0; index < text.length; index++) bytes[index] = text.charCodeAt(index) & 0xff;
+    return bytes;
+  };
+  const LENGTH = 12;
+  const pad = (text) => text.padEnd(LENGTH, ' ').slice(0, LENGTH);
+
+  const casos = [
+    'AC', '  AC', '351000', '', '*', ' 34', '1234.56', '-7',
+    // Acento em cp1252: sai do caminho rápido e cai no decodificador.
+    'S\xE3o Paulo', 'Ji-Paran\xE1', '\xC7\xE3o',
+    // NBSP (0xA0): trim() corta, um corte só de espaço não cortaria.
+    '\xA042\xA0', '\xA0',
+    // Tabulação e CR, que trim() corta e o corte por espaço não cortaria.
+    '\t42\t', ' \t 7 \r',
+    // Cheio, para exercitar o limite do caminho rápido.
+    'XXXXXXXXXXXX', 'nome com \xE9',
+  ].map(pad);
+
+  // Cabeçalho DBF com um único campo C de 12 bytes.
+  const header = new Uint8Array(33 + 32);
+  const view = new DataView(header.buffer);
+  header[0] = 0x03;
+  view.setUint32(4, casos.length, true);
+  view.setUint16(8, 33 + 32, true);
+  view.setUint16(10, 1 + LENGTH, true);
+  header.set(cp1252('TEXTO'), 32);
+  header[32 + 11] = 'C'.charCodeAt(0);
+  header[32 + 16] = LENGTH;
+  header[32 + 32] = 0x0d;
+
+  const body = new Uint8Array((1 + LENGTH) * casos.length + 1);
+  casos.forEach((caso, index) => {
+    const at = index * (1 + LENGTH);
+    body[at] = 0x20;
+    body.set(cp1252(caso), at + 1);
+  });
+  body[body.length - 1] = 0x1a;
+
+  const dbf = new Uint8Array(header.length + body.length);
+  dbf.set(header, 0);
+  dbf.set(body, header.length);
+
+  const lidos = [];
+  streamDbfRecords(dbf, (batch) => { for (const record of batch.records) lidos.push(record.TEXTO); });
+
+  assert.equal(lidos.length, casos.length);
+  casos.forEach((caso, index) => {
+    // Exatamente o que o código anterior fazia para um campo C.
+    const antigo = decoder.decode(cp1252(caso)).replace(/ +$/, '');
+    assert.deepEqual(lidos[index], antigo === '' ? null : antigo, 'divergiu em ' + JSON.stringify(caso));
+  });
+});
