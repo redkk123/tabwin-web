@@ -88,6 +88,18 @@ e há um **selecionar todos** para quem quer a lista inteira num clique:
 
 Com nada marcado as duas ficam indisponíveis, em vez de rodarem vazias.
 
+### Baixar o que já está guardado
+
+Em **Downloads recentes**, cada pacote guardado neste aparelho tem **Baixar**
+ao lado de **Abrir offline**. Querer o arquivo é diferente de querer analisá-lo
+aqui: o botão grava o `.dbc` em disco **sem abrir a análise**, para você levar
+o dado a outro programa. Com mais de um guardado, aparece **Baixar tudo
+(.zip)** no topo da lista.
+
+Sai o arquivo que você reconhece — o `.dbc` de dentro do pacote —, não o
+`.zip` como veio da rede. Quando um pacote traz mais de um arquivo, sai um
+`.zip`, porque juntar arquivos distintos num nome só seria mentira.
+
 Em ambas, **uma falha não derruba o lote**: o que falhou é nomeado e você
 pode **retentar somente as falhas**, sem baixar tudo de novo. Os `.dbc`
 entram no pacote sem recompressão, porque já são comprimidos.

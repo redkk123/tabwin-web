@@ -6962,6 +6962,82 @@ async function openRecentArchive(summary: CachedArchiveSummary): Promise<void> {
  */
 let recentArchivesGeneration = 0;
 
+/**
+ * Grava em disco um pacote que já está no cache deste aparelho.
+ *
+ * Entrega o arquivo de dados de dentro do pacote, e não o `.zip` como veio,
+ * porque é o `.dbc` que a pessoa reconhece e é ele que outro programa abre.
+ * Quando o pacote traz mais de um, sai um `.zip` — juntar arquivos distintos
+ * num nome só seria mentira.
+ */
+async function saveCachedArchiveToDisk(summary: CachedArchiveSummary): Promise<void> {
+  const cached = await readCachedArchive(summary.key, Number.POSITIVE_INFINITY);
+  if (!cached) throw new Error('O arquivo não está mais no cache deste aparelho.');
+  const extracted = extractSupportedArchiveFiles(cached.bytes);
+  const data = extracted.filter((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
+  const wanted = data.length ? data : extracted;
+
+  if (wanted.length === 1) {
+    const only = wanted[0]!;
+    downloadBlob(
+      new Blob([only.bytes as BlobPart], { type: 'application/octet-stream' }),
+      displayBaseName(only.name),
+    );
+    setCatalogStatus(`${displayBaseName(only.name)} salvo em disco.`);
+    return;
+  }
+  if (!wanted.length) {
+    // O pacote existe mas não traz nada reconhecível: entregar o zip cru é
+    // melhor do que dizer que não há nada.
+    downloadBlob(new Blob([cached.bytes as BlobPart], { type: 'application/zip' }), `${summary.key.replace(/[^w.-]+/g, '-')}.zip`);
+    setCatalogStatus('O pacote não traz DBC ou DBF reconhecido; o arquivo original foi salvo.');
+    return;
+  }
+  const bundle: Record<string, [Uint8Array, { level: 0 }]> = {};
+  for (const entry of wanted) bundle[displayBaseName(entry.name)] = [entry.bytes, { level: 0 }];
+  const zipped = zipSync(bundle, { level: 0 });
+  downloadBlob(new Blob([zipped as BlobPart], { type: 'application/zip' }), `datasus-${new Date().toISOString().slice(0, 10)}.zip`);
+  setCatalogStatus(`${integerFormat.format(wanted.length)} arquivo(s) salvos em um .zip.`);
+}
+
+/**
+ * Junta num `.zip` tudo que está guardado neste aparelho.
+ *
+ * Um pacote que não puder ser lido não derruba os outros: ele é nomeado no
+ * fim e o `.zip` sai com o que deu certo, como no resto da aquisição.
+ */
+async function saveAllCachedArchives(summaries: readonly CachedArchiveSummary[]): Promise<void> {
+  const bundle: Record<string, [Uint8Array, { level: 0 }]> = {};
+  const failed: string[] = [];
+  for (const summary of summaries) {
+    try {
+      const cached = await readCachedArchive(summary.key, Number.POSITIVE_INFINITY);
+      if (!cached) throw new Error('não está mais no cache');
+      for (const entry of extractSupportedArchiveFiles(cached.bytes)) {
+        if (!['DBC', 'DBF'].includes(extensionOf(entry.name))) continue;
+        const name = displayBaseName(entry.name);
+        // Nomes repetidos não podem se sobrescrever em silêncio.
+        bundle[bundle[name] ? `${summary.key.slice(-6)}-${name}` : name] = [entry.bytes, { level: 0 }];
+      }
+    } catch {
+      failed.push(summary.sources[0]?.name ?? summary.key);
+    }
+  }
+  const count = Object.keys(bundle).length;
+  if (!count) throw new Error('Nenhum dos pacotes guardados pôde ser lido.');
+  // Nível 0: DBC já é comprimido.
+  const zipped = zipSync(bundle, { level: 0 });
+  downloadBlob(
+    new Blob([zipped as BlobPart], { type: 'application/zip' }),
+    `datasus-guardados-${new Date().toISOString().slice(0, 10)}.zip`,
+  );
+  setCatalogStatus(
+    `${integerFormat.format(count)} arquivo(s) no pacote.`
+    + (failed.length ? ` ${failed.length} não pôde(ram) ser lido(s): ${failed.join(', ')}.` : ''),
+    failed.length > 0,
+  );
+}
+
 async function renderRecentArchives(): Promise<void> {
   const generation = ++recentArchivesGeneration;
   catalogRecentSummary.textContent = 'Verificando o armazenamento local…';
@@ -6978,6 +7054,35 @@ async function renderRecentArchives(): Promise<void> {
       ? `${integerFormat.format(dataCount)} arquivo(s) de dados · ${formatBytes(totalBytes)} em ${integerFormat.format(archives.length)} pacote(s)`
       : 'Nenhum download oficial salvo neste aparelho.';
     catalogCacheClear.disabled = archives.length === 0;
+
+    // Com vários pacotes guardados, salvar um a um é trabalho manual sem
+    // motivo. O botão só aparece quando de fato há mais de um.
+    const dataArchives = archives.filter((archive) => archive.role === 'data');
+    if (dataArchives.length > 1) {
+      const bulk = document.createElement('div');
+      bulk.className = 'catalog-result catalog-batch-bar';
+      const description = document.createElement('div');
+      const title = document.createElement('b');
+      title.textContent = `Baixar os ${integerFormat.format(dataArchives.length)} arquivos guardados`;
+      const note = document.createElement('small');
+      note.textContent = 'Um .zip com os DBC deste aparelho, sem precisar abrir nenhum';
+      description.append(title, note);
+
+      const run = document.createElement('button');
+      run.className = 'secondary-button';
+      run.type = 'button';
+      run.textContent = 'Baixar tudo (.zip)';
+      run.addEventListener('click', () => {
+        run.disabled = true;
+        const label = run.textContent;
+        run.textContent = 'Montando…';
+        void saveAllCachedArchives(dataArchives)
+          .catch((error: unknown) => setCatalogStatus(error instanceof Error ? error.message : String(error), true))
+          .finally(() => { run.disabled = false; run.textContent = label; });
+      });
+      bulk.append(description, run);
+      catalogRecentList.append(bulk);
+    }
 
     for (const archive of archives) {
       const item = document.createElement('div');
@@ -7000,6 +7105,25 @@ async function renderRecentArchives(): Promise<void> {
         open.addEventListener('click', () => void openRecentArchive(archive));
         actions.append(open);
       }
+
+      // Baixar direto do cache: o arquivo já está neste aparelho, e querer o
+      // arquivo é diferente de querer analisá-lo aqui. Sem isto, a única forma
+      // de tirá-lo daqui era abrir a análise primeiro — trabalho à toa, e
+      // impossível quando o objetivo é só levar o dado para outro programa.
+      const save = document.createElement('button');
+      save.className = 'secondary-button';
+      save.type = 'button';
+      save.textContent = 'Baixar';
+      save.title = 'Salva o arquivo em disco, sem abrir a análise';
+      save.addEventListener('click', () => {
+        save.disabled = true;
+        const label = save.textContent;
+        save.textContent = 'Extraindo…';
+        void saveCachedArchiveToDisk(archive)
+          .catch((error: unknown) => setCatalogStatus(error instanceof Error ? error.message : String(error), true))
+          .finally(() => { save.disabled = false; save.textContent = label; });
+      });
+      actions.append(save);
       const remove = document.createElement('button');
       remove.className = 'text-button danger-text-button';
       remove.type = 'button';

@@ -1415,3 +1415,55 @@ test('o pacote para o Lab sai com os dados e a procedência junto', async ({ pag
   const csv = strFromU8(entries['dados.csv']);
   expect(csv.split('\r\n').length - 1).toBe(provenance.rowCount + 1);
 });
+
+test('o arquivo guardado pode ser baixado sem precisar abrir a análise', async ({ page }) => {
+  // Querer o arquivo é diferente de querer analisá-lo aqui. Antes, a única
+  // forma de tirá-lo do aparelho era abrir a análise primeiro.
+  await page.route('https://datasus.saude.gov.br/wp-content/ftp.php', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: '[]',
+    });
+  });
+  await page.goto('/');
+
+  // O zip é montado aqui e entregue como bytes: o navegador de teste não tem
+  // como importar fflate da árvore de node_modules.
+  const { zipSync, strToU8 } = await import('fflate');
+  const archive = [...zipSync({ 'GUARDADO01.dbc': strToU8('conteudo-de-teste') })];
+
+  await page.evaluate(async (bytes) => {
+    const open = indexedDB.open('tabwin-web', 1);
+    const database: IDBDatabase = await new Promise((resolve, reject) => {
+      open.onsuccess = () => resolve(open.result);
+      open.onerror = () => reject(open.error);
+      open.onupgradeneeded = () => {
+        if (!open.result.objectStoreNames.contains('official-archives')) {
+          open.result.createObjectStore('official-archives', { keyPath: 'key' });
+        }
+      };
+    });
+    const transaction = database.transaction('official-archives', 'readwrite');
+    transaction.objectStore('official-archives').put({
+      key: 'official-v1:teste',
+      savedAt: Date.now(),
+      bytes: new Uint8Array(bytes).buffer,
+      sha256: 'a'.repeat(64),
+      role: 'data',
+      sources: [{ name: 'GUARDADO01.dbc', address: 'ftp://ftp.datasus.gov.br/x', source: 'SINAN', modality: 'Dados' }],
+    });
+    await new Promise((resolve) => { transaction.oncomplete = () => resolve(null); });
+  }, archive);
+
+  await page.locator('#catalog-button').click();
+  const row = page.locator('.catalog-recent-item').filter({ hasText: 'GUARDADO01.dbc' });
+  await expect(row).toBeVisible();
+
+  const download = page.waitForEvent('download');
+  await row.getByRole('button', { name: 'Baixar' }).click();
+  const file = await download;
+  // Sai o DBC que a pessoa reconhece, não o .zip como veio da rede.
+  expect(file.suggestedFilename()).toBe('GUARDADO01.dbc');
+});
