@@ -105,7 +105,12 @@ function baseHeaders(origin = null, cacheControl = 'no-store') {
   });
   if (origin) {
     headers.set('Access-Control-Allow-Origin', origin);
-    headers.set('Access-Control-Expose-Headers', 'Content-Disposition, Content-Length, Content-Type, ETag, Last-Modified');
+    // Accept-Ranges e Content-Range: sem expor, o navegador esconde do
+    // JavaScript e o download em partes não teria como se verificar.
+    headers.set(
+      'Access-Control-Expose-Headers',
+      'Accept-Ranges, Content-Disposition, Content-Length, Content-Range, Content-Type, ETag, Last-Modified',
+    );
   }
   return headers;
 }
@@ -176,6 +181,24 @@ function validateUpstreamTarget(routeName, target) {
     return;
   }
   throw new ProxyFailure(502, 'upstream_redirect_rejected', 'DATASUS redirected outside the approved route');
+}
+
+/**
+ * Aceita apenas uma faixa simples de bytes, com início e fim explícitos.
+ *
+ * Nada de faixa aberta, faixa múltipla ou sufixo. Cada uma dessas formas tem
+ * resposta diferente (multipart, por exemplo), e repassar sem entender daria
+ * ao cliente um corpo que ele montaria errado. O que o aplicativo usa é
+ * exatamente esta forma; o resto é recusado e vira download inteiro.
+ */
+function safeRangeHeader(value) {
+  if (!value) return null;
+  const match = /^bytes=(\d{1,15})-(\d{1,15})$/.exec(value.trim());
+  if (!match) return null;
+  const start = Number(match[1]);
+  const end = Number(match[2]);
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start > end) return null;
+  return `bytes=${start}-${end}`;
 }
 
 function contentLength(headers, failureStatus, failureCode) {
@@ -357,14 +380,22 @@ function boundedArchiveStream(body, maximum, dispose) {
 async function handleArchive(request, environment, origin, proxySettings) {
   const timed = timeoutController(proxySettings.archiveTimeoutMs);
   try {
+    // Uma faixa pedida pelo cliente é repassada como veio. O proxy não inventa
+    // faixa nem a reescreve: se o DATASUS não suportar, ele responde 200 e o
+    // cliente decide o que fazer com isso.
+    const requestedRange = safeRangeHeader(request.headers.get('Range'));
     const upstream = await fetchWithValidatedRedirects('archive', targetForRequest(request.url), {
       method: 'GET',
-      headers: { Accept: 'application/zip, application/octet-stream' },
+      headers: {
+        Accept: 'application/zip, application/octet-stream',
+        ...(requestedRange ? { Range: requestedRange } : {}),
+      },
     }, timed.controller.signal, proxySettings.maxRedirects);
     if (!upstream.ok) {
       await upstream.body?.cancel();
       throw upstreamHttpFailure(upstream.status);
     }
+    const partial = upstream.status === 206;
     const contentType = (upstream.headers.get('Content-Type') ?? '').split(';', 1)[0].trim().toLowerCase();
     if (!ARCHIVE_CONTENT_TYPES.has(contentType)) {
       await upstream.body?.cancel();
@@ -384,8 +415,14 @@ async function handleArchive(request, environment, origin, proxySettings) {
       const value = safeUpstreamHeader(upstream.headers, name);
       if (value) headers.set(name, value);
     }
+    for (const name of ['Accept-Ranges', 'Content-Range']) {
+      const value = safeUpstreamHeader(upstream.headers, name);
+      if (value) headers.set(name, value);
+    }
     const stream = boundedArchiveStream(upstream.body, proxySettings.maxArchiveBytes, timed.dispose);
-    return new Response(stream, { status: 200, headers });
+    // 206 é repassado como 206: transformar em 200 faria o cliente montar um
+    // arquivo com um pedaço só, achando que tinha o inteiro.
+    return new Response(stream, { status: partial ? 206 : 200, headers });
   } catch (error) {
     timed.dispose();
     throw normalizedUnexpectedFailure(error, timed.controller.signal);
@@ -401,12 +438,15 @@ function preflightResponse(route, request, origin) {
     .split(',')
     .map((value) => value.trim().toLowerCase())
     .filter(Boolean);
-  if (requestedHeaders.some((name) => !['accept', 'content-type'].includes(name))) {
+  // `range` entra na lista porque o download em partes precisa dele. A lista
+  // continua fechada: qualquer outro cabeçalho é recusado no preflight, antes
+  // de a requisição de verdade sair.
+  if (requestedHeaders.some((name) => !['accept', 'content-type', 'range'].includes(name))) {
     throw new ProxyFailure(400, 'header_not_allowed', 'Preflight requested a header outside the proxy allowlist');
   }
   const headers = baseHeaders(origin);
   headers.set('Access-Control-Allow-Methods', route.method);
-  headers.set('Access-Control-Allow-Headers', 'Accept, Content-Type');
+  headers.set('Access-Control-Allow-Headers', 'Accept, Content-Type, Range');
   headers.set('Access-Control-Max-Age', '600');
   return new Response(null, { status: 204, headers });
 }

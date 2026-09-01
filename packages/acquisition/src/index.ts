@@ -5,3 +5,4 @@ export * from './resilient-batch.js';
 export * from './retry-policy.js';
 export * from './bridge-policy.js';
 export * from './bridge-client.js';
+export * from './ranged-download.js';

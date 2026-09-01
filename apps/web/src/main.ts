@@ -77,6 +77,7 @@ import {
   labPackageFilename,
 } from '../../../packages/export/src/lab-package.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
+import { describeDownloadStrategy } from '../../../packages/acquisition/src/ranged-download.ts';
 import {
   bridgeWouldHelp,
   cancelBridgeDownload,
@@ -108,6 +109,7 @@ import {
   chooseVerifiedAuxiliaryBundle,
   extractOneArchiveEntry,
   extractSupportedArchive,
+  readLastDownloadTransport,
   extractSupportedArchiveFiles,
   fetchOfficialArchiveDetailed,
   prepareOfficialDownloadDetailed,
@@ -6708,9 +6710,13 @@ async function openOfficialFile(
       ? `${remote.name} aberto. Escolha auxiliares manualmente, se precisar.`
       : `${remote.name} aberto${auxiliaryCount ? ` com ${integerFormat.format(auxiliaryCount)} auxiliares` : ''}.`);
     if (!manualAuxiliariesOffered && !keepDialogOpen) catalogDialog.close();
+    // Dizer por qual caminho veio: sem isso, a otimização de download em
+    // partes é invisível, e um download lento parece azar em vez de ter uma
+    // explicação que dá para conferir.
+    const transport = readLastDownloadTransport();
     showToast(downloaded.provenance.cacheHit
       ? `${remote.name} reaberto do cache local`
-      : `${remote.name} carregado diretamente do DATASUS`);
+      : `${remote.name} baixado do DATASUS · ${describeDownloadStrategy(transport.strategy, transport.parts, transport.reason)}`);
     void renderRecentArchives();
     return {
       ok: true,

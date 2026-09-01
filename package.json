@@ -22,8 +22,8 @@
     "verify:goldens:second": "npm run build && node scripts/verify-second-goldens-local.mjs",
     "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
     "seed:differential": "npm run build && node scripts/differential-seed.mjs",
-  "bridge:start": "npm run build && node apps/tabwin-bridge/server.mjs",
-  "inspect:cnv-n": "node scripts/inspect-new-format-cnv.mjs",
+    "bridge:start": "npm run build && node apps/tabwin-bridge/server.mjs",
+    "inspect:cnv-n": "node scripts/inspect-new-format-cnv.mjs",
     "bench:record-stream": "npm run build && node --expose-gc --max-old-space-size=6144 scripts/measure-record-stream-memory.mjs",
     "bench:decode-breakdown": "npm run build && node scripts/measure-decode-breakdown.mjs",
     "bench:plan-projection": "npm run build && node --max-old-space-size=8192 scripts/measure-plan-projection.mjs",
@@ -34,6 +34,7 @@
     "bench:columnar": "npm run build && node scripts/measure-columnar-cache.mjs"
   },
   "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",
     "@precisa-saude/datasus-dbc": "2.0.2",
     "fflate": "0.8.2"
   },

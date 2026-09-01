@@ -16,6 +16,15 @@ import {
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
 import { validateDatasusZipArchive } from '../../../packages/acquisition/src/archive-validation.ts';
+import {
+  assembleRangedParts,
+  planByteRanges,
+  rangeHeaderValue,
+  readRangeSupport,
+  type ByteRange,
+  type DownloadStrategy,
+  type RangeSupport,
+} from '../../../packages/acquisition/src/ranged-download.ts';
 import { resolveMicrodatasusCompatibleCandidates } from '../../../packages/acquisition/src/microdatasus-resolver.ts';
 import {
   runDatasusBatch,
@@ -255,14 +264,130 @@ export interface ArchiveDownloadProgress {
   totalBytes?: number;
 }
 
+/**
+ * Como o último download foi obtido, para a interface poder dizer.
+ *
+ * Sem isso, um download lento parece azar. Com isso, dá para saber se o
+ * caminho paralelo sequer entrou em ação — e por que não entrou.
+ */
+export interface LastDownloadTransport {
+  strategy: DownloadStrategy;
+  parts: number;
+  reason?: string;
+}
+
+let lastDownloadTransport: LastDownloadTransport = { strategy: 'única conexão', parts: 1 };
+
+export function readLastDownloadTransport(): LastDownloadTransport {
+  return { ...lastDownloadTransport };
+}
+
+function archiveEndpoint(url: string): string {
+  return DATASUS_PROXY_BASE
+    ? `${DATASUS_PROXY_BASE}/archive?url=${encodeURIComponent(url)}`
+    : url;
+}
+
+/**
+ * Pergunta ao servidor se ele entrega faixas de bytes.
+ *
+ * Pede um byte só. Uma promessa em `Accept-Ranges` não basta: há servidor que
+ * anuncia e ignora, e descobrir isso no meio da montagem daria um arquivo com
+ * pedaços trocados. O que conta é um 206 com `Content-Range` coerente.
+ *
+ * Qualquer falha aqui é respondida com "não dá" — a sondagem nunca pode ser o
+ * motivo de o download não acontecer.
+ */
+async function probeRangeSupport(downloadUrl: string, signal?: AbortSignal): Promise<RangeSupport> {
+  const probe: ByteRange = { start: 0, end: 0 };
+  try {
+    const response = await fetch(downloadUrl, {
+      headers: { Range: rangeHeaderValue(probe) },
+      ...(signal ? { signal } : {}),
+    });
+    // O corpo não interessa; soltar evita segurar a conexão.
+    await response.body?.cancel();
+    return readRangeSupport(response.status, response.headers.get('content-range'), probe);
+  } catch (error) {
+    if (isAbortErrorLike(error) || signal?.aborted) throw error;
+    return { supported: false, reason: 'a sondagem de faixa falhou' };
+  }
+}
+
+/**
+ * Baixa em partes paralelas, ou devolve `null` para o chamador seguir pelo
+ * caminho simples.
+ *
+ * Devolve `null` em vez de lançar sempre que a paralelização não se
+ * justifica ou não se confirma. Esta é uma otimização: ela não pode ser a
+ * causa de um download falhar.
+ */
+async function fetchArchiveInParts(
+  downloadUrl: string,
+  signal?: AbortSignal,
+  onProgress?: (progress: ArchiveDownloadProgress) => void,
+): Promise<Uint8Array | null> {
+  const support = await probeRangeSupport(downloadUrl, signal);
+  if (!support.supported) {
+    lastDownloadTransport = { strategy: 'única conexão', parts: 1, reason: support.reason };
+    return null;
+  }
+  if (support.totalBytes > MAX_ARCHIVE_BYTES) {
+    throw new Error('Arquivo remoto excede o limite de segurança');
+  }
+  const ranges = planByteRanges(support.totalBytes);
+  if (ranges.length < 2) {
+    lastDownloadTransport = { strategy: 'única conexão', parts: 1, reason: 'arquivo pequeno demais para dividir' };
+    return null;
+  }
+
+  let receivedBytes = 0;
+  const parts = await Promise.all(ranges.map(async (range) => {
+    const response = await fetch(downloadUrl, {
+      headers: { Range: rangeHeaderValue(range) },
+      ...(signal ? { signal } : {}),
+    });
+    if (response.status !== 206) {
+      throw new Error(`parte ${range.start}-${range.end}: servidor respondeu ${response.status}`);
+    }
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    receivedBytes += bytes.byteLength;
+    onProgress?.({ receivedBytes, totalBytes: support.totalBytes });
+    return { range, bytes };
+  }));
+
+  // Montagem confere tamanho e sequência; qualquer desencontro lança, e o
+  // chamador cai no caminho simples em vez de aceitar bytes suspeitos.
+  const archive = assembleRangedParts(parts, support.totalBytes);
+  lastDownloadTransport = { strategy: 'partes paralelas', parts: ranges.length };
+  return archive;
+}
+
 async function fetchOfficialArchiveOnce(
   url: string,
   signal?: AbortSignal,
   onProgress?: (progress: ArchiveDownloadProgress) => void,
 ): Promise<Uint8Array> {
-  const downloadUrl = DATASUS_PROXY_BASE
-    ? `${DATASUS_PROXY_BASE}/archive?url=${encodeURIComponent(url)}`
-    : url;
+  const downloadUrl = archiveEndpoint(url);
+
+  // Tenta o caminho paralelo primeiro. Se ele não se confirmar, ou falhar por
+  // qualquer motivo que não seja cancelamento, o download simples acontece
+  // como sempre aconteceu — a otimização não pode custar o arquivo.
+  try {
+    const inParts = await fetchArchiveInParts(downloadUrl, signal, onProgress);
+    if (inParts) {
+      validateDatasusZipArchive(inParts, 'application/zip');
+      return inParts;
+    }
+  } catch (error) {
+    if (isAbortErrorLike(error) || signal?.aborted) throw error;
+    lastDownloadTransport = {
+      strategy: 'única conexão',
+      parts: 1,
+      reason: error instanceof Error ? error.message : String(error),
+    };
+  }
+
   const response = await fetch(downloadUrl, signal ? { signal } : {});
   if (!response.ok) throw await datasusHttpError(response, 'Falha no download DATASUS');
   const length = Number(response.headers.get('content-length') ?? 0);

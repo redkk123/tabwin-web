@@ -1493,3 +1493,4 @@ test('um .TAB salvo pelo TabWin 4.15 abre aqui, somente para leitura', async ({ 
   await expect(page.locator('#save-recipe-button')).toBeDisabled();
   await expect(page.locator('#save-table-button')).toBeEnabled();
 });
+

@@ -248,3 +248,74 @@ test('archive route rejects non-ZIP and oversized upstream envelopes', async () 
     assert.equal(await errorCode(response), 'archive_too_large');
   });
 });
+
+test('o proxy repassa uma faixa de bytes e devolve 206 como 206', async () => {
+  // Sem isto o download em partes não existe: o cliente pediria uma faixa, o
+  // proxy mandaria o arquivo inteiro, e cada "parte" seria o arquivo todo.
+  const parte = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+  let rangeRecebido = null;
+  await withMockFetch(async (input, init) => {
+    rangeRecebido = init.headers?.Range ?? null;
+    return new Response(parte, {
+      status: 206,
+      headers: {
+        'Content-Type': 'application/zip',
+        'Content-Length': String(parte.byteLength),
+        'Content-Range': 'bytes 0-3/1024',
+        'Accept-Ranges': 'bytes',
+      },
+    });
+  }, async () => {
+    const response = await handleRequest(request(`/archive?url=${encodeURIComponent(ARCHIVE_URL)}`, {
+      method: 'GET',
+      headers: { Range: 'bytes=0-3' },
+    }), ENVIRONMENT);
+
+    assert.equal(rangeRecebido, 'bytes=0-3', 'a faixa precisa chegar ao DATASUS');
+    // Transformar 206 em 200 faria o cliente montar um arquivo com um pedaço
+    // só, achando que tinha o inteiro.
+    assert.equal(response.status, 206);
+    assert.equal(response.headers.get('Content-Range'), 'bytes 0-3/1024');
+    assert.equal(response.headers.get('Accept-Ranges'), 'bytes');
+    // E o navegador precisa poder LER esses cabeçalhos.
+    const exposed = response.headers.get('Access-Control-Expose-Headers') ?? '';
+    assert.match(exposed, /Content-Range/);
+    assert.match(exposed, /Accept-Ranges/);
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), parte);
+  });
+});
+
+test('faixa malformada não é repassada — vira download inteiro', async () => {
+  // Faixa aberta, múltipla ou por sufixo têm resposta diferente (multipart,
+  // por exemplo). Repassar sem entender daria ao cliente um corpo que ele
+  // montaria errado.
+  const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+  for (const hostil of ['bytes=0-', 'bytes=-500', 'bytes=0-1,5-9', 'bytes=abc', 'items=0-1', 'bytes=9-1']) {
+    let rangeRecebido = 'não chamado';
+    await withMockFetch(async (_input, init) => {
+      rangeRecebido = init.headers?.Range ?? null;
+      return new Response(zip, {
+        headers: { 'Content-Type': 'application/zip', 'Content-Length': String(zip.byteLength) },
+      });
+    }, async () => {
+      const response = await handleRequest(request(`/archive?url=${encodeURIComponent(ARCHIVE_URL)}`, {
+        method: 'GET',
+        headers: { Range: hostil },
+      }), ENVIRONMENT);
+      assert.equal(rangeRecebido, null, `${hostil} não podia ser repassada`);
+      assert.equal(response.status, 200);
+    });
+  }
+});
+
+test('o preflight passa a aceitar Range, senão o navegador barraria antes de tentar', async () => {
+  const response = await handleRequest(request(`/archive?url=${encodeURIComponent(ARCHIVE_URL)}`, {
+    method: 'OPTIONS',
+    headers: {
+      'Access-Control-Request-Method': 'GET',
+      'Access-Control-Request-Headers': 'range',
+    },
+  }), ENVIRONMENT);
+  assert.equal(response.status, 204);
+  assert.match(response.headers.get('Access-Control-Allow-Headers') ?? '', /Range/i);
+});
