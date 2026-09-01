@@ -22,6 +22,7 @@
     "verify:goldens:second": "npm run build && node scripts/verify-second-goldens-local.mjs",
     "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
     "seed:differential": "npm run build && node scripts/differential-seed.mjs",
+  "bridge:start": "npm run build && node apps/tabwin-bridge/server.mjs",
   "inspect:cnv-n": "node scripts/inspect-new-format-cnv.mjs",
     "bench:record-stream": "npm run build && node --expose-gc --max-old-space-size=6144 scripts/measure-record-stream-memory.mjs",
     "bench:decode-breakdown": "npm run build && node scripts/measure-decode-breakdown.mjs",

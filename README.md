@@ -78,12 +78,14 @@ npm run web:dev
 | `npm run e2e` | testes ponta a ponta (Playwright) |
 | `npm run web:build` | build de produção em `dist-web/` |
 | `npm run seed:differential` | gera casos determinísticos para conferir contra o TabWin real |
+| `npm run bridge:start` | sobe o auxiliar local de download ([o que é](./apps/tabwin-bridge/README.md)) |
 
 ## Estrutura
 
 ```
 apps/web              a aplicação
 apps/datasus-proxy    Worker Cloudflare para o CORS do catálogo oficial
+apps/tabwin-bridge    auxiliar local e OPCIONAL de download (Windows/Unix)
 packages/core         modelo, plano normalizado, execução, receitas
 packages/formats      DEF, CNV, .TAB, Windows-1252, mapas, BIFF
 packages/analysis     estatística, epidemiologia, transformação, fórmulas
