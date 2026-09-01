@@ -143,6 +143,15 @@ export interface ImplodeStreamOptions {
   maxOutputBytes?: number;
   /** DBC record streams may omit their declared final DBF EOF byte (0x1a). */
   allowMissingFinalByte?: boolean;
+  /**
+   * Desliga a tabela rápida, forçando todo símbolo pelo percurso bit a bit.
+   *
+   * Existe para o teste poder exercitar o caminho lento sobre dados reais. Ele
+   * ficou sem cobertura uma vez e o defeito só apareceu em uso: a tabela
+   * rápida resolvia quase tudo, então o caminho lento raramente rodava — e
+   * quando rodava, saía de alinhamento.
+   */
+  forceSlowPath?: boolean;
 }
 
 export type ImplodeChunkConsumer = (chunk: Uint8Array, decodedOffset: number) => void;
@@ -161,6 +170,7 @@ class ImplodeStreamDecoder {
     private readonly expectedLength: number,
     private readonly consume: ImplodeChunkConsumer,
     private readonly allowMissingFinalByte: boolean,
+    private readonly forceSlowPath = false,
   ) {}
 
   private inputByte(): number {
@@ -202,7 +212,7 @@ class ImplodeStreamDecoder {
     // Caminho rápido: um acesso resolve o símbolo, em vez de descer a árvore
     // um bit por vez. A tabela foi construída a partir do caminho lento
     // abaixo, então as duas respostas são a mesma por construção.
-    if (this.peekBits(FAST_BITS) >= FAST_BITS) {
+    if (!this.forceSlowPath && this.peekBits(FAST_BITS) >= FAST_BITS) {
       const pattern = this.bitBuffer & (FAST_SIZE - 1);
       const symbol = table.fastSymbol[pattern]!;
       if (symbol >= 0) {
@@ -216,33 +226,37 @@ class ImplodeStreamDecoder {
   }
 
   /** O percurso canônico bit a bit. Continua sendo a referência. */
+  /**
+   * Percurso canônico bit a bit. É a referência de correção.
+   *
+   * Foi reescrito por causa de um defeito real: a versão herdada do `blast.c`
+   * terminava com `this.bitCount = (this.bitCount - length) & 7`, o que só
+   * está certo se o buffer tem menos de 8 bits na entrada — premissa que valia
+   * quando só `bits()` o enchia. Com a tabela rápida espiando 9 bits, o buffer
+   * pode chegar aqui com até 15, e o `& 7` PERDIA a contagem: o fluxo saía de
+   * alinhamento e o arquivo falhava no meio da leitura.
+   *
+   * Esta versão não faz suposição sobre quantos bits há no buffer. Consome um
+   * bit por vez e pede byte só quando acaba.
+   */
   private decodeSlow(table: HuffmanTable): number {
-    let bitBuffer = this.bitBuffer;
-    let left = this.bitCount;
     let code = 0;
     let first = 0;
     let index = 0;
-    let length = 1;
-    let nextIndex = 1;
-    while (true) {
-      while (left-- > 0) {
-        code |= (bitBuffer & 1) ^ 1;
-        bitBuffer >>>= 1;
-        const count = table.count[nextIndex++]!;
-        if (code < first + count) {
-          this.bitBuffer = bitBuffer;
-          this.bitCount = (this.bitCount - length) & 7;
-          return table.symbol[index + code - first]!;
-        }
-        index += count;
-        first = (first + count) << 1;
-        code <<= 1;
-        length++;
+    for (let length = 1; length <= MAX_BITS; length++) {
+      if (this.bitCount === 0) {
+        this.bitBuffer = this.inputByte();
+        this.bitCount = 8;
       }
-      left = MAX_BITS + 1 - length;
-      if (left === 0) break;
-      bitBuffer = this.inputByte();
-      if (left > 8) left = 8;
+      code |= (this.bitBuffer & 1) ^ 1;
+      this.bitBuffer >>>= 1;
+      this.bitCount--;
+
+      const count = table.count[length]!;
+      if (code < first + count) return table.symbol[index + code - first]!;
+      index += count;
+      first = (first + count) << 1;
+      code <<= 1;
     }
     return -9;
   }
@@ -313,5 +327,11 @@ export function implodeDecompressChunks(
   if (!Number.isSafeInteger(expectedLength) || expectedLength < 0 || expectedLength > maximum) {
     throw new Error(`DCL Implode: tamanho de saída inválido ou acima do limite (${expectedLength})`);
   }
-  return new ImplodeStreamDecoder(compressed, expectedLength, consume, options.allowMissingFinalByte ?? false).run();
+  return new ImplodeStreamDecoder(
+    compressed,
+    expectedLength,
+    consume,
+    options.allowMissingFinalByte ?? false,
+    options.forceSlowPath ?? false,
+  ).run();
 }

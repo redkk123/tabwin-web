@@ -2649,7 +2649,14 @@ function askDatasetWorker<T>(
     };
     const onFailure = (): void => {
       terminateDatasetWorker(worker);
-      finish(() => reject(new DatasetWorkerInterruptedError(`${options.label} falhou no trabalhador local`)));
+      // Este erro quase sempre é o worker não CARREGAR, não o arquivo ser
+      // ruim: acontece quando a página em cache pede um trecho do programa que
+      // uma publicação nova acabou de substituir. Dizer "falhou" e parar fazia
+      // parecer defeito do arquivo, e a pessoa desistia do arquivo certo.
+      finish(() => reject(new DatasetWorkerInterruptedError(
+        `${options.label} não pôde ser iniciada: o leitor local não carregou. `
+        + 'Isso costuma ser uma versão em cache do aplicativo — recarregue a página e tente de novo.',
+      )));
     };
     const onMessageFailure = (): void => {
       terminateDatasetWorker(worker);
@@ -2778,6 +2785,28 @@ function datasetProgress(label: string) {
 }
 
 async function openDataset(
+  sources: DatasetWorkerSource[],
+  label: string,
+  fields?: DbfField[],
+): Promise<DbfHeader> {
+  // Os bytes são TRANSFERIDOS para o worker, o que esvazia o buffer deste
+  // lado. Uma retentativa precisa de uma cópia feita ANTES, senão a segunda
+  // tentativa receberia um buffer já destacado.
+  const retryable = sources.map((source) => (source.kind === 'binary'
+    ? { ...source, bytes: source.bytes.slice(0) }
+    : source));
+  try {
+    return await openDatasetOnce(sources, label, fields);
+  } catch (error) {
+    // Só vale retentar quando o worker não chegou a rodar. Um erro de leitura
+    // — esquema incompatível, arquivo corrompido — vai falhar igual na
+    // segunda vez, e insistir só faria a pessoa esperar em dobro.
+    if (!(error instanceof DatasetWorkerInterruptedError)) throw error;
+    return await openDatasetOnce(retryable, label, fields);
+  }
+}
+
+async function openDatasetOnce(
   sources: DatasetWorkerSource[],
   label: string,
   fields?: DbfField[],
