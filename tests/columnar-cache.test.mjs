@@ -125,3 +125,52 @@ test('a projection keeps null, undefined, boolean and Date apart from their text
   // Eight values that a naive String() dictionary would collapse into fewer.
   assert.equal(projection.columns.get('V').dictionary.length, 8);
 });
+
+test('a projeção devolve o MESMO resultado do caminho direto, em todo formato de plano', async () => {
+  // Este é o teste que a ligação do cache no aplicativo exige. Antes, a
+  // igualdade estava provada para um plano só; agora muitos formatos passam
+  // por aqui, e um resultado divergente seria invisível — a tela mostraria um
+  // número plausível vindo de dados guardados.
+  const { generateSeededCase } = await import('../dist/packages/core/src/differential-seed.js');
+  const { compileQueryPlan } = await import('../dist/packages/core/src/plan.js');
+  const { fieldsUsedByPlan } = await import('../dist/packages/core/src/plan-fields.js');
+
+  for (let seed = 0; seed < 24; seed++) {
+    const testCase = generateSeededCase(seed);
+    const compiled = compileQueryPlan(testCase.spec);
+    const conversions = testCase.conversion
+      ? { [testCase.conversion.id]: testCase.conversion.definition }
+      : {};
+
+    const direct = executeInMemory(testCase.records, compiled, conversions);
+    const projection = buildColumnarProjection(testCase.records, fieldsUsedByPlan(compiled));
+    const columnar = executeColumnarProjection(projection, compiled, conversions);
+
+    assert.deepEqual(columnar, direct, `seed ${seed} (${testCase.intent}) divergiu`);
+  }
+});
+
+test('a projeção sobrevive a lote fatiado igual ao do worker', () => {
+  // O worker alimenta o builder em lotes de 5.000 registros, não de uma vez.
+  // Se a fronteira de lote deslocasse uma linha, o erro apareceria só em
+  // arquivo grande - tarde demais.
+  const many = Array.from({ length: 12_345 }, (_, index) => ({
+    UF: index % 3 === 0 ? 'AC' : 'SP',
+    SEXO: index % 2 === 0 ? '1' : '2',
+    VALOR: index / 10,
+    FLAG: index % 5 === 0,
+  }));
+  const inOneGo = buildColumnarProjection(many, ['UF', 'SEXO', 'VALOR', 'FLAG']);
+
+  const builder = createColumnarProjectionBuilder(['UF', 'SEXO', 'VALOR', 'FLAG']);
+  for (let start = 0; start < many.length; start += 5_000) {
+    builder.push(many.slice(start, start + 5_000));
+  }
+  const inBatches = builder.finish();
+
+  assert.equal(inBatches.rowCount, inOneGo.rowCount);
+  assert.deepEqual(executeInMemory(inBatches.records(), plan), executeInMemory(many, plan));
+  // E o primeiro e o último registro, que são onde um deslocamento aparece.
+  assert.deepEqual(inBatches.recordAt(0), many[0]);
+  assert.deepEqual(inBatches.recordAt(many.length - 1), many[many.length - 1]);
+});

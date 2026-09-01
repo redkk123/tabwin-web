@@ -32,6 +32,11 @@ import {
 } from '../../../packages/core/src/execute.ts';
 import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
 import {
+  createColumnarProjectionBuilder,
+  createColumnarProjectionCache,
+  executeColumnarProjection,
+} from '../../../packages/core/src/columnar-cache.ts';
+import {
   createFlowAccumulator,
   type FlowBuildResult,
 } from '../../../packages/analysis/src/spatial-flows.ts';
@@ -211,6 +216,48 @@ let header: DbfHeader | null = null;
  */
 const resultCache = createTabulationResultCache();
 
+/**
+ * L2: guarda as colunas já decodificadas, para uma tabulação nova sobre os
+ * MESMOS dados não reler o arquivo.
+ *
+ * Por que importa: medido neste projeto, transformar registro em objeto
+ * JavaScript é ~92% do tempo de abrir um DBC. O L3 acima só ajuda quando o
+ * plano é idêntico; trocar a variável de linha ou mexer num filtro caía
+ * direto no arquivo de novo. É essa releitura que fazia cada clique custar o
+ * preço de abrir o arquivo inteiro.
+ *
+ * A semântica não muda: o registro é reconstruído e executado pelo mesmo
+ * kernel de referência, então CNV, lookups, regras cruzadas e totais
+ * continuam com uma implementação só.
+ */
+const columnarCache = createColumnarProjectionCache(4);
+
+/**
+ * Teto de memória do cache colunar.
+ *
+ * O módulo limita por número de entradas, não por bytes — a decisão de quanto
+ * a aba pode gastar é de quem chama, porque só aqui se sabe que ela também
+ * segura os dados sendo tabulados. Sem teto, guardar as colunas de um arquivo
+ * grande trocaria velocidade por aba travada, que é um péssimo negócio.
+ */
+const COLUMNAR_BUDGET_BYTES = 192 * 1024 * 1024;
+
+/**
+ * Identidade do conjunto em memória.
+ *
+ * Muda a cada 'open', 'append' e transformação. Uma projeção guardada só vale
+ * para os dados que a produziram; reaproveitá-la depois de os dados mudarem
+ * devolveria o resultado do arquivo anterior — silenciosamente.
+ */
+let datasetGeneration = 0;
+const datasetSourceId = (): string => `dataset-${datasetGeneration}`;
+
+function invalidateDataset(): void {
+  datasetGeneration += 1;
+  resultCache.clear();
+  columnarCache.clear();
+}
+
 function post(message: unknown, transfer: Transferable[] = []): void {
   workerScope.postMessage(message, transfer);
 }
@@ -359,7 +406,7 @@ function handle(request: DatasetRequest): void {
       const nextHeader = headerForSources(request);
       sources = request.sources;
       header = nextHeader;
-      resultCache.clear();
+      invalidateDataset();
       post({ type: 'opened', requestId: request.requestId, header, recordCount: header.recordCount });
       return;
     }
@@ -378,7 +425,7 @@ function handle(request: DatasetRequest): void {
       }
       sources = [...sources, source];
       header = { ...header, recordCount: header.recordCount + incoming.recordCount };
-      resultCache.clear();
+      invalidateDataset();
       post({ type: 'opened', requestId: request.requestId, header, recordCount: header.recordCount });
       return;
     }
@@ -389,9 +436,37 @@ function handle(request: DatasetRequest): void {
         post({ type: 'tabulation', requestId: request.requestId, result: cached, cached: true });
         return;
       }
+      const planFields = fieldsUsedByPlan(request.plan);
+      const sourceId = datasetSourceId();
+
+      // Colunas já decodificadas para estes campos (ou para um superconjunto
+      // delas): tabula sem tocar no arquivo.
+      const reused = columnarCache.get(sourceId, planFields);
+      if (reused) {
+        const result: TabulationResult = executeColumnarProjection(reused, request.plan, conversions);
+        resultCache.set({ plan: request.plan, conversions }, result);
+        post({ type: 'tabulation', requestId: request.requestId, result, cached: false });
+        return;
+      }
+
+      // Primeira passagem sobre estes campos: tabula e monta a projeção na
+      // MESMA leitura. Ler duas vezes para poder guardar seria pagar hoje o
+      // que se quer economizar amanhã.
       const accumulator = createTabulationAccumulator(request.plan, conversions);
-      streamAll(request.requestId, fieldsUsedByPlan(request.plan), (batch) => accumulator.push(batch.records));
+      const builder = createColumnarProjectionBuilder(planFields);
+      streamAll(request.requestId, planFields, (batch) => {
+        accumulator.push(batch.records);
+        builder.push(batch.records);
+      });
       const result: TabulationResult = accumulator.finish();
+
+      const projection = builder.finish();
+      // Só guarda o que cabe no orçamento. Guardar algo grande demais e
+      // derrubar a aba seria pior do que reler o arquivo.
+      if (projection.estimatedBytes <= COLUMNAR_BUDGET_BYTES) {
+        columnarCache.set(sourceId, projection);
+      }
+
       resultCache.set({ plan: request.plan, conversions }, result);
       post({ type: 'tabulation', requestId: request.requestId, result, cached: false });
       return;
@@ -540,7 +615,7 @@ function handle(request: DatasetRequest): void {
 
       sources = [{ kind: 'records', name: 'Dados transformados', records: outcome.records as DbfRecord[] }];
       header = nextHeader;
-      resultCache.clear();
+      invalidateDataset();
       const steps: TransformStepResult[] = outcome.steps;
       post({ type: 'transform-applied', requestId: request.requestId, header, recordCount: header.recordCount, steps });
       return;
