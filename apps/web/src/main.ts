@@ -1,4 +1,4 @@
-import { zip } from 'fflate';
+import { zip, zipSync } from 'fflate';
 import {
   readDbfHeader,
   readDbfRecords,
@@ -71,6 +71,10 @@ import {
 } from '../../../packages/acquisition/src/datasus.ts';
 import { tabulationToCsv, tabulationToJson, tabulationToXml } from '../../../packages/export/src/tabulation.ts';
 import { tabulationToXlsx } from '../../../packages/export/src/xlsx.ts';
+import {
+  labPackageEntries,
+  labPackageFilename,
+} from '../../../packages/export/src/lab-package.ts';
 import { extractSourceDbf } from '../../../packages/export/src/dbf-source.ts';
 import {
   bridgeWouldHelp,
@@ -268,6 +272,7 @@ const fileList = element<HTMLElement>('#file-list');
 const sourceDbfButton = element<HTMLButtonElement>('#source-dbf-button');
 const selectedDbfButton = element<HTMLButtonElement>('#selected-dbf-button');
 const microdatasusCsvButton = element<HTMLButtonElement>('#microdatasus-csv-button');
+const labPackageButton = element<HTMLButtonElement>('#lab-package-button');
 const decodeCancelButton = element<HTMLButtonElement>('#decode-cancel-button');
 const combineCompatibleFiles = element<HTMLInputElement>('#combine-compatible-files');
 const form = element<HTMLFormElement>('#analysis-form');
@@ -2053,6 +2058,23 @@ function addConfiguredFilter(): void {
   void runAnalysis();
 }
 
+/**
+ * Os filtros ativos em texto, para o pacote de laboratório.
+ *
+ * Usa a mesma frase que a interface mostra, e não uma segunda formulação: se
+ * divergirem, o que a pessoa leu na tela e o que ficou registrado na
+ * procedência passam a ser coisas diferentes.
+ */
+function describeActiveFiltersForExport(): string[] {
+  return configuredFilters.map((filter) => {
+    const prefix = filter.origin === 'data-quality' ? 'Limpeza'
+      : filter.mode === 'exclude' ? 'Excluir' : 'Incluir';
+    return filter.kind === 'numeric-range'
+      ? `${prefix} ${selectionLabel(filter.field)} · ${filter.minimum ?? '−∞'} a ${filter.maximum ?? '+∞'}`
+      : `${prefix} ${selectionLabel(filter.field)} · ${filter.acceptedCategories.length + (filter.includeUnclassified ? 1 : 0)} valor(es)`;
+  });
+}
+
 function renderConfiguredFilters(): void {
   activeFilterList.replaceChildren();
   configuredFilters.forEach((filter, index) => {
@@ -3549,6 +3571,7 @@ async function downloadMicrodatasusCsv(): Promise<void> {
   if (!dbfHeader || !currentPlan || !currentResult) return;
   const label = microdatasusCsvButton.textContent;
   microdatasusCsvButton.disabled = true;
+  labPackageButton.disabled = true;
   microdatasusCsvButton.textContent = 'Preparando Microdatasus…';
   const chunks: BlobPart[] = [];
   try {
@@ -3733,6 +3756,7 @@ async function runAnalysis(measureOverride?: MeasureSpec): Promise<boolean> {
   setControlsEnabled(false);
   selectedDbfButton.disabled = true;
   microdatasusCsvButton.disabled = true;
+  labPackageButton.disabled = true;
   await new Promise<void>((resolve) => window.setTimeout(resolve, 0));
   decodeCancelButton.hidden = false;
   try {
@@ -3767,6 +3791,7 @@ async function runAnalysis(measureOverride?: MeasureSpec): Promise<boolean> {
     microdatasusCsvButton.disabled = false;
     saveRecipeButton.disabled = false;
     saveTableButton.disabled = false;
+    labPackageButton.disabled = false;
     selectedDbfButton.disabled = false;
     setControlsEnabled(true);
     if (currentView === 'map' || rowField.value.toUpperCase().includes('MUNIC')) await ensureMap();
@@ -6024,6 +6049,55 @@ async function runBridgeDownload(
   }
 }
 
+/**
+ * Exporta a tabela atual como pacote para o Tabwin Lab.
+ *
+ * Leva a tabulação, não os registros: é o resultado que a pessoa acabou de
+ * conferir na tela, e é ele que ela quer levar para um gráfico ou um modelo.
+ * Os totais que o TabWin mostra ficam de fora — são apresentação, não célula
+ * de resultado, e entrariam no Lab como se fossem mais uma linha de dado.
+ */
+function downloadLabPackage(): void {
+  if (!currentResult) throw new Error('Execute uma tabulação antes de exportar para o Lab.');
+
+  const rowHeader = exportRowLabel();
+  const columns = [
+    { name: rowHeader, label: activeRowLabel() === rowHeader ? null : activeRowLabel() },
+    ...currentResult.columns.map((column) => ({ name: column.label, label: null })),
+  ];
+  const rows = currentResult.rows.map((row, index) => [
+    row.label,
+    // A célula ausente vira null e sai como campo vazio no CSV; virar 0 aqui
+    // inventaria uma observação que a tabulação não fez.
+    ...(currentResult?.columns ?? []).map((_column, columnIndex) =>
+      currentResult?.cells[index]?.[columnIndex] ?? null),
+  ]);
+
+  const entries = labPackageEntries({
+    content: 'tabulation',
+    columns,
+    rows,
+    sources: loadedSources
+      .filter((source) => ['DBC', 'DBF', 'CSV'].includes(source.extension.toUpperCase()))
+      .map((source) => ({
+        name: source.name,
+        sha256: source.sha256,
+        bytes: source.size,
+        ...(source.origin ? { origin: source.origin } : {}),
+        ...(source.retrievedAt ? { retrievedAt: source.retrievedAt } : {}),
+      })),
+    transformSteps: transformSteps as unknown[],
+    filters: describeActiveFiltersForExport(),
+  });
+
+  const archive = zipSync(entries, { level: 6 });
+  downloadBlob(
+    new Blob([archive as BlobPart], { type: 'application/zip' }),
+    labPackageFilename({ content: 'tabulation' }),
+  );
+  showToast('Pacote para o Lab salvo, com a procedência junto.');
+}
+
 function setCatalogStatus(message: string, isError = false): void {
   catalogStatus.textContent = message;
   catalogStatus.classList.toggle('error', isError);
@@ -7361,6 +7435,7 @@ async function openPortableTable(file: File): Promise<void> {
   sourceDbfButton.disabled = true;
   selectedDbfButton.disabled = true;
   microdatasusCsvButton.disabled = true;
+  labPackageButton.disabled = true;
   configuredFilters = [];
   configuredCrossFieldRules = [];
   extraMeasures = [];
@@ -7423,6 +7498,7 @@ async function openPortableTable(file: File): Promise<void> {
   setControlsEnabled(false);
   saveRecipeButton.disabled = true;
   saveTableButton.disabled = false;
+  labPackageButton.disabled = false;
   exportCsvButton.disabled = false;
   exportJsonButton.disabled = false;
   exportXlsxButton.disabled = false;
@@ -7760,6 +7836,13 @@ sourceDbfButton.addEventListener('click', () => void downloadSourceDbf().catch((
   showToast(error instanceof Error ? error.message : String(error), true)));
 microdatasusCsvButton.addEventListener('click', () => void downloadMicrodatasusCsv().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
+labPackageButton.addEventListener('click', () => {
+  try {
+    downloadLabPackage();
+  } catch (error) {
+    showToast(error instanceof Error ? error.message : String(error), true);
+  }
+});
 selectedDbfButton.addEventListener('click', () => void downloadSelectedDbf().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
 decodeCancelButton.addEventListener('click', () => activeDecode?.cancel());

@@ -56,7 +56,15 @@
             <button class="secondary-button" id="source-dbf-button" type="button" disabled>Extrair DBF original</button>
             <button class="secondary-button" id="selected-dbf-button" type="button" disabled>Salvar seleção em DBF</button>
             <button class="secondary-button" id="microdatasus-csv-button" type="button" disabled>Microdatasus filtrado CSV</button>
+            <button class="secondary-button" id="lab-package-button" type="button" disabled>Pacote para o Lab</button>
           </div>
+          <p class="group-hint">
+            <b>Extrair DBF original</b> devolve o arquivo de dentro do DBC, sem alteração.
+            <b>Salvar seleção em DBF</b> grava só os registros que passaram nos filtros.
+            <b>Microdatasus filtrado CSV</b> sai no formato que o pacote do R espera.
+            <b>Pacote para o Lab</b> leva a tabela mais um arquivo de procedência
+            (origem, hash, filtros) para analisar no Tabwin&nbsp;Lab.
+          </p>
         </details>
 
         <details class="sidebar-group" id="group-metadata">

@@ -105,6 +105,11 @@ h1, h2, h3, p { margin-top: 0; }
 .sidebar-group > summary span { color: var(--muted); font-size: 11px; font-weight: 400; }
 .sidebar-group[open] > summary { border-bottom: 1px solid var(--line); }
 .sidebar-group > *:not(summary) { padding: 11px 12px; }
+/* Cada grupo diz para que serve o que tem dentro. Um botão sozinho, sem
+   contexto, obriga a pessoa a clicar para descobrir - e alguns destes gravam
+   arquivo. */
+.group-hint { margin: 10px 0 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.group-hint b { color: var(--ink); font-weight: 600; }
 .sidebar-group .source-actions, .sidebar-group .recipe-actions { margin-top: 0; }
 .analysis-form { display: grid; gap: 13px; margin-top: 21px; }
 .analysis-form label > span:first-child { display: block; margin: 0 0 6px 2px; color: #4b535c; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }

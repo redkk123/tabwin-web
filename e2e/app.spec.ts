@@ -1385,3 +1385,33 @@ test('auxiliar de versão incompatível é recusado em vez de tentar adivinhar',
   await expect(verdict).toContainText('incompatível');
   await expect(verdict).toHaveClass(/bridge-verdict-warn/);
 });
+
+test('o pacote para o Lab sai com os dados e a procedência junto', async ({ page }) => {
+  await tabulateFixture(page);
+  await openSidebarGroup(page, 'export');
+
+  const download = page.waitForEvent('download');
+  await page.locator('#lab-package-button').click();
+  const file = await download;
+  expect(file.suggestedFilename()).toMatch(/^tabwin-lab-tabela-\d{4}-\d{2}-\d{2}\.zip$/);
+
+  // O ponto do pacote é não ser um CSV solto: sem procedência, meses depois
+  // ninguém sabe qual arquivo gerou aquilo nem que filtros estavam ativos.
+  const path = await file.path();
+  const { readFileSync } = await import('node:fs');
+  const { unzipSync, strFromU8 } = await import('fflate');
+  const entries = unzipSync(new Uint8Array(readFileSync(path)));
+  expect(Object.keys(entries).sort()).toEqual(['PROVENIENCIA.json', 'dados.csv']);
+
+  const provenance = JSON.parse(strFromU8(entries['PROVENIENCIA.json']));
+  expect(provenance.schema).toBe('tabwin-web.lab-package');
+  expect(provenance.content).toBe('tabulation');
+  expect(provenance.rowCount).toBeGreaterThan(0);
+  expect(provenance.notes.join(' ')).toMatch(/Nenhum zero foi fabricado/);
+
+  // O BOM se afere nos BYTES: o decodificador de texto o consome, então
+  // checar a string sempre passaria por engano.
+  expect([...entries['dados.csv'].slice(0, 3)]).toEqual([0xef, 0xbb, 0xbf]);
+  const csv = strFromU8(entries['dados.csv']);
+  expect(csv.split('\r\n').length - 1).toBe(provenance.rowCount + 1);
+});

@@ -304,10 +304,23 @@ histórico do TabWin 4.15.
 | CSV / JSON / XLSX / XML | exportação do resultado |
 | **Microdatasus filtrado CSV** | os registros aceitos, no formato que o pacote `microdatasus` do R espera |
 | **Extrair DBF original** | o DBF de dentro do DBC, sem alteração |
+| **Pacote para o Lab** | a tabela mais um `PROVENIENCIA.json` (origem, hash das fontes, filtros e transformações), para analisar no Tabwin Lab |
 
 A receita carrega o pipeline junto. Sem isso ela reconstruiria uma tabela
 diferente enquanto afirma fidelidade à fonte — e uma receita que mente sobre
 isso é pior que nenhuma receita.
+
+### Levar para o Tabwin Lab
+
+O **Pacote para o Lab** é um `.zip` com `dados.csv` e `PROVENIENCIA.json`.
+Existe em vez de um CSV solto por um motivo prático: um CSV sozinho é número
+sem origem — meses depois ninguém sabe qual arquivo do DATASUS o gerou, que
+filtros estavam ativos, nem se a coluna já vinha recodificada. A procedência
+responde isso por escrito, com o hash de cada fonte, para a análise poder ser
+citada.
+
+Célula vazia significa **ausente**. Nenhum zero é fabricado para preencher
+lacuna — nem na exportação, nem na leitura do outro lado.
 
 O formato **`.TAB`** do TabWin 4.15 é **lido**, não escrito. A leitura foi
 verificada contra uma captura real do programa. A escrita fica de fora até
