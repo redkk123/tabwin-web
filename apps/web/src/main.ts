@@ -109,6 +109,14 @@ import { nextToPrepare } from '../../../packages/acquisition/src/prepare-ahead.t
 import { parseQuestion, type QuestionMatch } from '../../../packages/acquisition/src/question-parser.ts';
 import { describeRecognition, recognizeArchive } from '../../../packages/acquisition/src/known-archive.ts';
 import {
+  createWorklist,
+  describeWorklistPlan,
+  parseWorklist,
+  planWorklist,
+  serializeWorklist,
+  type WorklistItem,
+} from '../../../packages/acquisition/src/worklist.ts';
+import {
   forgetCatalogMemory,
   readCatalogMemory,
   rememberCatalogAnswers,
@@ -6373,6 +6381,33 @@ function renderSourceManifestDownload(
   ));
   catalogResults.append(button);
 
+  // A lista de trabalho é o que a pessoa QUER, e sobrevive à sessão. Baixar
+  // microdado do DATASUS leva minutos por arquivo, e ninguém termina de uma
+  // vez; sem isto, a próxima sessão recomeça de "quais arquivos mesmo?".
+  const salvarLista = document.createElement('button');
+  salvarLista.className = 'secondary-button';
+  salvarLista.type = 'button';
+  salvarLista.textContent = 'Salvar lista de trabalho';
+  salvarLista.title = 'Guarda quais arquivos você quer, para continuar depois ou em outro aparelho';
+  salvarLista.addEventListener('click', () => void salvarListaDeTrabalho(system, fileType, currentFiles));
+  catalogResults.append(salvarLista);
+
+  const abrirLista = document.createElement('button');
+  abrirLista.className = 'secondary-button';
+  abrirLista.type = 'button';
+  abrirLista.textContent = 'Abrir lista de trabalho';
+  const entradaLista = document.createElement('input');
+  entradaLista.type = 'file';
+  entradaLista.accept = '.json,.twwork';
+  entradaLista.hidden = true;
+  abrirLista.addEventListener('click', () => entradaLista.click());
+  entradaLista.addEventListener('change', () => {
+    const arquivo = entradaLista.files?.[0];
+    entradaLista.value = '';
+    if (arquivo) void abrirListaDeTrabalho(arquivo);
+  });
+  catalogResults.append(abrirLista, entradaLista);
+
   const compare = document.createElement('button');
   compare.className = 'secondary-button';
   compare.type = 'button';
@@ -7332,6 +7367,89 @@ async function saveAllCachedArchives(summaries: readonly CachedArchiveSummary[])
  * armazenamento — navegação privada, política de site — passa em silêncio,
  * porque não saber isso não impede ninguém de trabalhar.
  */
+/**
+ * Guarda a lista dos arquivos encontrados, com a impressão dos que já estão
+ * neste aparelho.
+ *
+ * A impressão é o que transforma a lista em memória: sem ela, reabrir noutro
+ * aparelho diria apenas o que se queria, não o que já foi feito.
+ */
+async function salvarListaDeTrabalho(
+  system: string,
+  fileType: string,
+  files: readonly DatasusRemoteFile[],
+): Promise<void> {
+  if (!files.length) {
+    showToast('Nenhum arquivo encontrado para guardar na lista', true);
+    return;
+  }
+
+  const porNome = new Map<string, string>();
+  try {
+    for (const guardado of await listCachedArchives()) {
+      if (!guardado.sha256) continue;
+      for (const fonte of guardado.sources) porNome.set(fonte.name.toLowerCase(), guardado.sha256);
+    }
+  } catch {
+    /* sem cache: a lista sai sem impressões, e ainda serve como lista */
+  }
+
+  const rotulo = window.prompt('Como você chama este trabalho?',
+    `${system} · ${fileType}`)?.trim();
+  // Cancelar o diálogo é desistir de salvar, não salvar sem nome.
+  if (rotulo === undefined) return;
+
+  const itens: WorklistItem[] = files.map((file) => ({
+    name: file.name,
+    system: file.source || system,
+    fileType,
+    ...(file.catalogQuery?.year ? { year: file.catalogQuery.year } : {}),
+    ...(file.catalogQuery?.month ? { month: file.catalogQuery.month } : {}),
+    ...(file.catalogQuery?.uf ? { uf: file.catalogQuery.uf } : {}),
+    ...(file.address ? { address: file.address } : {}),
+    ...(porNome.has(file.name.toLowerCase())
+      ? { sha256: porNome.get(file.name.toLowerCase())! }
+      : {}),
+  }));
+
+  const lista = createWorklist(rotulo, itens);
+  downloadBlob(
+    new Blob([serializeWorklist(lista)], { type: 'application/json;charset=utf-8' }),
+    `${(rotulo || 'trabalho').replace(/[^\w-]+/g, '-').toLowerCase()}.twwork`,
+  );
+  showToast(`Lista guardada: ${lista.items.length} arquivo(s)`);
+}
+
+/** Lê uma lista e diz o que falta baixar neste aparelho. */
+async function abrirListaDeTrabalho(arquivo: File): Promise<void> {
+  let lista;
+  try {
+    lista = parseWorklist(await arquivo.text());
+  } catch (erro) {
+    showToast(erro instanceof Error ? erro.message : String(erro), true);
+    return;
+  }
+
+  let hashes: string[] = [];
+  try {
+    hashes = (await listCachedArchives()).map((item) => item.sha256).filter(Boolean);
+  } catch {
+    /* sem cache, tudo conta como ainda não baixado */
+  }
+
+  const plano = planWorklist(lista, hashes);
+  setCatalogStatus(describeWorklistPlan(lista, plano));
+
+  // A lista dos que faltam é o que a pessoa veio buscar; nomeá-los poupa a
+  // conferência item a item contra o caderno dela.
+  const faltando = [...plano.missing, ...plano.unknown].map((item) => item.name);
+  if (faltando.length) {
+    showToast(`Faltam ${faltando.length}: ${faltando.slice(0, 4).join(', ')}${faltando.length > 4 ? '…' : ''}`);
+  } else {
+    showToast('Todos os arquivos desta lista já estão neste aparelho');
+  }
+}
+
 async function reconhecerArquivoConhecido(sha256: string, nome: string): Promise<void> {
   try {
     const reconhecido = recognizeArchive(sha256, await listCachedArchives(), nome);

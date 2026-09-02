@@ -15,3 +15,4 @@ export * from './catalog-memory.js';
 export * from './prepare-ahead.js';
 export * from './question-parser.js';
 export * from './known-archive.js';
+export * from './worklist.js';
