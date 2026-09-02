@@ -34,6 +34,11 @@ import {
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
+  describeHeadline,
+  describeRecordBasis,
+  summarizeTable,
+} from '../../../packages/analysis/src/table-headline.ts';
+import {
   classifyCnv,
   convertGeoJsonToTabwinMap,
   encodeWindows1252,
@@ -634,6 +639,11 @@ const tableRowAggregate = element<HTMLButtonElement>('#table-row-aggregate');
 const tableRowSuppress = element<HTMLButtonElement>('#table-row-suppress');
 const chart = element<HTMLElement>('#chart');
 const auditOutput = element<HTMLElement>('#audit-output');
+const tableHeadline = element<HTMLElement>('#table-headline');
+const tableHeadlineTotal = element<HTMLElement>('#table-headline-total');
+const tableHeadlineMeasure = element<HTMLElement>('#table-headline-measure');
+const tableHeadlineShare = element<HTMLElement>('#table-headline-share');
+const tableHeadlineBasis = element<HTMLElement>('#table-headline-basis');
 
 /**
  * Onde o tempo foi, na última abertura vinda do DATASUS.
@@ -4326,7 +4336,43 @@ function bindTableScrollOnce(): void {
   window.addEventListener('afterprint', () => renderTableBody({ full: false }));
 }
 
+/**
+ * Desenha a manchete da tabela.
+ *
+ * Usa o mesmo resultado que a tabela desenha, então os dois nunca discordam.
+ * A medida é nomeada pelo que ela é — se o DEF chama de "Nascidos vivos", a
+ * manchete diz isso, e não "Total", que seria verdade sobre a soma e mentira
+ * sobre o assunto.
+ */
+function renderTableHeadline(result: TabulationResult): void {
+  const headline = summarizeTable({
+    rows: result.rows,
+    cells: result.cells,
+    // Uma coluna só: o rótulo dela nomeia a medida. Várias colunas, o total
+    // é de tudo somado e nenhum rótulo isolado o descreveria.
+    ...(result.columns.length === 1 && result.columns[0]?.label
+      ? { measureLabel: result.columns[0].label }
+      : {}),
+    recordsAccepted: result.recordsAccepted,
+    recordsSeen: result.recordsSeen,
+  });
+  const formatadores = {
+    integer: (valor: number) => integerFormat.format(valor),
+    percent: (fracao: number) => `${Math.round(fracao * 100)}%`,
+  };
+
+  tableHeadlineTotal.textContent = integerFormat.format(headline.total);
+  tableHeadlineMeasure.textContent = headline.measureLabel;
+  tableHeadlineShare.textContent = describeHeadline(headline, formatadores);
+
+  const procedencia = describeRecordBasis(headline, formatadores);
+  tableHeadlineBasis.textContent = procedencia ?? '';
+  tableHeadlineBasis.hidden = procedencia === null;
+  tableHeadline.hidden = false;
+}
+
 function renderTable(result: TabulationResult): void {
+  renderTableHeadline(result);
   const caption = resultTable.caption ?? resultTable.createCaption();
   caption.replaceChildren();
   const captionTitle = document.createElement('strong');
@@ -6521,12 +6567,37 @@ async function downloadCatalogEntries(
   } catch {
     // Private browsing or storage policies may disable IndexedDB; acquisition remains usable.
   }
+  /**
+   * Roda algo demorado batendo um sinal de vida por segundo.
+   *
+   * O vigia de parada mede tempo sem atividade, não tempo total. Uma etapa
+   * lenta e silenciosa — o DATASUS montando o pacote leva 11 a 13 segundos, e
+   * a retentativa pode triplicar isso — é indistinguível de uma travada, e o
+   * vigia mata o que estava funcionando. O contador na tela sai de graça, e
+   * responde à outra queixa: a de que nada aparecia enquanto se esperava.
+   */
+  const comBatimento = async <T>(rotulo: string, executar: () => Promise<T>): Promise<T> => {
+    const inicio = Date.now();
+    const anunciar = (): void => {
+      onActivity?.();
+      setCatalogStatus(`${rotulo}… ${Math.round((Date.now() - inicio) / 1000)}s`);
+    };
+    anunciar();
+    const batida = window.setInterval(anunciar, 1000);
+    try {
+      return await executar();
+    } finally {
+      window.clearInterval(batida);
+    }
+  };
+
   if (!archive) {
     let prepared = files.length === 1 && files[0]?.preparedUrl && files[0].preparedAt
       && Date.now() - files[0].preparedAt < 4 * 60 * 1000
       ? { value: files[0].preparedUrl, attempts: 0 }
       : await temposDoDownload.measure('preparo no DATASUS',
-        () => prepareOfficialDownloadDetailed(files, signal));
+        () => comBatimento('O DATASUS está preparando o pacote',
+          () => prepareOfficialDownloadDetailed(files, signal)));
 
     const baixar = (url: string): Promise<{ value: Uint8Array; attempts: number }> =>
       temposDoDownload.measure('download', () => fetchOfficialArchiveDetailed(url, signal, ({ receivedBytes, totalBytes }) => {
@@ -6550,9 +6621,10 @@ async function downloadCatalogEntries(
       // é a tentativa com menos chance de funcionar. Um preparo novo custa uma
       // viagem e, medido, vem inteiro.
       if (!preparedArchiveIsUnusable(error)) throw error;
-      onActivity?.();
-      setCatalogStatus('O pacote do DATASUS não veio inteiro; pedindo outro…');
-      const refeito = await prepareOfficialDownloadDetailed(files, signal);
+      const refeito = await comBatimento(
+        'O pacote do DATASUS não veio inteiro; pedindo outro',
+        () => prepareOfficialDownloadDetailed(files, signal),
+      );
       prepared = { value: refeito.value, attempts: prepared.attempts + refeito.attempts };
       downloaded = await baixar(prepared.value);
     }

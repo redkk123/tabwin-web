@@ -617,6 +617,18 @@
               </div>
               <p class="compatibility-note">As ações de linha usam a busca “Localizar” acima e entram no mesmo histórico reversível das colunas calculadas.</p>
             </section>
+            <!-- A manchete vem antes do detalhe: uma tabela de contingência
+                 está certa e é ilegível de relance, e quem precisa do dado para
+                 uma frase quer o número, não a matriz. -->
+            <div class="table-headline" id="table-headline" hidden>
+              <div class="table-headline-number">
+                <strong id="table-headline-total">—</strong>
+                <span id="table-headline-measure">Total</span>
+              </div>
+              <p class="table-headline-share" id="table-headline-share"></p>
+              <p class="table-headline-basis" id="table-headline-basis" hidden></p>
+            </div>
+
             <div class="table-wrap" id="table-wrap" hidden>
               <table id="result-table">
                 <thead></thead>

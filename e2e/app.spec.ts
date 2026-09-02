@@ -1659,6 +1659,66 @@ test('uma seleção enorme pede confirmação antes de começar a espera', async
   await expect.poll(() => consultas, { timeout: 60_000 }).toBeGreaterThan(0);
 });
 
+test('preparo demorado dá sinal de vida, em vez de parecer travado', async ({ page }) => {
+  // O DATASUS leva 11 a 13 segundos montando o pacote, e com retentativa passa
+  // de 90 — que é o prazo do vigia de parada. O vigia mede tempo SEM sinal de
+  // atividade, então o preparo silencioso era indistinguível de uma travada:
+  // ele matava um download em pé, e a pessoa pagava 105 MB de novo.
+  const { zipSync, strToU8 } = await import('fflate');
+  const pacote = Buffer.from(zipSync({ 'DNBR1997.dbc': strToU8('microdado-de-teste') }, { level: 0 }));
+
+  await page.route('**/wp-content/ftp.php', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify([{
+      arquivo: 'DNBR1997.dbc',
+      endereco: 'ftp://ftp.datasus.gov.br/dissemin/publicos/SINASC/NOV/DNRES/DNBR1997.dbc',
+      fonte: 'SINASC',
+      modalidade: 'Dados',
+    }]),
+  }));
+
+  // O preparo demora, como o de verdade demora.
+  await page.route('**/wp-content/download.php', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3500));
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify(['https://datasus.saude.gov.br/wp-content/zipupload/Arq_1/arquivo.zip']),
+    });
+  });
+  await page.route('**/zipupload/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/zip',
+    headers: { 'access-control-allow-origin': '*', 'accept-ranges': 'none' },
+    body: pacote,
+  }));
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINASC');
+  await page.locator('#catalog-file-type').selectOption('DN');
+  await page.locator('#catalog-year').selectOption(['1997']);
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await page.locator('.catalog-result').first().waitFor();
+  await page.locator('.catalog-result button', { hasText: 'Baixar e abrir' }).click();
+
+  // Enquanto o preparo corre, a tela precisa dizer que ele corre — e o
+  // contador é o que prova que a operação está viva, não só "demorando".
+  const status = page.locator('#catalog-status');
+  await expect(status).toContainText('preparando o pacote', { timeout: 3000 });
+  const primeiro = await status.textContent();
+  await expect(status).not.toHaveText(primeiro ?? '', { timeout: 3000 });
+
+  // E o preparo dá lugar ao download, sem falso alarme de travamento. O
+  // conteúdo aqui não é um DBC de verdade e não vai abrir — o que este teste
+  // prova é que a espera não é confundida com travamento.
+  await expect(status).toContainText('Baixando', { timeout: 20_000 });
+  await expect(status).not.toContainText('parou de progredir');
+});
+
 test('o .dbc pode ser salvo direto do resultado da busca, sem abrir', async ({ page }) => {
   // "Baixar e abrir" serve para tabular aqui. Quem vai levar o arquivo para o
   // R, para o Python ou para outra máquina não precisa que o navegador monte
