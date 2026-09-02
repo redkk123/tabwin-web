@@ -4,8 +4,28 @@
     {
       "name": "tabwin-web",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "web:dev", "--", "--port", "5173"],
+      "runtimeArgs": [
+        "run",
+        "web:dev",
+        "--",
+        "--port",
+        "5173"
+      ],
       "port": 5173
+    },
+    {
+      "name": "tabwin-web-preview",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "C:/projetos/tabwin-web/node_modules/vite/bin/vite.js",
+        "preview",
+        "--config",
+        "C:/projetos/tabwin-web/vite.config.ts",
+        "--port",
+        "4173",
+        "--strictPort"
+      ],
+      "port": 4173
     }
   ]
 }

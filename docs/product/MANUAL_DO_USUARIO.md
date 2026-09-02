@@ -36,6 +36,8 @@ está aberto.
 
 ## 2. Primeiro uso, em quatro passos
 
+![Tela inicial do TabWin Web, com a área para abrir arquivo e o painel de configuração à esquerda](./manual/01-inicio.png "A tela inicial. A tarja **Seus dados ficam neste aparelho** não é slogan: não existe servidor de dados neste programa.")
+
 1. **Abra um arquivo.** Arraste um `.DBC` para a área tracejada, ou clique nela
    para escolher. Se você não tem um arquivo ainda, use **Buscar no DATASUS**
    (seção 3).
@@ -51,6 +53,10 @@ Pronto — daí em diante é refinar.
 ---
 
 ## 3. Buscar dados no DATASUS
+
+![Diálogo de busca no DATASUS com sistema, tipo de dados, anos e UFs](./manual/13-busca-datasus.png "O resumo diz quantas combinações serão consultadas e quanto tempo leva. Acima de 200, o programa pede confirmação antes de começar.")
+
+![Resultados da busca no catálogo, com ações por arquivo e em lote](./manual/14-resultados-catalogo.png "**Baixar e abrir** traz e tabula; **Salvar .dbc** só grava no computador, útil para levar o dado ao R ou ao Python.")
 
 **Buscar no DATASUS** abre o catálogo oficial. Você escolhe sistema (SINAN,
 SIM, SINASC, SIH, CNES…), tipo de dado, e ano ou período.
@@ -163,6 +169,12 @@ Instalação, endereços que ele pode acessar e modelo de ameaça estão em
 
 ## 4. Montar a tabela
 
+![Aplicativo com o arquivo DOINF23 aberto, mostrando registros, campos, tamanho e SHA-256](./manual/02-arquivo-aberto.png "DOINF23 aberto: 32.017 registros, 87 campos, e o SHA-256 do arquivo. Esse código identifica exatamente o que você abriu, e vai junto na exportação.")
+
+![Tabela cruzada de sexo por raça e cor, com totais por coluna](./manual/03-tabela-cruzada.png "Sexo cruzado com raça/cor. Os códigos aparecem como estão no arquivo porque nenhum CNV foi carregado — o programa não adivinha que `1` significa “masculino”.")
+
+![Painel lateral com linhas, colunas, medida, filtros, limpeza, regras cruzadas e transformações](./manual/04-controles.png "O painel de configuração. O texto ao lado de cada seção recolhida — “nenhum”, “não destrutiva”, “nenhuma etapa” — diz o estado sem precisar abrir.")
+
 | Controle | O que faz |
 | --- | --- |
 | **Linhas** | a variável que vira as linhas |
@@ -197,6 +209,8 @@ valor), em colunas paralelas.
 
 ## 5. Filtros e seleções
 
+![Seção de filtros e seleções aberta, com a lista de valores do campo escolhido](./manual/05-filtro.png "Filtro por valores. A lista mostra o que existe no arquivo, com busca para campos de muitas categorias.")
+
 **Filtros e seleções** aceita:
 
 - **valores exatos** — escolha na lista, com busca;
@@ -222,6 +236,8 @@ vezes — frequentemente erro de digitação, às vezes achado real.
 ---
 
 ## 7. Transformar dados
+
+![Seção de transformação de dados, com seleção do tipo de etapa e configuração](./manual/06-transformar.png "Diferente do filtro: aqui as etapas alteram o conjunto, entram numa lista na ordem aplicada, e podem ser desfeitas.")
 
 **Transformar dados** é um pipeline no estilo dplyr/pandas, aplicado sobre os
 registros antes da tabulação. Onze verbos:
@@ -272,6 +288,18 @@ Duas coisas importantes:
 ---
 
 ## 9. As abas de resultado
+
+![Aba de gráfico com controles de tipo, eixos e exportação](./manual/07-grafico.png "O gráfico é sempre da tabela atual. Zoom, cores e limites de eixo são apresentação: nada aqui altera o número exportado.")
+
+![Aba de estatística com seleção de operação e colunas](./manual/08-estatistica.png "Descritivas, correlação, regressão e taxas padronizadas sobre as colunas da tabela.")
+
+![Aba investigar, com seleção de campos numéricos, categóricos e geográficos](./manual/09-investigar.png "A detecção é pelo formato do sinal, não pelo assunto. Um placar aponta estranheza; decidir se é erro é julgamento de quem conhece o dado.")
+
+![Aba de consulta SQL antes de carregar dados, com a lista de campos disponíveis](./manual/10-consulta-vazia.png "A aba Consulta antes de carregar. Num arquivo de 87 campos, a tela diz quantos cabem — carregar todos raramente é o que se quer.")
+
+![Consulta SQL agrupando por causa básica, com o resultado em tabela](./manual/11-consulta-resultado.png "As oito causas básicas mais frequentes entre os óbitos infantis de 2023, em 135 ms. P369 é sepse bacteriana do recém-nascido.")
+
+![Aba de auditoria com o registro de procedência e operações](./manual/12-auditoria.png "De onde vieram os dados e o que foi feito com eles — para reproduzir o resultado depois e explicar como foi obtido.")
 
 **Tabela** — o resultado. Aqui também ficam as operações pós-tabela: totais,
 percentuais, renomear e mover colunas, ordenar, casas decimais, título e

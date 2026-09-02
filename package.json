@@ -21,7 +21,7 @@
     "verify:goldens": "npm run build && node scripts/verify-goldens-local.mjs",
     "verify:goldens:second": "npm run build && node scripts/verify-second-goldens-local.mjs",
     "verify:implode-paths": "npm run build && node scripts/verify-implode-paths.mjs",
-  "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
+    "verify:record-stream": "npm run build && node scripts/verify-record-stream.mjs",
     "seed:differential": "npm run build && node scripts/differential-seed.mjs",
     "bridge:start": "npm run build && node apps/tabwin-bridge/server.mjs",
     "inspect:cnv-n": "node scripts/inspect-new-format-cnv.mjs",
@@ -32,7 +32,8 @@
     "e2e": "playwright test",
     "e2e:headed": "playwright test --headed",
     "check:all": "npm run check && npm run e2e",
-    "bench:columnar": "npm run build && node scripts/measure-columnar-cache.mjs"
+    "bench:columnar": "npm run build && node scripts/measure-columnar-cache.mjs",
+    "lab:sync": "node scripts/sync-lab.mjs"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",

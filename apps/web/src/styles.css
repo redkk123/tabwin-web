@@ -69,6 +69,10 @@ button:focus-visible, input:focus-visible, select:focus-visible, .drop-zone:has(
 .brand-mark i:nth-child(3) { height: 100%; }
 .privacy-pill { border: 1px solid rgba(205, 220, 237, .28); background: rgba(205, 220, 237, .10); color: #dae3ee; padding: 7px 12px; border-radius: 4px; font-size: 12px; font-weight: 500; }
 .privacy-pill span { color: #cddced; margin-right: 6px; }
+.topbar-links { display: flex; align-items: center; gap: 8px; }
+.topbar-links a { color: #dae3ee; text-decoration: none; font-size: 13px; font-weight: 500; padding: 7px 12px; border: 1px solid rgba(205, 220, 237, .28); border-radius: 4px; }
+.topbar-links a:hover { background: rgba(205, 220, 237, .12); color: white; }
+.topbar-links a:focus-visible { outline: 2px solid #cddced; outline-offset: 2px; }
 .icon-button { width: 36px; height: 36px; border: 1px solid rgba(255,255,255,.18); border-radius: 50%; color: white; background: transparent; cursor: pointer; font-weight: 600; }
 
 .workspace { grid-column: 1; grid-row: 2; padding: 28px 24px; background: var(--surface); border-right: 1px solid var(--line); overflow: auto; }
@@ -563,6 +567,7 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
   .app-shell { grid-template: 68px auto 1fr / 1fr; }
   .topbar { padding: 0 18px; }
   .privacy-pill { display: none; }
+  .topbar-links a { padding: 6px 9px; }
   .workspace { grid-column: 1; grid-row: 2; padding: 20px; border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
   .workspace-heading, .drop-zone, .file-list, .local-note { max-width: 650px; margin-left: auto; margin-right: auto; }
   .analysis-form { max-width: 650px; margin-left: auto; margin-right: auto; grid-template-columns: 1fr 1fr; }

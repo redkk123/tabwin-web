@@ -1850,3 +1850,49 @@ test('a consulta SQL responde sobre os dados abertos, sem tocar no motor de tabu
   await expect(page.locator('#query-status')).toContainText('linha(s) em');
   expect(erros.join(' | ')).toBe('');
 });
+
+test('o topo leva ao manual, e ao Lab só quando ele está publicado', async ({ page }) => {
+  await page.goto('/');
+
+  const manual = page.locator('.topbar-links a[href="./manual.html"]');
+  await expect(manual).toBeVisible();
+  await expect(manual).toHaveText('Manual');
+
+  // O Lab é copiado para `/lab/` por uma etapa à parte, e aqui não foi. Este
+  // servidor devolve o index.html com status 200 para qualquer caminho, então
+  // a asserção abaixo é justamente o caso difícil: quem checar só o status
+  // revela um link para lugar nenhum.
+  await expect(page.locator('#lab-link')).toBeHidden();
+
+  // Com o Lab publicado, o mesmo carregamento revela o link. A resposta é
+  // simulada aqui porque o conteúdo do Lab não é assunto deste repositório.
+  await page.route('**/lab/ORIGEM.json', (route) => route.fulfill({
+    status: 200, contentType: 'application/json', body: '{"repositorio":"tabwin-lab"}',
+  }));
+  await page.reload();
+  const lab = page.locator('#lab-link');
+  await expect(lab).toBeVisible();
+  await expect(lab).toHaveAttribute('href', './lab/');
+});
+
+test('o manual publicado abre com as figuras que ele cita', async ({ page }) => {
+  // `vite dev` serve `public/`, mas o manual é gerado no build. O teste checa o
+  // artefato construído, que é o que a pessoa realmente abre.
+  const html = await import('node:fs').then((fs) => fs.promises.readFile('dist-web/manual.html', 'utf8'))
+    .catch(() => null);
+  test.skip(html === null, 'manual.html só existe depois de npm run web:build');
+
+  const citadas = [...html!.matchAll(/<img src="\.\/manual\/([^"]+)"/g)].map((m) => m[1]);
+  expect(citadas.length).toBeGreaterThan(0);
+
+  const fs2 = await import('node:fs');
+  for (const nome of new Set(citadas)) {
+    expect(fs2.existsSync(`dist-web/manual/${nome}`), `falta dist-web/manual/${nome}`).toBe(true);
+  }
+
+  // Toda figura precisa de alt: quem usa leitor de tela recebe a descrição, e
+  // quem está com a imagem quebrada ao menos sabe o que deveria estar ali.
+  const semAlt = [...html!.matchAll(/<img src="\.\/manual\/[^"]+" alt="(.*?)"/g)]
+    .filter((m) => !m[1].trim()).length;
+  expect(semAlt, 'há figura sem texto alternativo').toBe(0);
+});

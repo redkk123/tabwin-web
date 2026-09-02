@@ -14,6 +14,11 @@ import path from 'node:path';
 
 const SOURCE = 'docs/product/MANUAL_DO_USUARIO.md';
 const OUTPUT = 'dist-web/manual.html';
+// As capturas moram ao lado do markdown para que ele também renderize no
+// GitHub. O caminho relativo `./manual/x.png` vale nos dois lugares porque a
+// pasta é copiada para junto do HTML gerado.
+const IMAGES_FROM = 'docs/product/manual';
+const IMAGES_TO = 'dist-web/manual';
 
 const escapeHtml = (value) => value
   .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -24,6 +29,10 @@ function inline(text) {
   return escapeHtml(text)
     // Code first: nothing inside a backtick span should be re-interpreted.
     .replace(/`([^`]+)`/g, (_, code) => `<code>${code}</code>`)
+    // A imagem vem ANTES do link: `![alt](src)` contém `[alt](src)`, e a regra
+    // de link casaria com o miolo, deixando um `!` órfão antes de uma âncora.
+    .replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+&quot;([^&]*)&quot;)?\)/g,
+      (_, alt, src) => `<img src="${src}" alt="${alt}" loading="lazy">`)
     .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, href) => `<a href="${href}">${label}</a>`)
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[^*])\*([^*]+)\*/g, '$1<em>$2</em>');
@@ -111,12 +120,25 @@ function render(markdown) {
       continue;
     }
 
+    // Uma imagem sozinha na linha vira figura com legenda. O texto entre
+    // aspas no markdown é a legenda; o alt continua descrevendo a imagem para
+    // quem não a vê, que são coisas diferentes e por isso ficam separadas.
+    const figura = /^!\[([^\]]*)\]\(([^)\s]+)(?:\s+"([^"]*)")?\)\s*$/.exec(line);
+    if (figura) {
+      const [, alt, src, legenda] = figura;
+      html.push(`<figure><img src="${escapeHtml(src)}" alt="${escapeHtml(alt)}" loading="lazy">`
+        + (legenda ? `<figcaption>${inline(legenda)}</figcaption>` : '')
+        + '</figure>');
+      index++;
+      continue;
+    }
+
     if (/^[-*]\s+/.test(line)) { flushList('ul', false); continue; }
     if (/^\d+\.\s+/.test(line)) { flushList('ol', true); continue; }
 
     const paragraph = [];
     while (index < lines.length && lines[index].trim()
-      && !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|\||```|---+$)/.test(lines[index])) {
+      && !/^(#{1,6}\s|[-*]\s|\d+\.\s|>|\||```|!\[|---+$)/.test(lines[index])) {
       paragraph.push(lines[index].trim());
       index++;
     }
@@ -166,6 +188,9 @@ table { width: 100%; border-collapse: collapse; font-size: 15px; background: var
 th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { background: var(--surface-2); font-weight: 600; }
 tr:last-child td { border-bottom: 0; }
+figure { margin: 22px 0; }
+figure img { width: 100%; display: block; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+figcaption { margin-top: 8px; color: var(--muted); font-size: 14px; line-height: 1.5; }
 ul, ol { padding-left: 22px; }
 li { margin: 5px 0; }
 footer { max-width: 820px; margin: 0 auto; padding: 0 24px 60px; color: var(--muted); font-size: 14px; }
@@ -190,4 +215,25 @@ ${body}
 
 fs.mkdirSync(path.dirname(OUTPUT), { recursive: true });
 fs.writeFileSync(OUTPUT, page);
-console.log(`manual: ${OUTPUT} (${(Buffer.byteLength(page) / 1024).toFixed(0)} kB)`);
+
+// Cada imagem citada no texto precisa existir: uma figura quebrada num manual
+// é pior que nenhuma, porque quem lê fica sem saber o que deveria ver ali.
+const citadas = [...markdown.matchAll(/!\[[^\]]*\]\(\.\/manual\/([^)\s]+)/g)].map((m) => m[1]);
+const disponiveis = new Set(fs.existsSync(IMAGES_FROM) ? fs.readdirSync(IMAGES_FROM) : []);
+const faltando = [...new Set(citadas)].filter((nome) => !disponiveis.has(nome));
+if (faltando.length) {
+  throw new Error(`manual cita imagens que não existem em ${IMAGES_FROM}: ${faltando.join(', ')}`);
+}
+
+// Uma imagem que não virou figura caiu no caminho de parágrafo — quase sempre
+// porque a legenda tem uma aspa reta, que fecha o título antes da hora. O
+// resultado ainda renderiza, então só um confronto de contagens denuncia.
+const viraramFigura = (body.match(/<figure>/g) ?? []).length;
+if (viraramFigura !== citadas.length) {
+  throw new Error(`${citadas.length} imagens citadas mas ${viraramFigura} viraram figura: `
+    + 'alguma legenda provavelmente contém aspas retas, que encerram o título markdown');
+}
+fs.mkdirSync(IMAGES_TO, { recursive: true });
+for (const nome of disponiveis) fs.copyFileSync(path.join(IMAGES_FROM, nome), path.join(IMAGES_TO, nome));
+
+console.log(`manual: ${OUTPUT} (${(Buffer.byteLength(page) / 1024).toFixed(0)} kB, ${citadas.length} figuras)`);

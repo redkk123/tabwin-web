@@ -17,7 +17,13 @@
           <span><strong>TabWin</strong><em>Web</em></span>
         </a>
         <div class="privacy-pill"><span aria-hidden="true">●</span> Seus dados ficam neste aparelho</div>
-        <button class="icon-button" id="about-button" type="button" aria-label="Sobre o projeto">?</button>
+        <nav class="topbar-links" aria-label="Recursos">
+          <a href="./manual.html" target="_blank" rel="noopener">Manual</a>
+          <!-- O Lab é publicado por uma etapa separada. O link só aparece se
+               a pasta existir de fato, para não oferecer um 404. -->
+          <a id="lab-link" href="./lab/" target="_blank" rel="noopener" hidden>Laboratório</a>
+          <button class="icon-button" id="about-button" type="button" aria-label="Sobre o projeto">?</button>
+        </nav>
       </header>
 
       <aside class="workspace" aria-label="Configuração da análise">

@@ -8823,6 +8823,24 @@ mapCanvas.addEventListener('pointerup', (event) => {
 });
 mapCanvas.addEventListener('pointercancel', () => { mapDrag = null; mapPointerOrigin = null; });
 mapCanvas.addEventListener('pointerleave', () => { if (!mapDrag) mapTooltip.hidden = true; });
+// O Laboratório é um aplicativo à parte, copiado para `/lab/` por
+// `scripts/sync-lab.mjs`. Quem constrói o site sem rodar essa etapa não deve
+// ver um link quebrado, então a existência do destino é que decide.
+void (async () => {
+  try {
+    // Um 200 não basta: servidores com rota de fallback devolvem o index.html
+    // para qualquer caminho, e o link apareceria apontando para lugar nenhum.
+    // Só o conteúdo esperado prova que o Lab foi mesmo publicado aqui.
+    const response = await fetch('./lab/ORIGEM.json', { cache: 'no-cache' });
+    if (!response.ok) return;
+    const origem: unknown = await response.json();
+    if ((origem as { repositorio?: string } | null)?.repositorio !== 'tabwin-lab') return;
+    element<HTMLAnchorElement>('#lab-link').hidden = false;
+  } catch {
+    /* sem Lab publicado, ou resposta que não é JSON: o link continua oculto */
+  }
+})();
+
 element<HTMLButtonElement>('#about-button').addEventListener('click', () => aboutDialog.showModal());
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());
 aboutDialog.addEventListener('click', (event) => {
