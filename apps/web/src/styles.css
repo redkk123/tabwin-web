@@ -652,3 +652,4 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .query-result thead th { position: sticky; top: 0; background: var(--surface-2); color: var(--muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
 .query-result td.numero { font-variant-numeric: tabular-nums; text-align: right; }
 .query-result .vazio { color: var(--faint); font-style: italic; }
+.query-fields { width: 100%; padding: 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace; font-size: 12px; }

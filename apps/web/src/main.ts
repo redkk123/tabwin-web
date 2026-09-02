@@ -88,6 +88,7 @@ import {
   type StallWatchdog,
 } from '../../../packages/acquisition/src/stall-watchdog.ts';
 import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
+import { checkIngestBudget } from '../../../packages/analysis/src/duckdb-surface.ts';
 import {
   loadRecordsAsTable,
   quoteIdentifier,
@@ -963,6 +964,7 @@ function chooseDefaultField(fields: DbfHeader['fields']): string {
 
 function populateControls(preferredField?: string): void {
   populateFlowFields();
+  populateQueryFields();
   if (!dbfHeader) return;
   fieldSearch.value = '';
   const previousRow = preferredField ?? rowField.value;
@@ -8987,6 +8989,8 @@ const queryExport = element<HTMLButtonElement>('#query-export');
 const queryUnload = element<HTMLButtonElement>('#query-unload');
 const queryLoad = element<HTMLButtonElement>('#query-load');
 const queryResult = element<HTMLElement>('#query-result');
+const queryFields = element<HTMLSelectElement>('#query-fields');
+const queryFieldsAll = element<HTMLButtonElement>('#query-fields-all');
 
 let queryTable: string | null = null;
 let queryLastResult: DuckDbQueryResult | null = null;
@@ -9032,10 +9036,35 @@ function renderQueryResult(resultado: DuckDbQueryResult): void {
   queryResult.append(table);
 }
 
+/**
+ * Preenche a lista de campos quando um arquivo é aberto.
+ *
+ * Marca todos por padrão quando cabem no orçamento, e nenhum quando não cabem
+ * — obrigar a escolha é melhor que deixar marcado algo que vai ser recusado.
+ */
+function populateQueryFields(): void {
+  const campos = (dbfHeader?.fields ?? []).map((field) => field.name);
+  queryFields.replaceChildren();
+  for (const nome of campos) queryFields.add(new Option(nome, nome));
+  const orcamento = checkIngestBudget(datasetRecordCount || QUERY_MAX_RECORDS, campos.length);
+  for (const opcao of queryFields.options) opcao.selected = orcamento.withinBudget;
+  if (campos.length) {
+    setQueryStatus(orcamento.withinBudget
+      ? `${campos.length} campo(s) disponíveis, todos marcados. ${orcamento.message}`
+      : `${orcamento.message} Marque os campos que interessam.`,
+      orcamento.withinBudget ? 'normal' : 'erro');
+  }
+}
+
 async function loadDatasetIntoQueryEngine(): Promise<void> {
   if (!datasetName) { setQueryStatus('Abra um arquivo antes de consultar.', 'erro'); return; }
-  const campos = (dbfHeader?.fields ?? []).map((field) => field.name);
-  if (!campos.length) { setQueryStatus('O conjunto aberto não declara campos.', 'erro'); return; }
+  const campos = [...queryFields.selectedOptions].map((opcao) => opcao.value);
+  if (!campos.length) { setQueryStatus('Marque ao menos um campo para carregar.', 'erro'); return; }
+  // O limite é conferido ANTES de pedir os registros: descobrir que não cabe
+  // depois de materializar quatrocentas mil linhas seria descobrir tarde.
+  const orcamento = checkIngestBudget(
+    Math.min(datasetRecordCount || QUERY_MAX_RECORDS, QUERY_MAX_RECORDS), campos.length);
+  if (!orcamento.withinBudget) { setQueryStatus(orcamento.message, 'erro'); return; }
   queryLoad.disabled = true;
   try {
     setQueryStatus('Lendo os registros do conjunto aberto…', 'trabalhando');
@@ -9127,3 +9156,5 @@ queryUnload.addEventListener('click', () => {
     setQueryStatus('Motor descarregado. A memória dele voltou para o navegador.');
   });
 });
+
+wireSelectAll(queryFieldsAll, queryFields, 'todos');

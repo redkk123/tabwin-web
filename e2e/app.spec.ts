@@ -1822,7 +1822,12 @@ test('a consulta SQL responde sobre os dados abertos, sem tocar no motor de tabu
   await expect(page.locator('#result-table tbody tr').first()).toBeVisible();
 
   await page.getByRole('button', { name: 'Consulta' }).click();
-  await expect(page.locator('#query-status')).toContainText('Nenhum dado carregado');
+  // Ao abrir um arquivo a aba já diz quais campos existem e se cabem, antes de
+  // qualquer carga. Um limite descoberto depois de materializar centenas de
+  // milhares de linhas seria descoberto tarde demais.
+  await expect(page.locator('#query-status')).toContainText('campo(s) disponíveis');
+  await expect(page.locator('#query-fields option')).toHaveCount(3);
+  await expect(page.locator('#query-fields option:checked')).toHaveCount(3);
   // Executar tem que estar desligado enquanto não há tabela.
   await expect(page.locator('#query-run')).toBeDisabled();
 

@@ -69,7 +69,14 @@ test('origin configuration is canonical, exact and deduplicated', () => {
 test('health is available without an Origin while proxy routes require configuration and allowlisting', async () => {
   const health = await handleRequest(request('/health', { method: 'GET', origin: null }), {});
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { status: 'ok', service: 'tabwin-datasus-proxy' });
+  assert.deepEqual(await health.json(), {
+    status: 'ok',
+    service: 'tabwin-datasus-proxy',
+    // O corpo ganhou a revisão no ar; sem binding os campos saem nulos.
+    version: null,
+    tag: null,
+    deployedAt: null,
+  });
   assert.equal(health.headers.get('Access-Control-Allow-Origin'), null);
 
   const unconfigured = await handleRequest(request('/catalog', {
@@ -421,4 +428,34 @@ test('origem que para de responder ainda é cortada, por ociosidade', async (t) 
     assert.equal(sinal.aborted, true, 'origem travada precisa ser cortada');
     origem.liberar();
   });
+});
+
+test('/health diz qual revisão está no ar, porque "ok" sozinho não serve', async () => {
+  // Esta necessidade custou horas: produção rodava uma revisão antiga do
+  // Worker e a única forma de descobrir era medir comportamento. Um endpoint
+  // de saúde que responde "ok" sem dizer o que é "ok" não serve para o que ele
+  // existe.
+  const comVersao = {
+    ...ENVIRONMENT,
+    CF_VERSION_METADATA: { id: '0accdd6f-4c6e-4921-a452-5d28fb52166e', tag: 'v7', timestamp: '2026-09-02T15:00:00Z' },
+  };
+  const resposta = await handleRequest(request('/health', { method: 'GET', origin: null }), comVersao);
+  assert.equal(resposta.status, 200);
+  assert.deepEqual(await resposta.json(), {
+    status: 'ok',
+    service: 'tabwin-datasus-proxy',
+    version: '0accdd6f-4c6e-4921-a452-5d28fb52166e',
+    tag: 'v7',
+    deployedAt: '2026-09-02T15:00:00Z',
+  });
+});
+
+test('sem o binding a versão sai como nula, e não some do corpo', async () => {
+  // Ausência declarada é informação; campo que some parece que nunca existiu,
+  // e quem consulta não sabe se o Worker é antigo ou se o campo é novo.
+  const resposta = await handleRequest(request('/health', { method: 'GET', origin: null }), ENVIRONMENT);
+  const corpo = await resposta.json();
+  assert.equal(corpo.status, 'ok');
+  assert.equal(corpo.version, null);
+  assert.ok('version' in corpo && 'deployedAt' in corpo);
 });

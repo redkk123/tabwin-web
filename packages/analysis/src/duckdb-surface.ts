@@ -53,6 +53,46 @@ export interface DuckDbLoadedTable {
  */
 export const MAX_RESULT_ROWS = 5000;
 
+/**
+ * Quantas células (linhas × campos) a ingestão aceita de uma vez.
+ *
+ * Não é um número estético. A ingestão passa por representações caras em
+ * sequência: objetos JavaScript vindos do worker, depois um vetor por coluna,
+ * depois os vetores Arrow. Um arquivo do SIM tem 87 campos; 400 mil linhas
+ * dele são 34,8 milhões de células, e o pico de memória derruba a aba antes
+ * de qualquer consulta rodar.
+ *
+ * Recusar com instrução é melhor que travar: quem escolhe cinco campos em vez
+ * de oitenta e sete consulta o mesmo arquivo sem chegar perto do limite.
+ */
+export const MAX_INGEST_CELLS = 8_000_000;
+
+export interface IngestBudget {
+  cells: number;
+  withinBudget: boolean;
+  /** Quantos campos caberiam nessa quantidade de linhas. */
+  suggestedFields: number;
+  message: string;
+}
+
+/** Diz se a carga cabe, e o que fazer quando não cabe. */
+export function checkIngestBudget(rows: number, fields: number): IngestBudget {
+  const cells = Math.max(0, rows) * Math.max(0, fields);
+  const withinBudget = cells <= MAX_INGEST_CELLS;
+  const suggestedFields = rows > 0 ? Math.max(1, Math.floor(MAX_INGEST_CELLS / rows)) : fields;
+  return {
+    cells,
+    withinBudget,
+    suggestedFields,
+    message: withinBudget
+      ? `${rows.toLocaleString('pt-BR')} linha(s) × ${fields} campo(s).`
+      : `${rows.toLocaleString('pt-BR')} linha(s) × ${fields} campo(s) dá `
+        + `${cells.toLocaleString('pt-BR')} células, acima do limite de `
+        + `${MAX_INGEST_CELLS.toLocaleString('pt-BR')}. Escolha até ${suggestedFields} campo(s) `
+        + 'para esta quantidade de linhas — a consulta responde igual sobre os campos escolhidos.',
+  };
+}
+
 /** Nome de tabela seguro a partir do nome de um arquivo aberto. */
 export function tableNameFor(sourceName: string): string {
   const base = sourceName.replace(/\.[^.]+$/, '');

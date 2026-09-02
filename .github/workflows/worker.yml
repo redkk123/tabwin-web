@@ -1,0 +1,70 @@
+# Publica o proxy DATASUS junto com o site.
+#
+# Existe por um custo real: o Pages atualizava a cada push e o Worker não. O
+# site ficou semanas apontando para uma revisão antiga do proxy que recusava
+# `Range`, e a única forma de descobrir foi medir o comportamento em produção —
+# horas de investigação para um deploy que ninguém tinha rodado.
+#
+# Requer o segredo CLOUDFLARE_API_TOKEN no repositório, criado no painel da
+# Cloudflare com permissão "Edit Cloudflare Workers". Sem ele o job falha
+# dizendo isso, em vez de passar em silêncio sem publicar nada.
+
+name: Publicar Worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/datasus-proxy/**'
+      - '.github/workflows/worker.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: worker-deploy
+  cancel-in-progress: false
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # O proxy tem teste próprio. Publicar sem rodá-lo trocaria um problema
+      # (Worker velho) por outro pior (Worker novo e quebrado).
+      - name: Testar o proxy
+        run: |
+          npm run build
+          node --test tests/datasus-proxy.test.mjs
+
+      - name: Exigir a credencial antes de tentar
+        env:
+          TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Falta o segredo CLOUDFLARE_API_TOKEN. Crie um token com permissão 'Edit Cloudflare Workers' no painel da Cloudflare e adicione em Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+      - name: Publicar
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy --config apps/datasus-proxy/wrangler.jsonc
+
+      # Prova que o que subiu é o que está respondendo. Um deploy que retorna
+      # zero mas não muda produção é exatamente a falha que este workflow
+      # existe para impedir.
+      - name: Conferir /health em produção
+        run: |
+          set -e
+          resposta=$(curl -fsS https://tabwin-web-datasus-proxy.tabwin-web.workers.dev/health)
+          echo "$resposta"
+          echo "$resposta" | grep -q '"status":"ok"' || { echo "::error::/health não respondeu ok"; exit 1; }
+          echo "$resposta" | grep -q '"version":null' && { echo "::error::/health não revelou a revisão publicada"; exit 1; }
+          echo "Worker publicado e respondendo com a revisão."

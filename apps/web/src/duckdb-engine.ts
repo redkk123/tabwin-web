@@ -134,9 +134,18 @@ export async function loadRecordsAsTable(
   onProgress?.(`Preparando ${records.length.toLocaleString('pt-BR')} registros…`);
 
   const arrow = await import('apache-arrow');
-  const colunas: Record<string, unknown[]> = {};
+  // Uma coluna por vez, convertida para Arrow e liberada em seguida.
+  //
+  // A versão anterior montava TODAS as colunas como vetores JavaScript e só
+  // então chamava `tableFromArrays`. Num arquivo do SIM, com 87 campos, isso
+  // significava oitenta e sete vetores de centenas de milhares de posições
+  // vivos ao mesmo tempo, além dos objetos vindos do worker e dos vetores
+  // Arrow que viriam depois. Aqui o pico passa a ser: os registros, UMA coluna
+  // em JavaScript, e os vetores Arrow — que são compactos, com texto
+  // dicionarizado automaticamente.
+  const vetores: Record<string, unknown> = {};
   for (const c of columns) {
-    const destino = new Array<unknown>(records.length);
+    let destino: unknown[] | null = new Array<unknown>(records.length);
     for (let i = 0; i < records.length; i++) {
       const valor = records[i]![c.name];
       if (valor === null || valor === undefined) { destino[i] = null; continue; }
@@ -146,9 +155,12 @@ export async function loadRecordsAsTable(
           ? valor
           : typeof valor === 'string' ? valor : String(valor);
     }
-    colunas[c.name] = destino;
+    vetores[c.name] = arrow.vectorFromArray(destino as never);
+    // Soltar a referência aqui é o ponto todo: sem isso a coluna crua
+    // sobreviveria até o fim do laço, e o ganho desapareceria.
+    destino = null;
   }
-  const arrowTable = arrow.tableFromArrays(colunas as never);
+  const arrowTable = new arrow.Table(vetores as never);
   await connection.query(`DROP TABLE IF EXISTS ${quoteIdentifier(table)}`);
   await connection.insertArrowTable(arrowTable, { name: table, create: true });
   onProgress?.(`Tabela ${table} pronta com ${records.length.toLocaleString('pt-BR')} linhas.`);

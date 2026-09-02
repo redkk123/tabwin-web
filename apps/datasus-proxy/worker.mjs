@@ -477,6 +477,24 @@ async function handleArchive(request, environment, origin, proxySettings) {
   }
 }
 
+/**
+ * O corpo do /health, com a revisão que está realmente no ar.
+ *
+ * `version_metadata` é preenchido pela Cloudflare a cada deploy. Se o binding
+ * não estiver configurado, o campo sai como null em vez de sumir — ausência
+ * declarada é informação; campo que some parece que nunca existiu.
+ */
+function healthBody(environment) {
+  const versao = environment?.CF_VERSION_METADATA;
+  return {
+    status: 'ok',
+    service: 'tabwin-datasus-proxy',
+    version: versao?.id ?? null,
+    tag: versao?.tag ?? null,
+    deployedAt: versao?.timestamp ?? null,
+  };
+}
+
 function preflightResponse(route, request, origin) {
   const requestedMethod = request.headers.get('Access-Control-Request-Method')?.toUpperCase();
   if (requestedMethod !== route.method) {
@@ -512,7 +530,7 @@ export async function handleRequest(request, environment = {}) {
       }
       const headers = baseHeaders();
       headers.set('Content-Type', 'application/json; charset=utf-8');
-      return new Response(JSON.stringify({ status: 'ok', service: 'tabwin-datasus-proxy' }), { status: 200, headers });
+      return new Response(JSON.stringify(healthBody(environment)), { status: 200, headers });
     }
 
     const configuredOrigins = configuredAllowedOrigins(environment);
@@ -528,7 +546,7 @@ export async function handleRequest(request, environment = {}) {
     if (route.name === 'health') {
       const headers = baseHeaders(origin);
       headers.set('Content-Type', 'application/json; charset=utf-8');
-      return new Response(JSON.stringify({ status: 'ok', service: 'tabwin-datasus-proxy' }), { status: 200, headers });
+      return new Response(JSON.stringify(healthBody(environment)), { status: 200, headers });
     }
 
     const proxySettings = settings(environment);

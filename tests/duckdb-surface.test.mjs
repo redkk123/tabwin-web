@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  MAX_INGEST_CELLS,
   MAX_RESULT_ROWS,
+  checkIngestBudget,
   createTableSql,
   inferColumnTypes,
   normalizeCell,
@@ -82,4 +84,30 @@ test('BigInt do DuckDB vira número utilizável, e o que não cabe vira texto ex
 test('o teto de linhas é declarado, porque resultado cortado precisa dizer que foi cortado', () => {
   assert.equal(MAX_RESULT_ROWS, 5000);
   assert.ok(Number.isSafeInteger(MAX_RESULT_ROWS) && MAX_RESULT_ROWS > 0);
+});
+
+test('o orçamento de ingestão recusa com instrução, em vez de derrubar a aba', () => {
+  // A ingestão passa por representações caras em sequência: objetos vindos do
+  // worker, um vetor JavaScript por coluna, e os vetores Arrow. Um arquivo do
+  // SIM tem 87 campos; 400 mil linhas dele são 34,8 milhões de células.
+  const cabe = checkIngestBudget(100_000, 5);
+  assert.equal(cabe.withinBudget, true);
+  assert.equal(cabe.cells, 500_000);
+
+  const naoCabe = checkIngestBudget(400_000, 87);
+  assert.equal(naoCabe.withinBudget, false);
+  assert.equal(naoCabe.cells, 34_800_000);
+  // Recusar sem dizer o que fazer é só travar mais devagar.
+  assert.match(naoCabe.message, /Escolha até 20 campo\(s\)/);
+  assert.equal(naoCabe.suggestedFields, 20);
+  assert.match(naoCabe.message, /responde igual sobre os campos escolhidos/);
+});
+
+test('a borda do orçamento é exata, e zero linhas não divide por zero', () => {
+  assert.equal(checkIngestBudget(MAX_INGEST_CELLS, 1).withinBudget, true);
+  assert.equal(checkIngestBudget(MAX_INGEST_CELLS + 1, 1).withinBudget, false);
+  const vazio = checkIngestBudget(0, 87);
+  assert.equal(vazio.cells, 0);
+  assert.equal(vazio.withinBudget, true);
+  assert.equal(vazio.suggestedFields, 87, 'sem linhas não há campo a cortar');
 });
