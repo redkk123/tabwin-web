@@ -253,6 +253,47 @@ test('sem tamanho declarado, o limite volta a ser contado pedaço a pedaço', as
   });
 });
 
+test('a rota do TabNet repassa a tabulação agregada', async () => {
+  const html = '<TABLE CLASS="tabdados"><TR><TH>Sexo<TH>Total<TR><TD>Masc<TD>10</TABLE>';
+  let alvo = null;
+  await withMockFetch(async (input) => {
+    // O mock recebe string, URL ou Request conforme o caminho; Request tem
+    // `.url`, URL tem `.href`, e `String()` cobre os dois primeiros.
+    alvo = input?.url ?? String(input);
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } });
+  }, async () => {
+    const response = await handleRequest(request('/tabnet?def=sinasc/cnv/nvuf.def', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'Linha=Sexo',
+    }), ENVIRONMENT);
+    assert.equal(response.status, 200);
+    assert.equal(alvo, 'https://tabnet.datasus.gov.br/cgi/tabcgi.exe?sinasc/cnv/nvuf.def');
+    assert.match(await response.text(), /tabdados/);
+  });
+});
+
+test('a rota do TabNet recusa qualquer caminho fora da forma de um .def', async () => {
+  // Sem esta trava, a rota viraria um encaminhador aberto para todo o host do
+  // TabNet — e o proxy existe justamente para NÃO ser isso.
+  for (const def of [
+    '../../etc/passwd',
+    'sinasc/cnv/nvuf.def/../../x',
+    'https://exemplo.com/x.def',
+    'sinasc/nvuf.def',
+    'sinasc/cnv/nvuf.exe',
+    '',
+  ]) {
+    const response = await handleRequest(request(`/tabnet?def=${encodeURIComponent(def)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'Linha=Sexo',
+    }), ENVIRONMENT);
+    assert.equal(response.status, 400, `aceitou "${def}"`);
+    assert.equal(await errorCode(response), 'invalid_tabnet_def');
+  }
+});
+
 test('um 404 do DATASUS chega como 404, e não escondido dentro de um 502', async () => {
   // O DATASUS devolve o endereço do pacote preparado antes de terminar de
   // escrevê-lo, e nesse intervalo o arquivo responde 404. O cliente usa esse

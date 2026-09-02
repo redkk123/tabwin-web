@@ -1,4 +1,10 @@
 const DATASUS_ORIGIN = 'https://datasus.saude.gov.br';
+const TABNET_ORIGIN = 'https://tabnet.datasus.gov.br';
+
+// Só arquivos de definição, e só com a forma que o TabNet usa: pasta, subpasta
+// e nome, sem travessia. Aceitar caminho livre transformaria esta rota num
+// encaminhador aberto para tudo naquele host.
+const TABNET_DEF = /^[a-z0-9_]+\/[a-z0-9_]+\/[a-z0-9_]+\.def$/i;
 const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded';
 const ARCHIVE_PATH = /^\/wp-content\/zipupload\/[^/]+\/arquivo\.zip$/;
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
@@ -13,6 +19,7 @@ const ROUTES = Object.freeze({
   '/catalog': Object.freeze({ name: 'catalog', method: 'POST' }),
   '/prepare': Object.freeze({ name: 'prepare', method: 'POST' }),
   '/archive': Object.freeze({ name: 'archive', method: 'GET' }),
+  '/tabnet': Object.freeze({ name: 'tabnet', method: 'POST' }),
 });
 
 const DEFAULTS = Object.freeze({
@@ -146,7 +153,7 @@ function routeForRequest(requestUrl) {
   const url = new URL(requestUrl);
   const route = ROUTES[url.pathname];
   if (!route) throw new ProxyFailure(404, 'route_not_found', 'Proxy route not found');
-  if (route.name !== 'archive' && url.search) {
+  if (route.name !== 'archive' && route.name !== 'tabnet' && url.search) {
     throw new ProxyFailure(400, 'unexpected_query', 'This proxy route does not accept query parameters');
   }
   return { ...route, url };
@@ -173,6 +180,11 @@ export function validateArchiveTarget(candidate) {
 
 export function targetForRequest(requestUrl) {
   const { name, url } = routeForRequest(requestUrl);
+  if (name === 'tabnet') {
+    const def = new URL(requestUrl).searchParams.get('def') ?? '';
+    if (!TABNET_DEF.test(def)) throw new ProxyFailure(400, 'invalid_tabnet_def', 'Unsupported TabNet definition');
+    return `${TABNET_ORIGIN}/cgi/tabcgi.exe?${def}`;
+  }
   if (name === 'catalog') return `${DATASUS_ORIGIN}/wp-content/ftp.php`;
   if (name === 'prepare') return `${DATASUS_ORIGIN}/wp-content/download.php`;
   if (name === 'archive') {
@@ -187,6 +199,10 @@ export function targetForRequest(requestUrl) {
 }
 
 function validateUpstreamTarget(routeName, target) {
+  if (routeName === 'tabnet'
+    && target.origin === TABNET_ORIGIN
+    && target.pathname === '/cgi/tabcgi.exe'
+    && TABNET_DEF.test(target.search.slice(1))) return;
   if (routeName === 'catalog' && target.href === `${DATASUS_ORIGIN}/wp-content/ftp.php`) return;
   if (routeName === 'prepare' && target.href === `${DATASUS_ORIGIN}/wp-content/download.php`) return;
   if (routeName === 'archive') {
