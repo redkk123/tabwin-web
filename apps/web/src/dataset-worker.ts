@@ -230,17 +230,22 @@ const resultCache = createTabulationResultCache();
  * kernel de referência, então CNV, lookups, regras cruzadas e totais
  * continuam com uma implementação só.
  */
-const columnarCache = createColumnarProjectionCache(4);
-
 /**
  * Teto de memória do cache colunar.
  *
- * O módulo limita por número de entradas, não por bytes — a decisão de quanto
- * a aba pode gastar é de quem chama, porque só aqui se sabe que ela também
- * segura os dados sendo tabulados. Sem teto, guardar as colunas de um arquivo
- * grande trocaria velocidade por aba travada, que é um péssimo negócio.
+ * Quanto a aba pode gastar é decisão de quem chama, porque só aqui se sabe que
+ * ela também segura os dados sendo tabulados. Sem teto, guardar as colunas de
+ * um arquivo grande trocaria velocidade por aba travada.
  */
 const COLUMNAR_BUDGET_BYTES = 192 * 1024 * 1024;
+
+/**
+ * Quatro projeções E um teto de bytes somados.
+ *
+ * Sem o segundo, quatro projeções de 192 MiB conviviam em 768 MiB: cada uma
+ * passava na conferência individual e a soma não era olhada por ninguém.
+ */
+const columnarCache = createColumnarProjectionCache(4, COLUMNAR_BUDGET_BYTES);
 
 /**
  * Identidade do conjunto em memória.

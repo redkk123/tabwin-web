@@ -98,12 +98,38 @@ export async function readCachedArchive(key: string, maxAgeMs: number): Promise<
   }
 }
 
+/**
+ * Resumos dos pacotes guardados, sem trazer os pacotes.
+ *
+ * A versão anterior usava `getAll()`, que materializa os BYTES de todo pacote
+ * em cache só para montar uma lista que não usa nenhum deles. Com seis
+ * arquivos de centenas de megabytes, abrir o diálogo pedia gigabytes ao
+ * navegador — e num aparelho modesto isso é a aba morrendo.
+ *
+ * O cursor lê um registro por vez: o pico passa a ser o maior pacote, não a
+ * soma de todos. Continua não sendo grátis, porque o IndexedDB não sabe
+ * projetar colunas; a eliminação completa exigiria uma store separada só de
+ * metadados, o que é a evolução natural daqui.
+ */
 export async function listCachedArchives(): Promise<CachedArchiveSummary[]> {
   const database = await openDatabase();
   try {
     const transaction = database.transaction(STORE_NAME, 'readonly');
-    const entries = await requestResult(transaction.objectStore(STORE_NAME).getAll()) as CachedArchive[];
-    return entries.map(summarize).sort((a, b) => b.savedAt - a.savedAt);
+    const store = transaction.objectStore(STORE_NAME);
+    const summaries: CachedArchiveSummary[] = [];
+    await new Promise<void>((resolve, reject) => {
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (!cursor) { resolve(); return; }
+        summaries.push(summarize(cursor.value as CachedArchive));
+        // Sem guardar `cursor.value`: o registro anterior fica elegível para
+        // coleta assim que o cursor avança.
+        cursor.continue();
+      };
+      request.onerror = () => reject(request.error ?? new Error('Falha ao listar o cache local'));
+    });
+    return summaries.sort((a, b) => b.savedAt - a.savedAt);
   } finally {
     database.close();
   }
@@ -144,13 +170,22 @@ export async function writeCachedArchive(
     const entry: CachedArchive = { key, savedAt: Date.now(), bytes: buffer, ...metadata };
     const write = database.transaction(STORE_NAME, 'readwrite');
     await requestResult(write.objectStore(STORE_NAME).put(entry));
+    // Decidir QUEM sai não precisa de nenhum byte de dado. O índice `savedAt`
+    // já devolve as chaves em ordem cronológica, então a escolha custa a
+    // leitura de seis strings.
+    //
+    // Antes isto era um `getAll()`, que trazia os bytes de todos os pacotes
+    // para ordenar por data — e rodava a cada download, logo depois de o
+    // navegador já ter na memória o arquivo recém-baixado. Era o pior momento
+    // possível para pedir mais algumas centenas de megabytes.
     const read = database.transaction(STORE_NAME, 'readonly');
-    const entries = await requestResult(read.objectStore(STORE_NAME).getAll()) as CachedArchive[];
-    entries.sort((a, b) => b.savedAt - a.savedAt);
-    const expired = entries.slice(MAX_CACHED_ARCHIVES);
+    const keysByAge = await requestResult(
+      read.objectStore(STORE_NAME).index('savedAt').getAllKeys(),
+    ) as IDBValidKey[];
+    const expired = keysByAge.slice(0, Math.max(0, keysByAge.length - MAX_CACHED_ARCHIVES));
     if (expired.length) {
       const cleanup = database.transaction(STORE_NAME, 'readwrite').objectStore(STORE_NAME);
-      await Promise.all(expired.map((entry) => requestResult(cleanup.delete(entry.key))));
+      await Promise.all(expired.map((expiredKey) => requestResult(cleanup.delete(expiredKey))));
     }
     return summarize(entry);
   } finally {

@@ -1441,7 +1441,11 @@ test('o arquivo guardado pode ser baixado sem precisar abrir a análise', async 
       open.onerror = () => reject(open.error);
       open.onupgradeneeded = () => {
         if (!open.result.objectStoreNames.contains('official-archives')) {
-          open.result.createObjectStore('official-archives', { keyPath: 'key' });
+          // O indice tem que existir aqui tambem: o aplicativo o cria e a
+          // eviction depende dele. Uma store de teste sem indice fabricava um
+          // estado que nenhum usuario tem.
+          const store = open.result.createObjectStore('official-archives', { keyPath: 'key' });
+          store.createIndex('savedAt', 'savedAt');
         }
       };
     });
@@ -1769,4 +1773,40 @@ test('a lista de combinações aparece antes das respostas, e cada linha se reso
   await expect(page.locator('#catalog-results')).toContainText('DNBR1996.dbc');
   // A lista provisória sai quando o resultado definitivo entra.
   await expect(linhas).toHaveCount(0);
+});
+
+test('o cache guarda os seis mais recentes e descarta os antigos sem carregá-los', async ({ page }) => {
+  // A eviction nunca teve teste, e o código que ela substitui usava `getAll()`
+  // — trazia os BYTES de todo pacote em cache só para ordenar por data, logo
+  // depois de o navegador já ter na memória o arquivo recém-baixado.
+  const { zipSync, strToU8 } = await import('fflate');
+  await page.route('**/wp-content/ftp.php', (route) => route.fulfill({
+    status: 200, contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' }, body: '[]',
+  }));
+  await page.goto('/');
+
+  const pacote = [...zipSync({ 'X.dbc': strToU8('conteudo') })];
+  // Oito pacotes com datas crescentes; o limite do aplicativo é seis.
+  const resultado = await page.evaluate(async (bytes) => {
+    const mod = await import('/src/archive-cache.ts');
+    for (let i = 1; i <= 8; i++) {
+      await mod.writeCachedArchive(`official-v1:pacote-${i}`, new Uint8Array(bytes), {
+        sha256: String(i).repeat(64).slice(0, 64),
+        role: 'data',
+        sources: [{ name: `P${i}.dbc`, address: 'ftp://x', source: 'SINAN', modality: 'Dados' }],
+      });
+      // Datas distintas: escritos no mesmo milissegundo empatariam a ordenação.
+      await new Promise((r) => setTimeout(r, 4));
+    }
+    const guardados = await mod.listCachedArchives();
+    return guardados.map((s) => s.key);
+  }, pacote);
+
+  expect(resultado).toHaveLength(6);
+  // Os dois mais antigos saíram; os seis mais novos ficaram, do novo para o velho.
+  expect(resultado).toEqual([
+    'official-v1:pacote-8', 'official-v1:pacote-7', 'official-v1:pacote-6',
+    'official-v1:pacote-5', 'official-v1:pacote-4', 'official-v1:pacote-3',
+  ]);
 });

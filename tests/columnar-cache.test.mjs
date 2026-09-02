@@ -174,3 +174,57 @@ test('a projeção sobrevive a lote fatiado igual ao do worker', () => {
   assert.deepEqual(inBatches.recordAt(0), many[0]);
   assert.deepEqual(inBatches.recordAt(many.length - 1), many[many.length - 1]);
 });
+
+test('contar entradas não limita memória: o teto agregado é o que segura a aba', () => {
+  // O defeito que isto tranca: o cache limitava só a QUANTIDADE de projeções,
+  // e quem chamava conferia cada uma contra o próprio orçamento. Quatro
+  // projeções de 192 MiB passavam individualmente e conviviam em 768 MiB —
+  // a soma não era olhada por ninguém.
+  const uma = buildColumnarProjection(records, ['UF', 'SEXO', 'VALOR']);
+  const tamanho = uma.estimatedBytes;
+  assert.ok(tamanho > 0, 'a projeção precisa saber quanto ocupa');
+
+  // Orçamento para duas e meia: a terceira força despejo mesmo cabendo na
+  // contagem de entradas, que é generosa de propósito neste teste.
+  const cache = createColumnarProjectionCache(10, tamanho * 2.5);
+  cache.set('fonte-a', buildColumnarProjection(records, ['UF', 'SEXO', 'VALOR']));
+  cache.set('fonte-b', buildColumnarProjection(records, ['UF', 'SEXO', 'VALOR']));
+  assert.equal(cache.size, 2);
+  assert.ok(cache.estimatedBytes <= tamanho * 2.5);
+
+  cache.set('fonte-c', buildColumnarProjection(records, ['UF', 'SEXO', 'VALOR']));
+  assert.ok(cache.estimatedBytes <= tamanho * 2.5, 'o teto agregado não pode ser ultrapassado');
+  assert.equal(cache.size, 2, 'a mais antiga saiu para a nova caber');
+  assert.ok(cache.get('fonte-c', ['UF']), 'a recém-guardada continua lá');
+  assert.equal(cache.get('fonte-a', ['UF']), undefined, 'a mais antiga foi despejada');
+});
+
+test('projeção maior que o orçamento inteiro não é guardada, e não despeja as outras', () => {
+  // Aceitá-la esvaziaria o cache para no fim ficar com uma coisa que também
+  // não cabe — perde-se o que era útil e não se ganha nada.
+  const uma = buildColumnarProjection(records, ['UF', 'SEXO', 'VALOR']);
+  const cache = createColumnarProjectionCache(10, uma.estimatedBytes * 1.5);
+  cache.set('pequena', buildColumnarProjection(records, ['UF']));
+  const antes = cache.size;
+  const guardadoAntes = cache.estimatedBytes;
+
+  const gigante = buildColumnarProjection(records, ['UF', 'SEXO', 'VALOR', 'FLAG']);
+  const cacheApertado = createColumnarProjectionCache(10, 1);
+  cacheApertado.set('nao-cabe', gigante);
+  assert.equal(cacheApertado.size, 0, 'não guarda o que sozinho estoura o orçamento');
+
+  cache.set('outra-pequena', buildColumnarProjection(records, ['SEXO']));
+  assert.ok(cache.size >= antes, 'as pequenas continuam convivendo');
+  assert.ok(cache.estimatedBytes >= guardadoAntes);
+});
+
+test('o orçamento é validado, porque zero ou negativo esvaziaria tudo em silêncio', () => {
+  assert.throws(() => createColumnarProjectionCache(4, 0), /budget must be positive/);
+  assert.throws(() => createColumnarProjectionCache(4, -1), /budget must be positive/);
+  assert.throws(() => createColumnarProjectionCache(4, Number.NaN), /budget must be positive/);
+  // Sem orçamento declarado o comportamento antigo é preservado.
+  const semTeto = createColumnarProjectionCache(2);
+  semTeto.set('a', buildColumnarProjection(records, ['UF']));
+  assert.equal(semTeto.size, 1);
+  assert.ok(semTeto.estimatedBytes > 0);
+});

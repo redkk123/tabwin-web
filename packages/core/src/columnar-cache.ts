@@ -53,6 +53,8 @@ export interface ColumnarProjectionCache {
   deleteSource(sourceId: string): void;
   clear(): void;
   readonly size: number;
+  /** Soma estimada do que está guardado, para o teto ser observável. */
+  readonly estimatedBytes: number;
 }
 
 interface MutableColumn {
@@ -266,11 +268,35 @@ interface CacheEntry {
   projection: ColumnarProjection;
 }
 
-export function createColumnarProjectionCache(maxEntries = DEFAULT_CACHE_ENTRIES): ColumnarProjectionCache {
+/**
+ * Cria o cache com dois tetos: quantas projeções e quantos bytes ao todo.
+ *
+ * Contar entradas não limita memória. O limite anterior era só de quantidade,
+ * e quem chamava conferia cada projeção contra o próprio orçamento — o que
+ * deixava quatro projeções de 192 MiB conviverem em 768 MiB. Cada uma passava
+ * na conferência individual; a soma nunca era olhada por ninguém.
+ *
+ * O teto agregado precisa morar aqui porque só o cache conhece o tamanho de
+ * tudo que guarda. Uma projeção que sozinha estoura o orçamento não é
+ * guardada: aceitá-la despejaria todas as outras para no fim ficar com uma
+ * coisa que também não cabe.
+ */
+export function createColumnarProjectionCache(
+  maxEntries = DEFAULT_CACHE_ENTRIES,
+  maxBytes = Number.POSITIVE_INFINITY,
+): ColumnarProjectionCache {
   if (!Number.isSafeInteger(maxEntries) || maxEntries < 1 || maxEntries > 100) {
     throw new Error('columnar cache size must be an integer between 1 and 100');
   }
+  if (!(maxBytes > 0)) {
+    throw new Error('columnar cache byte budget must be positive');
+  }
   const entries = new Map<string, CacheEntry>();
+  const totalBytes = (): number => {
+    let soma = 0;
+    for (const entry of entries.values()) soma += entry.projection.estimatedBytes;
+    return soma;
+  };
   const keyFor = (sourceId: string, fields: readonly string[]): string => `${sourceId}\n${fieldKey(fields)}`;
   const touch = (key: string, entry: CacheEntry): void => {
     entries.delete(key);
@@ -303,12 +329,18 @@ export function createColumnarProjectionCache(maxEntries = DEFAULT_CACHE_ENTRIES
     set(sourceId, projection) {
       const cleanSource = sourceId.trim();
       if (!cleanSource) throw new Error('columnar cache sourceId cannot be empty');
+      // Sozinha maior que o orçamento: guardar despejaria todo o resto para
+      // terminar com uma coisa que também não cabe.
+      if (projection.estimatedBytes > maxBytes) return;
       const fields = normalizedFields(projection.fields);
       const key = keyFor(cleanSource, fields);
       touch(key, { sourceId: cleanSource, fields, projection });
-      while (entries.size > maxEntries) {
+      while (entries.size > maxEntries || totalBytes() > maxBytes) {
         const oldest = entries.keys().next().value;
         if (oldest === undefined) break;
+        // A recém-inserida é a última da ordem; parar antes de despejá-la
+        // evita o caso em que o cache se esvazia e ainda assim não cabe.
+        if (oldest === key) break;
         entries.delete(oldest);
       }
     },
@@ -317,5 +349,6 @@ export function createColumnarProjectionCache(maxEntries = DEFAULT_CACHE_ENTRIES
     },
     clear() { entries.clear(); },
     get size() { return entries.size; },
+    get estimatedBytes() { return totalBytes(); },
   };
 }
