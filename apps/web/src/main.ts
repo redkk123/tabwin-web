@@ -106,6 +106,8 @@ import {
   planCatalogLookups,
 } from '../../../packages/acquisition/src/catalog-memory.ts';
 import { nextToPrepare } from '../../../packages/acquisition/src/prepare-ahead.ts';
+import { parseQuestion, type QuestionMatch } from '../../../packages/acquisition/src/question-parser.ts';
+import { describeRecognition, recognizeArchive } from '../../../packages/acquisition/src/known-archive.ts';
 import {
   forgetCatalogMemory,
   readCatalogMemory,
@@ -2970,6 +2972,11 @@ async function loadFile(file: File): Promise<void> {
     size: file.size,
     sha256: await sha256(bytes),
   };
+
+  // Quem trabalha com DATASUS acumula o mesmo arquivo com três nomes: um do
+  // portal, um do R, um de um colega. Dizer que este já está guardado poupa a
+  // dúvida de "é o mesmo dado?" — e a resposta é por hash, não por nome.
+  void reconhecerArquivoConhecido(source.sha256, file.name);
 
   if (extension === 'DBF') {
     const lookupOption = activeDef?.options.find((option) =>
@@ -7318,6 +7325,22 @@ async function saveAllCachedArchives(summaries: readonly CachedArchiveSummary[])
   );
 }
 
+/**
+ * Avisa quando o arquivo aberto já está guardado neste aparelho.
+ *
+ * Nunca impede nem atrasa a abertura: roda solta, e uma falha de
+ * armazenamento — navegação privada, política de site — passa em silêncio,
+ * porque não saber isso não impede ninguém de trabalhar.
+ */
+async function reconhecerArquivoConhecido(sha256: string, nome: string): Promise<void> {
+  try {
+    const reconhecido = recognizeArchive(sha256, await listCachedArchives(), nome);
+    if (reconhecido) showToast(describeRecognition(reconhecido));
+  } catch {
+    /* sem cache disponível: seguir sem o aviso é o comportamento certo */
+  }
+}
+
 async function renderRecentArchives(): Promise<void> {
   const generation = ++recentArchivesGeneration;
   catalogRecentSummary.textContent = 'Verificando o armazenamento local…';
@@ -8988,6 +9011,85 @@ defInspectorDialog.addEventListener('click', (event) => {
 element<HTMLButtonElement>('#catalog-button').addEventListener('click', () => {
   catalogDialog.showModal();
   void renderRecentArchives();
+});
+
+/**
+ * Busca por pergunta.
+ *
+ * Traduz "óbitos infantis 2023" para sistema, tipo, ano e UF, e abre o
+ * catálogo já preenchido. Mostra sempre uma LISTA: quando a pergunta é
+ * ambígua, escolher por quem perguntou seria errar em silêncio — e cada linha
+ * diz por que apareceu, para a pessoa conferir se foi entendida.
+ */
+const questionInput = element<HTMLInputElement>('#question-input');
+const questionResults = element<HTMLElement>('#question-results');
+
+function applyQuestionMatch(match: QuestionMatch): void {
+  catalogSystem.value = match.system;
+  populateCatalogFileTypes();
+  catalogFileType.value = match.fileType;
+  updateCatalogGeography();
+
+  // Ano e UF são <select multiple>: marcar é selecionar a opção, se existir.
+  // Quando não existe — um ano que aquele sistema não publica — a escolha fica
+  // para a pessoa, no formulário que acabou de abrir.
+  for (const option of [...catalogYear.options]) {
+    option.selected = match.year !== undefined && option.value === match.year;
+  }
+  for (const option of [...catalogUf.options]) {
+    option.selected = match.uf !== undefined && option.value === match.uf;
+  }
+  catalogSystem.dispatchEvent(new Event('change', { bubbles: true }));
+  catalogFileType.dispatchEvent(new Event('change', { bubbles: true }));
+
+  questionResults.hidden = true;
+  catalogDialog.showModal();
+  void renderRecentArchives();
+}
+
+function renderQuestionResults(): void {
+  const pergunta = questionInput.value.trim();
+  if (pergunta.length < 3) {
+    questionResults.hidden = true;
+    questionResults.replaceChildren();
+    return;
+  }
+
+  const { matches } = parseQuestion(pergunta);
+  questionResults.replaceChildren();
+  questionResults.hidden = false;
+
+  if (!matches.length) {
+    const vazio = document.createElement('p');
+    vazio.className = 'question-empty';
+    vazio.textContent = 'Não reconheci nenhum conjunto. Tente o nome da doença, do agravo ou "Buscar no DATASUS".';
+    questionResults.append(vazio);
+    return;
+  }
+
+  for (const match of matches) {
+    const botao = document.createElement('button');
+    botao.type = 'button';
+    botao.className = 'question-result';
+    botao.setAttribute('role', 'option');
+    const titulo = document.createElement('b');
+    titulo.textContent = match.label;
+    const detalhe = document.createElement('small');
+    const partes = [match.year ?? 'ano a escolher', match.uf === 'BR' ? 'Brasil' : match.uf ?? 'UF a escolher'];
+    detalhe.textContent = `${partes.join(' · ')} — ${match.because.join('; ')}`;
+    botao.append(titulo, detalhe);
+    botao.addEventListener('click', () => applyQuestionMatch(match));
+    questionResults.append(botao);
+  }
+}
+
+questionInput.addEventListener('input', renderQuestionResults);
+questionInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  // Enter leva ao primeiro resultado: quem digitou e apertou já decidiu.
+  const primeiro = questionResults.querySelector<HTMLButtonElement>('.question-result');
+  primeiro?.click();
 });
 element<HTMLButtonElement>('#catalog-close').addEventListener('click', () => catalogDialog.close());
 catalogDialog.addEventListener('click', (event) => {

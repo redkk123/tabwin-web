@@ -13,3 +13,5 @@ export * from './stream-reader.js';
 export * from './ranged-download-runner.js';
 export * from './catalog-memory.js';
 export * from './prepare-ahead.js';
+export * from './question-parser.js';
+export * from './known-archive.js';

@@ -47,8 +47,22 @@
           <input id="file-input" type="file" accept=".dbc,.dbf,.csv,.tsv,.def,.cnv,.map" multiple />
         </label>
 
+        <div class="question-search">
+          <label class="question-field" for="question-input">
+            <span class="question-icon" aria-hidden="true">⌕</span>
+            <input id="question-input" type="search" autocomplete="off"
+              placeholder="O que você procura? Ex.: óbitos infantis 2023"
+              aria-describedby="question-hint">
+          </label>
+          <p class="question-hint" id="question-hint">
+            Escreva em português. Entende doença, CID, ano e estado.
+          </p>
+          <div class="question-results" id="question-results" role="listbox"
+            aria-label="Conjuntos encontrados" hidden></div>
+        </div>
+
         <button class="catalog-button" id="catalog-button" type="button">
-          <span><b>Buscar no DATASUS</b><small>Encontre DBC por sistema e período</small></span>
+          <span><b>Buscar no DATASUS</b><small>Escolher por sistema e período</small></span>
           <span aria-hidden="true">⌕</span>
         </button>
 
