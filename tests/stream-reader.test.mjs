@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  DEFAULT_HEADER_TIMEOUT_MS,
   DEFAULT_READ_IDLE_MS,
+  HeaderTimeoutError,
   StreamIdleTimeoutError,
+  fetchWithHeaderTimeout,
   readStreamWithIdleTimeout,
 } from '../dist/packages/acquisition/src/stream-reader.js';
 
@@ -113,6 +116,66 @@ test('o prazo é validado e o padrão é declarado', async () => {
   for (const invalido of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
     await assert.rejects(
       readStreamWithIdleTimeout(origem().stream, { idleMs: invalido, onChunk: () => {} }),
+      /precisa ser positivo/,
+    );
+  }
+});
+
+test('servidor que aceita a conexão e nunca responde é cortado nos cabeçalhos', async () => {
+  // Buraco apontado por auditoria externa: o relógio de ociosidade só vale
+  // quando existe corpo para ler. Antes dos cabeçalhos não havia prazo nenhum,
+  // e a promessa ficava pendente para sempre. Na interface o vigia de parada
+  // acabava pegando, mas por acidente — o transporte é quem deve ser dono
+  // disso.
+  const mudo = () => new Promise(() => {});
+  await assert.rejects(
+    fetchWithHeaderTimeout(mudo, 'https://exemplo/a.zip', {}, { headerMs: 30 }),
+    (erro) => {
+      assert.ok(erro instanceof HeaderTimeoutError, 'precisa ser reconhecível como prazo de cabeçalho');
+      assert.equal(erro.headerMs, 30);
+      return true;
+    },
+  );
+});
+
+test('o relógio de cabeçalho é desarmado quando a resposta chega, e não corta o corpo', async () => {
+  // Deixá-lo armado abortaria o corpo no meio — o defeito que este projeto já
+  // cometeu em três camadas diferentes.
+  let controlador;
+  const corpo = new ReadableStream({ start(c) { controlador = c; } });
+  const responde = async () => new Response(corpo, { status: 200 });
+  const resposta = await fetchWithHeaderTimeout(responde, 'https://exemplo/a.zip', {}, { headerMs: 40 });
+  // Bem depois do prazo de cabeçalho, o corpo continua utilizável.
+  await new Promise((r) => setTimeout(r, 120));
+  controlador.enqueue(Uint8Array.of(1, 2, 3));
+  controlador.close();
+  const lidos = [];
+  const total = await readStreamWithIdleTimeout(resposta.body, {
+    idleMs: 5000, onChunk: (c) => lidos.push(c.byteLength),
+  });
+  assert.equal(total, 3, 'o corpo sobreviveu ao prazo de cabeçalho já vencido');
+  assert.deepEqual(lidos, [3]);
+});
+
+test('cancelamento humano durante a espera dos cabeçalhos não vira prazo', async () => {
+  const controlador = new AbortController();
+  const mudo = (_url, init) => new Promise((_resolve, reject) => {
+    init.signal.addEventListener('abort', () => reject(init.signal.reason), { once: true });
+  });
+  const promessa = fetchWithHeaderTimeout(
+    mudo, 'https://exemplo/a.zip', {}, { headerMs: 5000, signal: controlador.signal });
+  controlador.abort(new Error('cancelado pelo usuário'));
+  await assert.rejects(promessa, (erro) => {
+    assert.ok(!(erro instanceof HeaderTimeoutError), 'cancelar não pode virar prazo de servidor');
+    return true;
+  });
+});
+
+test('o prazo de cabeçalho é validado e o padrão é declarado', async () => {
+  assert.equal(DEFAULT_HEADER_TIMEOUT_MS, 30_000);
+  for (const invalido of [0, -1, Number.NaN]) {
+    await assert.rejects(
+      fetchWithHeaderTimeout(async () => new Response(''), 'https://x', {}, { headerMs: invalido }),
       /precisa ser positivo/,
     );
   }

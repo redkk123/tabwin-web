@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { downloadInRanges } from '../dist/packages/acquisition/src/ranged-download-runner.js';
-import { StreamIdleTimeoutError } from '../dist/packages/acquisition/src/stream-reader.js';
+import {
+  HeaderTimeoutError,
+  StreamIdleTimeoutError,
+} from '../dist/packages/acquisition/src/stream-reader.js';
 
 const TOTAL = 40;
 const CONTEUDO = Uint8Array.from({ length: TOTAL }, (_, i) => (i * 7) & 255);
@@ -70,16 +73,47 @@ test('quatro faixas viram o arquivo inteiro, com progresso a cada pedaço', asyn
 
 test('uma faixa que falha aborta as irmãs antes de propagar', async () => {
   // Sem isto, o chamador começa o download integral enquanto três requisições
-  // antigas ainda disputam a mesma banda.
-  const { fetchImpl, abertas } = origemFalsa((r) => (r.start === 20 ? 'curta' : 'ok'));
+  // antigas ainda disputam a mesma banda — e a rota do usuário já é o gargalo.
+  //
+  // A versão anterior deste teste terminava em `assert.ok(vivas.length >= 0)`,
+  // verdadeiro sempre: ele passava com ou sem o cancelamento. Auditoria externa
+  // apontou a tautologia, que é pior que teste nenhum porque parece cobertura.
+  //
+  // Corrigir a asserção não bastou: as irmãs "ok" fechavam antes da falha, e
+  // stream já fechado nunca recebe `cancel()`. O cenário precisa deixá-las EM
+  // VOO — que é a situação real que o cancelamento existe para resolver.
+  const abertas = [];
+  const fetchImpl = async (_url, init) => {
+    const [, inicio, fim] = /bytes=(\d+)-(\d+)/.exec(init.headers.Range);
+    const range = { start: Number(inicio), end: Number(fim) };
+    const registro = { range, cancelado: false };
+    abertas.push(registro);
+    const stream = new ReadableStream({
+      start(controller) {
+        // Um pedaço para todas, e a que falha entrega menos do que prometeu.
+        controller.enqueue(CONTEUDO.subarray(range.start, range.start + 4));
+        if (range.start === 20) controller.close();
+        // As demais ficam abertas, esperando — como uma conexão lenta de verdade.
+      },
+      cancel() { registro.cancelado = true; },
+    });
+    return new Response(stream, {
+      status: 206,
+      headers: { 'content-range': `bytes ${range.start}-${range.end}/${TOTAL}` },
+    });
+  };
+
   await assert.rejects(
     downloadInRanges({ url: 'https://exemplo/a.zip', ranges: FAIXAS, totalBytes: TOTAL, fetchImpl }),
     /terminou com 4 de 10/,
   );
-  const irmasVivas = abertas.filter((a) => a.range.start !== 20 && !a.cancelado && !a.controller.desiredSize === false);
-  assert.ok(abertas.length >= 1, 'as faixas chegaram a abrir');
-  // O importante é que a promessa só volta depois de todas terminarem.
-  assert.ok(irmasVivas.length >= 0);
+  const irmas = abertas.filter((a) => a.range.start !== 20);
+  assert.equal(irmas.length, 3, 'as três irmãs chegaram a abrir');
+  assert.deepEqual(
+    irmas.filter((a) => !a.cancelado).map((a) => a.range.start),
+    [],
+    'nenhuma irmã pode continuar viva disputando banda enquanto o fallback começa',
+  );
 });
 
 test('o erro só sai depois de todas as faixas terminarem', async () => {
@@ -144,5 +178,27 @@ test('servidor que ignora a faixa e devolve 200 é recusado, não montado', asyn
   await assert.rejects(
     downloadInRanges({ url: 'https://exemplo/a.zip', ranges: FAIXAS, totalBytes: TOTAL, fetchImpl }),
     /parte 0-9/,
+  );
+});
+
+test('faixa cujo servidor nunca responde é cortada nos cabeçalhos, não fica pendente', async () => {
+  // Lacuna apontada por auditoria externa: o relógio de ociosidade só vale
+  // quando existe corpo. Uma faixa que trava ANTES da resposta não tinha
+  // prazo nenhum — e uma promessa pendente para sempre trava o lote inteiro,
+  // porque o fallback espera `allSettled`.
+  const fetchImpl = async (_url, init) => {
+    const [, inicio] = /bytes=(\d+)-/.exec(init.headers.Range);
+    if (Number(inicio) === 10) return new Promise(() => {});
+    const range = { start: Number(inicio), end: Number(inicio) + 9 };
+    return new Response(CONTEUDO.subarray(range.start, range.end + 1), {
+      status: 206,
+      headers: { 'content-range': `bytes ${range.start}-${range.end}/${TOTAL}` },
+    });
+  };
+  await assert.rejects(
+    downloadInRanges({
+      url: 'https://exemplo/a.zip', ranges: FAIXAS, totalBytes: TOTAL, fetchImpl, headerMs: 40,
+    }),
+    (erro) => erro instanceof HeaderTimeoutError,
   );
 });

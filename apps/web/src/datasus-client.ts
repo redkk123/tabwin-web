@@ -25,7 +25,12 @@ import {
   type RangeSupport,
 } from '../../../packages/acquisition/src/ranged-download.ts';
 import { downloadInRanges } from '../../../packages/acquisition/src/ranged-download-runner.ts';
-import { readStreamWithIdleTimeout } from '../../../packages/acquisition/src/stream-reader.ts';
+import {
+  HeaderTimeoutError,
+  StreamIdleTimeoutError,
+  fetchWithHeaderTimeout,
+  readStreamWithIdleTimeout,
+} from '../../../packages/acquisition/src/stream-reader.ts';
 import { resolveMicrodatasusCompatibleCandidates } from '../../../packages/acquisition/src/microdatasus-resolver.ts';
 import {
   runDatasusBatch,
@@ -105,7 +110,16 @@ async function datasusHttpError(response: Response, context: string): Promise<Da
   return new DatasusHttpError(response.status, `${context}: HTTP ${response.status}`);
 }
 
+/**
+ * O que merece nova tentativa.
+ *
+ * Origem que calou no meio e servidor que não respondeu são exatamente as
+ * falhas transitórias que uma nova tentativa resolve — e ficavam de fora,
+ * lacuna apontada por auditoria externa. Cancelamento humano continua fora,
+ * porque quem cancelou não quer que o programa insista.
+ */
 function shouldRetryDatasus(error: unknown): boolean {
+  if (error instanceof StreamIdleTimeoutError || error instanceof HeaderTimeoutError) return true;
   return error instanceof DatasusHttpError ? TRANSIENT_HTTP.has(error.status)
     : error instanceof DatasusTimeoutError || error instanceof TypeError;
 }
@@ -436,7 +450,8 @@ async function fetchOfficialArchiveOnce(
     };
   }
 
-  const response = await fetch(downloadUrl, signal ? { signal } : {});
+  const response = await fetchWithHeaderTimeout(
+    fetch, downloadUrl, {}, signal ? { signal } : {});
   if (!response.ok) throw await datasusHttpError(response, 'Falha no download DATASUS');
   const length = Number(response.headers.get('content-length') ?? 0);
   if (length > MAX_ARCHIVE_BYTES) throw new Error('Arquivo remoto excede o limite de segurança');

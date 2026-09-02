@@ -33,6 +33,73 @@ export class StreamIdleTimeoutError extends Error {
 /** Prazo padrão de silêncio numa leitura de rede. */
 export const DEFAULT_READ_IDLE_MS = 90_000;
 
+/** Prazo para a resposta CHEGAR, antes de haver corpo para medir ociosidade. */
+export const DEFAULT_HEADER_TIMEOUT_MS = 30_000;
+
+/** O servidor aceitou a conexão e não mandou a resposta. */
+export class HeaderTimeoutError extends Error {
+  readonly headerMs: number;
+  constructor(headerMs: number) {
+    super(`O servidor não respondeu em ${Math.round(headerMs / 1000)} segundos`);
+    this.name = 'HeaderTimeoutError';
+    this.headerMs = headerMs;
+  }
+}
+
+/**
+ * `fetch` com prazo para os CABEÇALHOS, não para o corpo.
+ *
+ * O relógio de ociosidade só começa a valer quando existe um corpo para ler.
+ * Antes disso havia um buraco apontado por auditoria externa: um servidor que
+ * aceita a conexão e nunca responde deixava a promessa pendente para sempre.
+ * Na interface o vigia de parada acabava pegando, mas por acidente — e o
+ * transporte é quem deve ser dono do prazo de rede.
+ *
+ * O relógio é desarmado assim que a resposta chega. Deixá-lo armado abortaria
+ * o corpo no meio, que é justamente o defeito que este projeto já cometeu em
+ * três camadas diferentes.
+ */
+export async function fetchWithHeaderTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  options: { headerMs?: number; signal?: AbortSignal } = {},
+): Promise<Response> {
+  const headerMs = options.headerMs ?? DEFAULT_HEADER_TIMEOUT_MS;
+  if (!Number.isFinite(headerMs) || headerMs <= 0) {
+    throw new Error(`Prazo de cabeçalho precisa ser positivo, recebeu ${headerMs}`);
+  }
+  const local = new AbortController();
+  let expirou = false;
+  let dispararPrazo: (erro: Error) => void = () => {};
+  // Corrida em vez de confiar só no abort. Um `fetch` que ignora o sinal
+  // deixaria a promessa pendente para sempre, e o prazo existe justamente
+  // para que nada fique pendente para sempre. O abort continua sendo enviado,
+  // porque libera a conexão do outro lado.
+  const prazo = new Promise<never>((_resolve, reject) => { dispararPrazo = reject; });
+  const timer = setTimeout(() => {
+    expirou = true;
+    local.abort(new HeaderTimeoutError(headerMs));
+    dispararPrazo(new HeaderTimeoutError(headerMs));
+  }, headerMs);
+  const signal = options.signal
+    ? AbortSignal.any([options.signal, local.signal])
+    : local.signal;
+  try {
+    return await Promise.race([fetchImpl(url, { ...init, signal }), prazo]);
+  } catch (error) {
+    // Distinguir "eu cortei por prazo" de "o usuário cancelou" importa: a
+    // primeira é transitória e merece nova tentativa, a segunda não.
+    if (expirou) throw new HeaderTimeoutError(headerMs);
+    throw error;
+  } finally {
+    clearTimeout(timer);
+    // Sem isto, uma promessa de prazo que nunca é observada vira rejeição não
+    // tratada quando o `fetch` ganha a corrida.
+    prazo.catch(() => {});
+  }
+}
+
 export interface ReadStreamOptions {
   idleMs?: number;
   /** Recebe cada pedaço na ordem em que chega. Pode lançar para interromper. */

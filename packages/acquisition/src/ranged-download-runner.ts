@@ -13,7 +13,7 @@
  */
 
 import { createRangeStreamWriter } from './range-stream-writer.js';
-import { readStreamWithIdleTimeout } from './stream-reader.js';
+import { fetchWithHeaderTimeout, readStreamWithIdleTimeout } from './stream-reader.js';
 import {
   rangeHeaderValue,
   readRangeSupport,
@@ -32,6 +32,8 @@ export interface RangedDownloadOptions {
   fetchImpl: typeof fetch;
   signal?: AbortSignal;
   idleMs?: number;
+  /** Prazo para a resposta chegar, antes de haver corpo para medir. */
+  headerMs?: number;
   onProgress?: (progress: RangedDownloadProgress) => void;
 }
 
@@ -59,10 +61,12 @@ export async function downloadInRanges(options: RangedDownloadOptions): Promise<
   let receivedBytes = 0;
 
   const pending = ranges.map(async (range) => {
-    const response = await fetchImpl(url, {
+    // Prazo para a resposta CHEGAR. O relógio de ociosidade só passa a valer
+    // quando existe corpo para ler; sem este, um servidor que aceita a conexão
+    // e nunca responde deixaria a faixa pendente para sempre.
+    const response = await fetchWithHeaderTimeout(fetchImpl, url, {
       headers: { Range: rangeHeaderValue(range) },
-      signal: partSignal,
-    });
+    }, { signal: partSignal, ...(options.headerMs === undefined ? {} : { headerMs: options.headerMs }) });
     const returned = readRangeSupport(
       response.status,
       response.headers.get('content-range'),
