@@ -469,12 +469,26 @@ async function handleArchive(request, environment, origin, proxySettings) {
     // Deixá-lo armado daqui para a frente seria dar ao CLIENTE um limite de
     // tempo para terminar de baixar — que é exatamente o defeito consertado.
     timed.dispose();
-    const stream = boundedArchiveStream(upstream.body, proxySettings.maxArchiveBytes, {
-      idleMs: proxySettings.archiveIdleTimeoutMs,
-      // O mesmo controlador continua servindo: desarmar o relógio não o aborta,
-      // então ele ainda é o jeito de cortar uma origem que parou de responder.
-      abortStalled: () => timed.controller.abort('upstream stalled'),
-    });
+
+    // Com o tamanho declarado, o corpo passa DIRETO para a resposta, sem
+    // encostar em JavaScript. Contar byte a byte custa um callback por pedaço,
+    // e num arquivo de dezenas de MB isso estoura o limite de CPU do Worker no
+    // meio do stream — o cliente recebe um corpo cortado, sem erro. Medido em
+    // 02/09 com uma fatia de 48 MB: direto do DATASUS 3/3 inteiros, por aqui
+    // 1/3, e em quatro faixas 0/3, com `outcome: exceededCpu` no log.
+    //
+    // O limite de tamanho não se perde: o cabeçalho já foi conferido acima,
+    // antes de qualquer byte. Sem tamanho declarado não há como conferir de
+    // antemão, e aí a contagem pedaço a pedaço volta a ser o único jeito — é
+    // um caminho raro, e nele o custo de CPU é o preço de ter um limite.
+    const stream = declared !== null
+      ? upstream.body
+      : boundedArchiveStream(upstream.body, proxySettings.maxArchiveBytes, {
+        idleMs: proxySettings.archiveIdleTimeoutMs,
+        // O mesmo controlador continua servindo: desarmar o relógio não o
+        // aborta, então ele ainda é o jeito de cortar uma origem travada.
+        abortStalled: () => timed.controller.abort('upstream stalled'),
+      });
     // 206 é repassado como 206: transformar em 200 faria o cliente montar um
     // arquivo com um pedaço só, achando que tinha o inteiro.
     return new Response(stream, { status: partial ? 206 : 200, headers });

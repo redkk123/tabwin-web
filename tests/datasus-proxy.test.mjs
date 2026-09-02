@@ -205,6 +205,54 @@ test('upstream failures use normalized JSON instead of leaking response bodies',
   });
 });
 
+test('com tamanho declarado, o corpo não passa pelo JavaScript do Worker', async () => {
+  // Esta é a regra que impede o corte. Contar byte a byte custa um callback por
+  // pedaço; num arquivo de dezenas de MB o Worker estoura o limite de CPU no
+  // meio do stream e o cliente recebe um corpo cortado, sem erro. Medido em
+  // 02/09: pela mesma URL preparada, direto do DATASUS 3/3 inteiros, pelo
+  // proxy 1/3, em quatro faixas 0/3, com `outcome: exceededCpu` no log.
+  //
+  // O teste verifica a identidade do stream: se o corpo repassado for o mesmo
+  // objeto que veio de cima, nenhum pedaço passou por JavaScript.
+  const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04, 1, 2, 3, 4]);
+  let corpoDeCima = null;
+  await withMockFetch(async () => {
+    corpoDeCima = new Response(zip).body;
+    return new Response(corpoDeCima, {
+      status: 200,
+      headers: { 'Content-Type': 'application/zip', 'Content-Length': String(zip.byteLength) },
+    });
+  }, async () => {
+    const response = await handleRequest(
+      request('/archive?url=' + encodeURIComponent('https://datasus.saude.gov.br/wp-content/zipupload/Arq_1/arquivo.zip')),
+      ENVIRONMENT,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(response.body, corpoDeCima,
+      'o corpo precisa ser repassado como veio; embrulhá-lo custa CPU por pedaço');
+    assert.deepEqual(new Uint8Array(await response.arrayBuffer()), zip);
+  });
+});
+
+test('sem tamanho declarado, o limite volta a ser contado pedaço a pedaço', async () => {
+  // O caminho raro: sem Content-Length não há como conferir o tamanho antes, e
+  // então a contagem é o único jeito de ter limite. O custo de CPU é o preço.
+  const grande = new Uint8Array(4096);
+  grande.set([0x50, 0x4b, 0x03, 0x04], 0);
+  await withMockFetch(async () => new Response(grande, {
+    status: 200,
+    headers: { 'Content-Type': 'application/zip' },
+  }), async () => {
+    const response = await handleRequest(
+      request('/archive?url=' + encodeURIComponent('https://datasus.saude.gov.br/wp-content/zipupload/Arq_1/arquivo.zip')),
+      { ...ENVIRONMENT, MAX_ARCHIVE_BYTES: String(1024 * 1024) },
+    );
+    assert.equal(response.status, 200);
+    const recebido = new Uint8Array(await response.arrayBuffer());
+    assert.equal(recebido.byteLength, grande.byteLength);
+  });
+});
+
 test('um 404 do DATASUS chega como 404, e não escondido dentro de um 502', async () => {
   // O DATASUS devolve o endereço do pacote preparado antes de terminar de
   // escrevê-lo, e nesse intervalo o arquivo responde 404. O cliente usa esse
