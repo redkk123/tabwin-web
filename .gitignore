@@ -24,3 +24,7 @@ playwright/.cache/
 
 # Saída do gerador diferencial por seed (regenerável a partir da seed)
 .seed-cases/
+
+# Arquivos do DATASUS usados para gerar as capturas do manual.
+# São públicos e re-baixáveis; não precisam pesar no repositório.
+e2e/fixtures/manual/
