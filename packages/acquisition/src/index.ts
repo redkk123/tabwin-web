@@ -7,3 +7,4 @@ export * from './bridge-policy.js';
 export * from './bridge-client.js';
 export * from './ranged-download.js';
 export * from './selection-advice.js';
+export * from './stall-watchdog.js';

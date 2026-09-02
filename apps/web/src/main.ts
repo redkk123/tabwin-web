@@ -83,6 +83,11 @@ import {
   describeSelectionCost,
 } from '../../../packages/acquisition/src/selection-advice.ts';
 import {
+  DEFAULT_STALL_MS,
+  createStallWatchdog,
+  type StallWatchdog,
+} from '../../../packages/acquisition/src/stall-watchdog.ts';
+import {
   bridgeWouldHelp,
   cancelBridgeDownload,
   describeBridgeProbe,
@@ -6387,6 +6392,10 @@ async function downloadCatalogEntries(
   signal?: AbortSignal,
   maxCacheAgeMs = 24 * 60 * 60 * 1000,
   role: CachedArchiveRole = 'data',
+  // Sinal de vida para o vigia de parada de quem chamou: cada pedaço de bytes
+  // que chega prova que a operação não travou. Sem isto, o vigia só saberia
+  // que "está demorando", que é outra coisa.
+  onActivity?: () => void,
 ): Promise<DownloadedArchive> {
   const cacheKey = `official-v1:${files.map((file) => file.address).sort().join('|')}`;
   let archive: Uint8Array | null = null;
@@ -6418,6 +6427,7 @@ async function downloadCatalogEntries(
       const progress = totalBytes
         ? `${Math.min(100, Math.round(receivedBytes / totalBytes * 100))}% · ${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`
         : formatBytes(receivedBytes);
+      onActivity?.();
       setCatalogStatus(`Baixando ${files.map((file) => file.name).join(', ')}… ${progress}`);
     });
     archive = downloaded.value;
@@ -6721,12 +6731,16 @@ async function openOfficialFile(
   const controller = new AbortController();
   activeCatalogController = controller;
   setCatalogBusy(true);
-  let timedOut = false;
   let manualAuxiliariesOffered = false;
-  const timer = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, 120_000);
+  // Antes havia aqui um `setTimeout` de 120 s sobre o fluxo INTEIRO — auxiliares,
+  // preparação, download, extração e abertura. Relógio de parede: media quanto
+  // tempo passou, não se alguma coisa estava acontecendo. A 0,8 MB/s dava um
+  // teto de ~96 MB, e um arquivo nacional de 121 MB precisa de ~152 s só para
+  // chegar; morria sempre, e a mensagem culpava o DATASUS por um limite nosso.
+  const watchdog: StallWatchdog = createStallWatchdog({
+    idleMs: DEFAULT_STALL_MS,
+    onStall: () => controller.abort(),
+  });
   try {
     let auxiliaryCount = 0;
     if (catalogAuxiliary.checked) {
@@ -6747,12 +6761,20 @@ async function openOfficialFile(
         showToast('Não há associação auxiliar comprovada; escolha um pacote oficial manualmente.');
       }
     }
+    // Cada etapa concluída é sinal de vida: os auxiliares podem demorar
+    // legitimamente, e terminá-los não pode consumir o prazo do download.
+    watchdog.nudge();
     setCatalogStatus(`Baixando ${remote.name} do DATASUS…`);
-    const downloaded = await downloadCatalogEntries([remote], controller.signal);
+    const downloaded = await downloadCatalogEntries(
+      [remote], controller.signal, 24 * 60 * 60 * 1000, 'data', () => watchdog.nudge());
     const wanted = downloaded.files.find((entry) => displayBaseName(entry.name).toLowerCase() === remote.name.toLowerCase())
       ?? downloaded.files.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
     if (!wanted) throw new Error('O pacote oficial não contém um DBC ou DBF reconhecido');
+    // Descomprimir e abrir também são trabalho: num arquivo de centenas de MB
+    // essa etapa sozinha pode passar do limite de silêncio.
+    watchdog.nudge();
     await loadFile(archiveFile(wanted));
+    watchdog.nudge();
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
     if (source) {
       source.origin = remote.address;
@@ -6785,13 +6807,16 @@ async function openOfficialFile(
   } catch (error) {
     const cause = retryCause(error);
     const message = isAbortError(error)
-      ? timedOut ? 'O DATASUS demorou mais de 2 minutos para responder. Tente novamente.' : 'Operação cancelada.'
+      ? watchdog.stalled
+        ? `O download parou de progredir por ${Math.round(watchdog.idleMs / 1000)} segundos e foi interrompido.`
+          + ' Nada foi guardado pela metade; tente de novo.'
+        : 'Operação cancelada.'
       : cause instanceof Error ? cause.message : String(cause);
-    setCatalogStatus(message, !isAbortError(error) || timedOut);
+    setCatalogStatus(message, !isAbortError(error) || watchdog.stalled);
     if (!isAbortError(error)) offerBridgeAfterFailure(remote, cause);
     return {
       ok: false,
-      status: isAbortError(error) && !timedOut
+      status: isAbortError(error) && !watchdog.stalled
         ? 'CANCELLED'
         : cause instanceof InvalidDatasusArchiveError ? 'INVALID_FILE' : 'DOWNLOAD_FAILED',
       error: message,
@@ -6799,7 +6824,7 @@ async function openOfficialFile(
       attempts: retryAttempts(error),
     };
   } finally {
-    window.clearTimeout(timer);
+    watchdog.dispose();
     if (activeCatalogController === controller) activeCatalogController = null;
     setCatalogBusy(false);
   }
