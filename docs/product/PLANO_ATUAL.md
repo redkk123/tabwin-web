@@ -53,6 +53,43 @@ Nenhuma capacidade foi removida. Só deixou de disputar atenção.
       02/09 — sem segredos, sem dado pessoal, fixtures sintéticas.
 - [x] Verificado no ar: abre sem erro de script, com o caderno montado.
 
+## Bloco 3.5 — O corte no download, resolvido ✅
+
+O relato original ("o download veio incompleto") **não era do DATASUS**. O
+`boundedArchiveStream` do Worker passava cada pedaço por JavaScript para contar
+bytes; num arquivo de dezenas de MB isso estoura o limite de CPU da Cloudflare
+no meio do stream, e o cliente recebe um corpo cortado sem erro nenhum.
+
+Como apareceu: o usuário notou que o portal oficial baixava 154 MB no mesmo
+navegador e na mesma conexão. Isso descartou tamanho e origem de uma vez.
+
+Medido com a mesma URL preparada, fatia de 48 MB, intercalado:
+
+| caminho | antes | depois |
+|---|---|---|
+| direto do DATASUS | 3/3 inteiros · 7,1–7,7s | 3/3 |
+| pelo proxy | 1/3 | 3/3 · 10,3–11,0s |
+| proxy, 4 faixas | 0/3 | 3/3 · **3,0–3,4s** |
+
+Com o tamanho declarado, o corpo passa direto para a resposta. O limite não se
+perde: o `Content-Length` já era conferido antes do primeiro byte.
+
+**Duas conclusões anteriores caem por terra**, e ficam registradas para não
+serem repetidas: o corte não vinha de reusar o pacote preparado, nem de carga
+no DATASUS. As duas medições mediam este defeito. A lição é olhar
+`wrangler tail` antes de investigar a origem.
+
+### O que foi medido e não vale a pena
+
+- **Mais conexões**: 1 conexão 7,43s, 2 conexões 4,13s, 4 conexões 4,01s. O
+  joelho está antes de 4; acima disso não melhora.
+- **Vários arquivos num pedido só**: o DATASUS aceita e monta um zip único, mas
+  o preparo é por arquivo de qualquer forma — 22,2s separados contra 21,5s
+  juntos. E um corte passa a levar todos os arquivos em vez de um.
+- **Baixar o `.dbc` direto do FTP**, como faz o microdatasus: impossível no
+  navegador. `ftp.datasus.gov.br` só fala FTP, e navegador não fala FTP desde
+  2021 — daí existir todo o caminho de preparo e ZIP.
+
 ## Bloco 4 — Pendências antigas
 
 - [ ] Segredo `CLOUDFLARE_API_TOKEN` no GitHub, para o workflow do Worker
@@ -70,8 +107,9 @@ Ordem por valor sobre esforço, não por ordem de chegada.
 - [ ] **Primeiro DBC absurdamente fluido.** A revisão apontou isto como o que
       vende o projeto sozinho: buscar no DATASUS → escolher → abrir → tabela,
       sem atrito. Medir o caminho inteiro e atacar o pior trecho.
-- [ ] **Concorrência adaptativa no download**, hoje fixa em 4 faixas.
 - [ ] **Partes retomáveis em OPFS**, para conexão de celular que cai no meio.
+      Menos urgente depois do conserto do Worker, mas ainda é o que protege
+      quem está no 4G num arquivo de 108 MB.
 
 ### O que a revisão pediu e já existe
 
