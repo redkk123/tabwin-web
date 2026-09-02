@@ -24,6 +24,11 @@ ZIP íntegro.
 
 ## Bloco 2 — Densidade inicial da barra lateral ✅
 
+Dois erros que os testes pegaram e vale não repetir: esconder os **Metadados**
+tirava da tela o Editor de CNV, que funciona sem conjunto aberto; e amarrar a
+barra a `setControlsEnabled` faria o formulário piscar a cada tabulação,
+porque esse sinal também desliga durante o cálculo.
+
 Motivo: revisão externa, com a qual o usuário concordou. Antes de abrir um
 arquivo, a barra mostrava a configuração inteira de uma tabulação inexistente.
 
@@ -38,13 +43,15 @@ arquivo, a barra mostrava a configuração inteira de uma tabulação inexistent
 
 Nenhuma capacidade foi removida. Só deixou de disputar atenção.
 
-## Bloco 3 — Laboratório publicado
+## Bloco 3 — Laboratório publicado ✅
 
-- [ ] `npm run lab:sync` traz o Lab para `/lab/`; o link no topo aparece
-      sozinho quando `lab/ORIGEM.json` responde.
-- [ ] Publicar o Lab publica o código-fonte dele: um app estático de navegador
-      entrega o próprio JavaScript. Conteúdo auditado em 02/09 — sem segredos,
-      sem dado pessoal, fixtures sintéticas.
+- [x] Publicado em https://tabweb.me/lab/, com o link no topo do aplicativo.
+      `npm run lab:sync` refaz a cópia a partir do repositório vizinho e grava
+      o commit de origem em `lab/ORIGEM.json`.
+- [x] Publicar o Lab publicou o código-fonte dele: um app estático de navegador
+      entrega o próprio JavaScript, não há meio termo. Conteúdo auditado em
+      02/09 — sem segredos, sem dado pessoal, fixtures sintéticas.
+- [x] Verificado no ar: abre sem erro de script, com o caderno montado.
 
 ## Bloco 4 — Pendências antigas
 
