@@ -93,6 +93,7 @@ import {
   describeCatalogMemory,
   planCatalogLookups,
 } from '../../../packages/acquisition/src/catalog-memory.ts';
+import { nextToPrepare } from '../../../packages/acquisition/src/prepare-ahead.ts';
 import {
   forgetCatalogMemory,
   readCatalogMemory,
@@ -6855,13 +6856,57 @@ async function openOfficialFile(
   }
 }
 
+/**
+ * Manda o DATASUS montar o ZIP do PRÓXIMO arquivo enquanto o atual baixa.
+ *
+ * Medido: `/prepare` custou 5,1 s num arquivo de 41,9 MB, e não depende de
+ * banda — acontece igual numa conexão de 1 Gb e numa de 0,5 MB/s. Num lote de
+ * trinta anos são dois minutos e meio de espera pura, em fila, sem nada
+ * trafegando.
+ *
+ * Os downloads continuam sequenciais: são dezenas de megabytes cada e
+ * paralelizá-los brigaria com o download em faixas. Preparar é outra coisa no
+ * servidor e não disputa a mesma banda.
+ *
+ * Falha aqui é ignorada de propósito. Se a preparação antecipada não der
+ * certo, o download do próximo a refaz do jeito de sempre — uma otimização não
+ * pode custar o arquivo.
+ */
+function prepararProximo(
+  arquivos: readonly DatasusRemoteFile[],
+  indiceAtual: number,
+  emAndamento: Set<number>,
+): void {
+  const alvo = nextToPrepare(
+    arquivos,
+    indiceAtual,
+    (arquivo) => (arquivo.preparedUrl && arquivo.preparedAt
+      ? { url: arquivo.preparedUrl, preparedAt: arquivo.preparedAt }
+      : undefined),
+    emAndamento,
+  );
+  if (!alvo) return;
+  emAndamento.add(alvo.index);
+  void prepareOfficialDownloadDetailed([alvo.item])
+    .then((pronto) => {
+      // O objeto do catálogo é o mesmo que o download vai consultar depois.
+      Object.assign(alvo.item, { preparedUrl: pronto.value, preparedAt: Date.now() });
+    })
+    .catch(() => {
+      // Silêncio proposital: ver o comentário acima.
+    })
+    .finally(() => emAndamento.delete(alvo.index));
+}
+
 async function openOfficialFileBatch(files: readonly DatasusRemoteFile[], fallbackQuery: DatasusSearchQuery): Promise<void> {
   const previousCombine = combineCompatibleFiles.checked;
   let opened = 0;
   const context: OfficialBatchContext = { auxiliaries: createBatchPromiseCache() };
   try {
-    const batch = await runDatasusBatch<DatasusRemoteFile, true>(files, async (remote) => {
+    const preparando = new Set<number>();
+    const batch = await runDatasusBatch<DatasusRemoteFile, true>(files, async (remote, index) => {
       combineCompatibleFiles.checked = opened > 0;
+      prepararProximo(files, index, preparando);
       const outcome = await openOfficialFile(remote, remote.catalogQuery ?? fallbackQuery, true, context);
       if (outcome.ok) {
         opened += 1;
@@ -6911,6 +6956,7 @@ async function packageOfficialFileBatch(
   setCatalogBusy(true);
   const contents: Record<string, [Uint8Array, { level: 0 }]> = {};
   const manifest: Array<Record<string, unknown>> = [];
+  const preparandoPacote = new Set<number>();
   let bytesCollected = 0;
   try {
     const batch = await runDatasusBatch<DatasusRemoteFile, true>(files, async (remote, index) => {
@@ -6918,6 +6964,7 @@ async function packageOfficialFileBatch(
         `Baixando para empacotar… ${index + 1} de ${files.length}`
         + ` (${formatBytes(bytesCollected)} até agora)`,
       );
+      prepararProximo(files, index, preparandoPacote);
       const downloaded = await downloadCatalogEntries([remote], controller.signal, 24 * 60 * 60 * 1000, 'data');
       const wanted = downloaded.files.filter((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
       if (!wanted.length) throw new Error(`${remote.name} não trouxe DBC ou DBF`);

@@ -12,3 +12,4 @@ export * from './stall-watchdog.js';
 export * from './stream-reader.js';
 export * from './ranged-download-runner.js';
 export * from './catalog-memory.js';
+export * from './prepare-ahead.js';
