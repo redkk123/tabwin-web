@@ -118,6 +118,21 @@ interface DistinctRequest {
   limit?: number;
 }
 
+/**
+ * Registros crus, para a superfície de consulta.
+ *
+ * O worker até aqui só devolvia AGREGADOS — tabulação, distintos, fluxos — ou
+ * bytes de exportação. O DuckDB precisa das linhas para ingerir, e um teto
+ * explícito existe porque materializar milhões de objetos na aba é a maneira
+ * conhecida de derrubá-la. O corte é declarado na resposta, nunca silencioso.
+ */
+interface RecordsRequest {
+  type: 'records';
+  requestId: number;
+  fields: string[];
+  maxRecords: number;
+}
+
 interface CombinationProfileRequest {
   type: 'profile-combinations';
   requestId: number;
@@ -200,6 +215,7 @@ interface TransformApplyRequest {
 type DatasetRequest =
   | OpenRequest | AppendRequest | TabulateRequest
   | NumericProfileRequest | CombinationProfileRequest | DistinctRequest | SelectedDbfRequest
+  | RecordsRequest
   | FlowRequest | MicrodatasusCsvRequest | AuditScanRequest | TransformApplyRequest;
 
 const workerScope: Worker = self as unknown as Worker;
@@ -488,6 +504,32 @@ function handle(request: DatasetRequest): void {
       streamAll(request.requestId, request.fields, (batch) => profiler.push(batch.records));
       const profile: FieldCombinationProfile = profiler.finish();
       post({ type: 'combination-profile', requestId: request.requestId, profile });
+      return;
+    }
+    case 'records': {
+      if (!header) throw new Error('Nenhum conjunto de dados aberto');
+      if (!request.fields.length) throw new Error('Escolha ao menos um campo para consultar');
+      if (!Number.isSafeInteger(request.maxRecords) || request.maxRecords < 1) {
+        throw new Error('Limite de registros inválido');
+      }
+      const coletados: DataRecord[] = [];
+      let vistos = 0;
+      let cortado = false;
+      streamAll(request.requestId, request.fields, (batch) => {
+        vistos += batch.records.length;
+        if (cortado) return;
+        for (const record of batch.records) {
+          if (coletados.length >= request.maxRecords) { cortado = true; return; }
+          coletados.push(record);
+        }
+      });
+      post({
+        type: 'records-ready',
+        requestId: request.requestId,
+        records: coletados,
+        seen: vistos,
+        truncated: cortado,
+      });
       return;
     }
     case 'distinct': {

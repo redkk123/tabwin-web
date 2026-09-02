@@ -634,3 +634,21 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .def-picker > span { color: #4b535c; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; font-weight: 600; }
 .def-picker select { min-height: 38px; padding: 7px 9px; border: 1px solid #d8dadd; border-radius: 4px; color: var(--ink); background: #fff; }
 .def-picker small { color: #7a7f85; font-size: 11px; line-height: 1.5; }
+
+/* Consulta SQL: superfície de análise, deliberadamente distinta da tabulação.
+   O monoespaçado e o fundo mais escuro dizem "aqui você escreve código", que é
+   diferente do resto do aplicativo, onde você escolhe em listas. */
+.query-status { padding: 10px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); color: var(--muted); font-size: 12px; line-height: 1.5; }
+.query-status.trabalhando { border-color: var(--brand-line); background: var(--brand-soft); color: var(--brand-ink); }
+.query-status.erro { border-color: #d9b7b2; background: #fbf1ef; color: var(--danger); }
+.query-editor-label { display: block; margin-top: 14px; }
+.query-editor-label span { display: block; color: var(--muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; margin-bottom: 6px; }
+.query-editor { width: 100%; padding: 12px 13px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace; font-size: 13px; line-height: 1.55; resize: vertical; }
+.query-editor:focus-visible { border-color: var(--brand); }
+.query-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 9px; margin-top: 11px; }
+.query-result { margin-top: 16px; overflow-x: auto; }
+.query-result table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+.query-result th, .query-result td { padding: 6px 11px; border-bottom: 1px solid var(--line); text-align: left; white-space: nowrap; }
+.query-result thead th { position: sticky; top: 0; background: var(--surface-2); color: var(--muted); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600; }
+.query-result td.numero { font-variant-numeric: tabular-nums; text-align: right; }
+.query-result .vazio { color: var(--faint); font-style: italic; }

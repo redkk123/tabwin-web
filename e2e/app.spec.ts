@@ -1810,3 +1810,38 @@ test('o cache guarda os seis mais recentes e descarta os antigos sem carregá-lo
     'official-v1:pacote-5', 'official-v1:pacote-4', 'official-v1:pacote-3',
   ]);
 });
+
+test('a consulta SQL responde sobre os dados abertos, sem tocar no motor de tabulação', async ({ page }) => {
+  // O DuckDB é superfície de ANÁLISE. A tabela do TabWin continua saindo do
+  // executor de referência; aqui é para perguntas que o plano não expressa.
+  test.setTimeout(180_000);
+  const erros: string[] = [];
+  page.on('pageerror', (e) => erros.push(String(e)));
+  await page.goto('/');
+  await page.locator('#file-input').setInputFiles('e2e/fixtures/microdados-e2e.csv');
+  await expect(page.locator('#result-table tbody tr').first()).toBeVisible();
+
+  await page.getByRole('button', { name: 'Consulta' }).click();
+  await expect(page.locator('#query-status')).toContainText('Nenhum dado carregado');
+  // Executar tem que estar desligado enquanto não há tabela.
+  await expect(page.locator('#query-run')).toBeDisabled();
+
+  await page.getByRole('button', { name: 'Carregar os dados abertos' }).click();
+  // O motor são ~7 MB de WebAssembly; a primeira carga leva tempo de verdade.
+  await expect(page.locator('#query-status')).toContainText('pronta com', { timeout: 150_000 });
+  await expect(page.locator('#query-run')).toBeEnabled();
+
+  // O nome da tabela sai do nome do arquivo normalizado; ler do status evita
+  // o teste adivinhar e falhar por um hifen virar sublinhado.
+  const status = await page.locator('#query-status').textContent();
+  // Segunda palavra do status: "Tabela <nome> pronta com …". Sem regex de
+  // propósito — o nome do arquivo é normalizado (hífen vira sublinhado) e
+  // adivinhá-lo no teste já falhou uma vez.
+  const tabela = (status ?? '').split(' ')[1];
+  expect(tabela).toBeTruthy();
+  await page.locator('#query-sql').fill(`SELECT COUNT(*) AS total FROM "${tabela}"`);
+  await page.locator('#query-run').click();
+  await expect(page.locator('#query-result')).toContainText('total');
+  await expect(page.locator('#query-status')).toContainText('linha(s) em');
+  expect(erros.join(' | ')).toBe('');
+});

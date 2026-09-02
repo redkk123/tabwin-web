@@ -497,6 +497,7 @@
             <button data-view="statistics" type="button" title="Descritivas, correlação, regressão e taxas com padronização">Estatística</button>
             <button data-view="compare" type="button" title="Alinha duas tabelas por chave e mostra as diferenças">Comparar</button>
             <button data-view="investigate" type="button" title="Procura estranheza estatística no grupo filtrado, contra o resto">Investigar</button>
+            <button data-view="query" type="button" title="Consulta SQL sobre os dados abertos, para perguntas que a tabulação não expressa">Consulta</button>
             <button data-view="audit" type="button" title="De onde vieram os dados e o que foi feito com eles">Auditoria</button>
           </nav>
 
@@ -806,6 +807,31 @@
               <p>Configure ao menos um filtro ativo para definir o grupo, escolha campos acima e execute.</p>
             </div>
             <p class="compatibility-note">A estatística aponta estranheza; ela não decide se é erro — isso é julgamento de domínio, de quem conhece o dado. Um placar não é probabilidade de erro nem gatilho automático: nenhuma ação é tomada sozinha. A detecção é pelo formato do sinal, não pelo assunto — o mesmo motor separaria idades concentradas num só município, uma categoria rara demais em todo lugar, ou uma lacuna de preenchimento maior que o normal, qualquer que seja o grupo.</p>
+          </div>
+
+          <div class="view-panel" id="query-view" data-panel="query" hidden>
+            <div class="result-toolbar">
+              <div>
+                <span class="eyebrow">Superfície de análise</span>
+                <h2>Consulta SQL</h2>
+              </div>
+              <button class="secondary-button" id="query-load" type="button">Carregar os dados abertos</button>
+            </div>
+            <p class="compatibility-note">Isto <strong>não</strong> é o motor de tabulação. A tabela do TabWin
+            continua sendo produzida pelo executor de referência, provado contra o TabWin 4.15 com tolerância
+            zero — aqui é uma superfície separada, para perguntas que o modelo de plano não expressa: junções,
+            percentis, funções de janela, faixas contínuas. O motor de consulta pesa cerca de 7 MB e só é
+            baixado quando você carrega os dados nesta aba.</p>
+            <div class="query-status" id="query-status" aria-live="polite">Nenhum dado carregado nesta aba.</div>
+            <label class="query-editor-label" for="query-sql"><span>Consulta</span></label>
+            <textarea id="query-sql" class="query-editor" spellcheck="false" rows="6"
+              placeholder="SELECT ... FROM ..."></textarea>
+            <div class="query-actions">
+              <button class="primary-button" id="query-run" type="button" disabled><span>Executar</span><span aria-hidden="true">→</span></button>
+              <button class="secondary-button" id="query-export" type="button" disabled>Exportar CSV</button>
+              <button class="text-button danger-text-button" id="query-unload" type="button" disabled>Descarregar motor</button>
+            </div>
+            <div class="query-result" id="query-result"></div>
           </div>
 
           <div class="view-panel" id="audit-view" data-panel="audit" hidden>

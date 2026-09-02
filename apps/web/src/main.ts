@@ -89,6 +89,14 @@ import {
 } from '../../../packages/acquisition/src/stall-watchdog.ts';
 import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
 import {
+  loadRecordsAsTable,
+  quoteIdentifier,
+  runQuery,
+  shutdownDuckDb,
+  tableNameFor,
+  type DuckDbQueryResult,
+} from './duckdb-engine.ts';
+import {
   catalogQueryKey,
   describeCatalogMemory,
   planCatalogLookups,
@@ -231,7 +239,7 @@ import type { JoinType, PipelineSource } from '../../../packages/analysis/src/tr
 import { tableRowIndexes, tableRowsToTsv } from '../../../packages/analysis/src/table-presentation.ts';
 import './styles.css';
 
-type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'compare' | 'investigate' | 'audit';
+type ViewName = 'table' | 'chart' | 'map' | 'statistics' | 'compare' | 'investigate' | 'query' | 'audit';
 
 interface LoadedSource {
   name: string;
@@ -8956,3 +8964,166 @@ window.addEventListener('resize', () => {
   if (currentView === 'map' && activeMap) renderMap();
 });
 initializeCatalog();
+
+
+// ---------------------------------------------------------------------------
+// Consulta SQL — superfície de análise, separada do motor de tabulação.
+//
+// A tabela do TabWin continua saindo do executor de referência, provado contra
+// o TabWin 4.15 com tolerância zero. Aqui é outra coisa: junções, percentis,
+// funções de janela, faixas contínuas — o que o modelo de plano não expressa e
+// que hoje só existia em script fora do aplicativo.
+//
+// O motor pesa ~7 MB e só é baixado quando alguém carrega dados nesta aba.
+// ---------------------------------------------------------------------------
+
+/** Teto de linhas trazidas do worker para o motor de consulta. */
+const QUERY_MAX_RECORDS = 400_000;
+
+const queryStatus = element<HTMLElement>('#query-status');
+const querySql = element<HTMLTextAreaElement>('#query-sql');
+const queryRun = element<HTMLButtonElement>('#query-run');
+const queryExport = element<HTMLButtonElement>('#query-export');
+const queryUnload = element<HTMLButtonElement>('#query-unload');
+const queryLoad = element<HTMLButtonElement>('#query-load');
+const queryResult = element<HTMLElement>('#query-result');
+
+let queryTable: string | null = null;
+let queryLastResult: DuckDbQueryResult | null = null;
+
+function setQueryStatus(mensagem: string, tom: 'normal' | 'trabalhando' | 'erro' = 'normal'): void {
+  queryStatus.textContent = mensagem;
+  queryStatus.classList.toggle('trabalhando', tom === 'trabalhando');
+  queryStatus.classList.toggle('erro', tom === 'erro');
+}
+
+function renderQueryResult(resultado: DuckDbQueryResult): void {
+  queryResult.replaceChildren();
+  if (!resultado.rows.length) {
+    const vazio = document.createElement('p');
+    vazio.className = 'vazio';
+    vazio.textContent = 'A consulta não devolveu nenhuma linha.';
+    queryResult.append(vazio);
+    return;
+  }
+  const table = document.createElement('table');
+  const thead = document.createElement('thead');
+  const headRow = document.createElement('tr');
+  for (const coluna of resultado.columns) {
+    const th = document.createElement('th');
+    th.textContent = coluna.name;
+    headRow.append(th);
+  }
+  thead.append(headRow);
+  const tbody = document.createElement('tbody');
+  for (const linha of resultado.rows) {
+    const tr = document.createElement('tr');
+    linha.forEach((valor, indice) => {
+      const td = document.createElement('td');
+      if (resultado.columns[indice]?.type === 'número') td.className = 'numero';
+      td.textContent = valor === null
+        ? '—'
+        : valor instanceof Date ? valor.toISOString().slice(0, 10) : String(valor);
+      tr.append(td);
+    });
+    tbody.append(tr);
+  }
+  table.append(thead, tbody);
+  queryResult.append(table);
+}
+
+async function loadDatasetIntoQueryEngine(): Promise<void> {
+  if (!datasetName) { setQueryStatus('Abra um arquivo antes de consultar.', 'erro'); return; }
+  const campos = (dbfHeader?.fields ?? []).map((field) => field.name);
+  if (!campos.length) { setQueryStatus('O conjunto aberto não declara campos.', 'erro'); return; }
+  queryLoad.disabled = true;
+  try {
+    setQueryStatus('Lendo os registros do conjunto aberto…', 'trabalhando');
+    const resposta = await askDataset<{
+      records: Array<Record<string, unknown>>; seen: number; truncated: boolean;
+    }>({ type: 'records', fields: campos, maxRecords: QUERY_MAX_RECORDS },
+      { label: 'Leitura para consulta' });
+
+    const tabela = tableNameFor(datasetName);
+    const carregada = await loadRecordsAsTable(
+      tabela, resposta.records, campos, (mensagem) => setQueryStatus(mensagem, 'trabalhando'));
+    queryTable = carregada.name;
+    querySql.value = querySql.value.trim()
+      || `SELECT * FROM ${quoteIdentifier(carregada.name)} LIMIT 100`;
+    queryRun.disabled = false;
+    queryUnload.disabled = false;
+    // Um corte silencioso faria a consulta responder sobre um pedaço do
+    // arquivo como se fosse o arquivo inteiro.
+    const aviso = resposta.truncated
+      ? ` ATENÇÃO: o conjunto tem ${integerFormat.format(resposta.seen)} registros e só os `
+        + `${integerFormat.format(carregada.rowCount)} primeiros foram carregados. As consultas respondem`
+        + ' sobre esse recorte, não sobre o arquivo inteiro.'
+      : '';
+    setQueryStatus(
+      `Tabela ${carregada.name} pronta com ${integerFormat.format(carregada.rowCount)} linha(s) e `
+      + `${integerFormat.format(carregada.columns.length)} coluna(s).${aviso}`,
+      resposta.truncated ? 'erro' : 'normal',
+    );
+  } catch (error) {
+    setQueryStatus(error instanceof Error ? error.message : String(error), 'erro');
+  } finally {
+    queryLoad.disabled = false;
+  }
+}
+
+queryLoad.addEventListener('click', () => void loadDatasetIntoQueryEngine());
+
+queryRun.addEventListener('click', () => {
+  const sql = querySql.value.trim();
+  if (!sql) { setQueryStatus('Escreva uma consulta.', 'erro'); return; }
+  queryRun.disabled = true;
+  setQueryStatus('Executando…', 'trabalhando');
+  void runQuery(sql)
+    .then((resultado) => {
+      queryLastResult = resultado;
+      renderQueryResult(resultado);
+      queryExport.disabled = !resultado.rows.length;
+      const corte = resultado.truncated
+        ? ` Mostrando as primeiras ${integerFormat.format(resultado.rows.length)}; exporte para ver todas.`
+        : '';
+      setQueryStatus(
+        `${integerFormat.format(resultado.rowCount)} linha(s) em ${resultado.milliseconds.toFixed(0)} ms.${corte}`,
+      );
+    })
+    .catch((error: unknown) => {
+      queryLastResult = null;
+      queryExport.disabled = true;
+      queryResult.replaceChildren();
+      setQueryStatus(error instanceof Error ? error.message : String(error), 'erro');
+    })
+    .finally(() => { queryRun.disabled = false; });
+});
+
+queryExport.addEventListener('click', () => {
+  if (!queryLastResult) return;
+  const escape = (valor: unknown): string => {
+    const texto = valor === null ? ''
+      : valor instanceof Date ? valor.toISOString().slice(0, 10) : String(valor);
+    return /[",\n;]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
+  };
+  const linhas = [
+    queryLastResult.columns.map((c) => escape(c.name)).join(';'),
+    ...queryLastResult.rows.map((linha) => linha.map(escape).join(';')),
+  ];
+  downloadBlob(
+    new Blob([`\ufeff${linhas.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' }),
+    `consulta-${new Date().toISOString().slice(0, 10)}.csv`,
+  );
+});
+
+queryUnload.addEventListener('click', () => {
+  queryUnload.disabled = true;
+  void shutdownDuckDb().finally(() => {
+    queryTable = null;
+    queryLastResult = null;
+    queryResult.replaceChildren();
+    queryRun.disabled = true;
+    queryExport.disabled = true;
+    setQueryStatus('Motor descarregado. A memória dele voltou para o navegador.');
+  });
+});
