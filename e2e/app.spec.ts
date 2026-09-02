@@ -1501,7 +1501,11 @@ test('a busca mostra o que já achou, sem esperar o lote inteiro', async ({ page
   // o lote devolver o parcial. Quem via isso concluía que a busca não
   // funcionava, e desistia.
   let respondidas = 0;
-  await page.route(/(catalog|ftp\.php)/, async (route) => {
+  // O padrão precisa casar com os ENDPOINTS, não com qualquer URL que contenha
+  // "catalog". Em desenvolvimento o Vite serve cada módulo pelo caminho, e um
+  // regex solto passou a interceptar `src/catalog-memory-store.ts` — a busca
+  // recebia JSON no lugar de JavaScript e o app nem carregava.
+  await page.route(/\/catalog(\?|$)|wp-content\/ftp\.php/, async (route) => {
     respondidas++;
     // A primeira responde na hora; as seguintes demoram, como o DATASUS ruim.
     if (respondidas > 1) await new Promise((resolve) => setTimeout(resolve, 4000));
@@ -1607,11 +1611,17 @@ test('uma seleção enorme pede confirmação antes de começar a espera', async
 
   // Confirmar também precisa funcionar: a seleção grande pode ser exatamente a
   // série que a pessoa quer, e o aviso não pode virar um bloqueio.
+  //
+  // A seleção muda de propósito. Repetir a anterior seria servido da memória
+  // do catálogo, e o teste passaria a medir o cache em vez da confirmação.
+  await page.locator('#catalog-year').selectOption(
+    ['2016', '2015', '2014', '2013', '2012', '2011', '2010', '2009']);
   page.removeAllListeners('dialog');
   page.on('dialog', (dialog) => { void dialog.accept(); });
   await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
-  await expect(page.locator('#catalog-status')).not.toContainText('Busca não iniciada', { timeout: 60_000 });
-  expect(consultas).toBeGreaterThan(0);
+  // Espera ativa: a submissão passa por uma leitura assíncrona da memória
+  // antes de tocar a rede, e conferir na hora media a corrida, não o efeito.
+  await expect.poll(() => consultas, { timeout: 60_000 }).toBeGreaterThan(0);
 });
 
 test('o .dbc pode ser salvo direto do resultado da busca, sem abrir', async ({ page }) => {
@@ -1664,4 +1674,54 @@ test('o .dbc pode ser salvo direto do resultado da busca, sem abrir', async ({ p
 
   // E nenhuma tabulação foi montada: salvar não é abrir.
   await expect(page.locator('#result-table tbody tr')).toHaveCount(0);
+});
+
+test('a segunda busca não repete as viagens que já foram respondidas', async ({ page }) => {
+  // No caso real, 48 combinações para trazer 30 arquivos: 17 viagens completas
+  // ao servidor existiram só para descobrir que um arquivo de 1981 não foi
+  // publicado. E na busca seguinte tudo se repetia.
+  let consultas = 0;
+  await page.route('**/wp-content/ftp.php', async (route) => {
+    consultas += 1;
+    const corpo = route.request().postData() ?? '';
+    // Só 1996 existe; os demais anos respondem vazio, como o DATASUS faz.
+    const existe = corpo.includes('1996');
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: existe
+        ? JSON.stringify([{
+          arquivo: 'DNBR1996.dbc',
+          endereco: 'ftp://ftp.datasus.gov.br/dissemin/publicos/SINASC/NOV/DNRES/DNBR1996.dbc',
+          fonte: 'SINASC',
+          modalidade: 'Dados',
+        }])
+        : '[]',
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINASC');
+  await page.locator('#catalog-file-type').selectOption('DN');
+  const anos = ['1996', '1997', '1998', '1999'];
+  await page.locator('#catalog-year').selectOption(anos);
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#catalog-results')).toContainText('DNBR1996.dbc');
+
+  const primeira = consultas;
+  expect(primeira).toBe(anos.length);
+
+  // Segunda busca idêntica: nada precisa ir ao servidor de novo.
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+  await expect(page.locator('#catalog-results')).toContainText('vieram de consultas anteriores');
+  expect(consultas).toBe(primeira);
+  // O arquivo encontrado continua listado, vindo da memória.
+  await expect(page.locator('#catalog-results')).toContainText('DNBR1996.dbc');
+
+  // E "Consultar de novo" ignora o que está guardado, como promete.
+  await page.getByRole('button', { name: 'Consultar de novo' }).click();
+  await expect(page.locator('#catalog-results')).toContainText('DNBR1996.dbc');
+  expect(consultas).toBe(primeira * 2);
 });

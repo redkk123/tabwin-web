@@ -89,6 +89,15 @@ import {
 } from '../../../packages/acquisition/src/stall-watchdog.ts';
 import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
 import {
+  describeCatalogMemory,
+  planCatalogLookups,
+} from '../../../packages/acquisition/src/catalog-memory.ts';
+import {
+  forgetCatalogMemory,
+  readCatalogMemory,
+  rememberCatalogAnswers,
+} from './catalog-memory-store.ts';
+import {
   bridgeWouldHelp,
   cancelBridgeDownload,
   describeBridgeProbe,
@@ -7473,6 +7482,7 @@ async function executeCatalogQueries(
   system: string,
   fileType: string,
   retryOnly = false,
+  ignorarMemoria = false,
 ): Promise<void> {
   catalogResults.replaceChildren();
   clearManualAuxiliaryPicker();
@@ -7481,6 +7491,13 @@ async function executeCatalogQueries(
   activeCatalogController = controller;
   setCatalogBusy(true);
   try {
+    // O que já se sabe não precisa de viagem. Numa série histórica, a maioria
+    // das combinações só existe para descobrir que um arquivo de 1981 não foi
+    // publicado — e isso não muda entre uma busca e outra.
+    const memoria = ignorarMemoria ? new Map() : await readCatalogMemory(queries);
+    const plano = planCatalogLookups(queries, memoria);
+    const arquivosLembrados = plano.remembered.flatMap(({ query, remembered }) =>
+      remembered.files.map((arquivo) => ({ ...arquivo, catalogQuery: query } as DatasusRemoteFile)));
     // Mostra o que já chegou, em vez de esperar o lote inteiro. Antes, com
     // dezenas de combinações, os arquivos "só apareciam quando você cancelava"
     // — porque cancelar era a única forma de o lote devolver o parcial.
@@ -7492,9 +7509,48 @@ async function executeCatalogQueries(
         + `${integerFormat.format(progress.files.length)} arquivo(s) encontrado(s) até agora`;
       if (!parcial.isConnected) catalogResults.prepend(parcial);
     };
-    const resultado = await searchOfficialCatalogBatch(queries, controller.signal, renderParcial);
+    const resultado = await searchOfficialCatalogBatch(plano.toFetch, controller.signal, renderParcial);
     parcial.remove();
-    renderCatalogSearchBatch(resultado, system, fileType, queries);
+
+    // Guardar inclusive o "não encontrado": é ele que economiza a próxima
+    // busca, e é justamente ele que um cache ingênuo não lembra. Só respostas
+    // conclusivas entram — uma falha de rede não é prova de que o arquivo não
+    // existe, e gravá-la como "não existe" seria inventar ausência.
+    void rememberCatalogAnswers(resultado.batch.items.flatMap((item) => {
+      if (item.status !== 'FOUND' && item.status !== 'NOT_PUBLISHED') return [];
+      const encontrados = item.value ?? [];
+      return [{
+        query: item.request,
+        answer: encontrados.length ? 'found' as const : 'missing' as const,
+        files: encontrados.map((arquivo) => ({
+          name: arquivo.name,
+          address: arquivo.address,
+          source: arquivo.source,
+          modality: arquivo.modality,
+        })),
+      }];
+    }));
+
+    const combinado = {
+      ...resultado,
+      files: [...arquivosLembrados, ...resultado.files],
+    };
+    renderCatalogSearchBatch(combinado, system, fileType, queries);
+    const aviso = describeCatalogMemory(plano.remembered.length, queries.length);
+    if (aviso) {
+      const nota = document.createElement('p');
+      nota.className = 'filter-info';
+      nota.textContent = aviso;
+      const refazer = document.createElement('button');
+      refazer.className = 'text-button';
+      refazer.type = 'button';
+      refazer.textContent = 'Consultar de novo';
+      refazer.addEventListener('click', () => {
+        void executeCatalogQueries(queries, system, fileType, false, true);
+      });
+      nota.append(' ', refazer);
+      catalogResults.prepend(nota);
+    }
   } catch (error) {
     const message = isAbortError(error)
       ? 'Consulta cancelada.'
@@ -8798,9 +8854,14 @@ catalogCancelButton.addEventListener('click', () => {
 catalogCacheClear.addEventListener('click', () => {
   if (!window.confirm('Remover todos os downloads oficiais salvos neste aparelho?')) return;
   catalogCacheClear.disabled = true;
-  void clearCachedArchives()
+  // Limpar cache limpa TUDO que este aparelho lembra do DATASUS, inclusive as
+  // respostas do catálogo. Deixar as respostas para trás faria a busca
+  // continuar dizendo "não encontrado" de memória depois de o usuário ter
+  // pedido justamente para esquecer.
+  void Promise.all([clearCachedArchives(), forgetCatalogMemory()])
     .then(() => {
-      setCatalogStatus('Cache local removido. Os arquivos poderão ser baixados novamente do DATASUS.');
+      setCatalogStatus('Cache local removido, inclusive as respostas guardadas do catálogo.'
+        + ' Os arquivos poderão ser baixados novamente do DATASUS.');
       return renderRecentArchives();
     })
     .catch((error: unknown) => setCatalogStatus(error instanceof Error ? error.message : String(error), true));
