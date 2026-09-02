@@ -7036,10 +7036,10 @@ let recentArchivesGeneration = 0;
  * Quando o pacote traz mais de um, sai um `.zip` — juntar arquivos distintos
  * num nome só seria mentira.
  */
-async function saveCachedArchiveToDisk(summary: CachedArchiveSummary): Promise<void> {
-  const cached = await readCachedArchive(summary.key, Number.POSITIVE_INFINITY);
-  if (!cached) throw new Error('O arquivo não está mais no cache deste aparelho.');
-  const extracted = extractSupportedArchiveFiles(cached.bytes);
+function saveExtractedFilesToDisk(
+  extracted: readonly ExtractedArchiveFile[],
+  original: { bytes: Uint8Array; filename: string } | null,
+): string {
   const data = extracted.filter((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
   const wanted = data.length ? data : extracted;
 
@@ -7049,21 +7049,61 @@ async function saveCachedArchiveToDisk(summary: CachedArchiveSummary): Promise<v
       new Blob([only.bytes as BlobPart], { type: 'application/octet-stream' }),
       displayBaseName(only.name),
     );
-    setCatalogStatus(`${displayBaseName(only.name)} salvo em disco.`);
-    return;
+    return `${displayBaseName(only.name)} salvo em disco.`;
   }
   if (!wanted.length) {
     // O pacote existe mas não traz nada reconhecível: entregar o zip cru é
     // melhor do que dizer que não há nada.
-    downloadBlob(new Blob([cached.bytes as BlobPart], { type: 'application/zip' }), `${summary.key.replace(/[^w.-]+/g, '-')}.zip`);
-    setCatalogStatus('O pacote não traz DBC ou DBF reconhecido; o arquivo original foi salvo.');
-    return;
+    if (!original) throw new Error('O pacote não traz DBC ou DBF reconhecido.');
+    downloadBlob(new Blob([original.bytes as BlobPart], { type: 'application/zip' }), original.filename);
+    return 'O pacote não traz DBC ou DBF reconhecido; o arquivo original foi salvo.';
   }
   const bundle: Record<string, [Uint8Array, { level: 0 }]> = {};
   for (const entry of wanted) bundle[displayBaseName(entry.name)] = [entry.bytes, { level: 0 }];
   const zipped = zipSync(bundle, { level: 0 });
   downloadBlob(new Blob([zipped as BlobPart], { type: 'application/zip' }), `datasus-${new Date().toISOString().slice(0, 10)}.zip`);
-  setCatalogStatus(`${integerFormat.format(wanted.length)} arquivo(s) salvos em um .zip.`);
+  return `${integerFormat.format(wanted.length)} arquivo(s) salvos em um .zip.`;
+}
+
+async function saveCachedArchiveToDisk(summary: CachedArchiveSummary): Promise<void> {
+  const cached = await readCachedArchive(summary.key, Number.POSITIVE_INFINITY);
+  if (!cached) throw new Error('O arquivo não está mais no cache deste aparelho.');
+  setCatalogStatus(saveExtractedFilesToDisk(extractSupportedArchiveFiles(cached.bytes), {
+    bytes: cached.bytes,
+    filename: `${summary.key.replace(/[^w.-]+/g, '-')}.zip`,
+  }));
+}
+
+/**
+ * Baixa um arquivo do catálogo e grava direto no computador, sem abrir.
+ *
+ * "Baixar e abrir" serve para tabular aqui; quem vai levar o `.dbc` para o R,
+ * para o Python ou para outra máquina não precisa que o navegador monte uma
+ * tabulação antes — e num arquivo de 120 MB essa etapa é justamente a que
+ * pesa. O lote já tinha o `.zip`; faltava o arquivo sozinho, sem embrulho.
+ *
+ * Usa o mesmo cache do resto da aquisição: pedir de novo o que já está neste
+ * aparelho não volta à rede.
+ */
+async function saveOfficialFileToDisk(remote: DatasusRemoteFile): Promise<void> {
+  const controller = new AbortController();
+  activeCatalogController = controller;
+  setCatalogBusy(true);
+  try {
+    setCatalogStatus(`Baixando ${remote.name} para salvar em disco…`);
+    const downloaded = await downloadCatalogEntries([remote], controller.signal, 24 * 60 * 60 * 1000, 'data');
+    setCatalogStatus(saveExtractedFilesToDisk(downloaded.files, null));
+  } catch (error) {
+    setCatalogStatus(
+      isAbortError(error)
+        ? 'Download cancelado.'
+        : `Não foi possível salvar ${remote.name}: ${error instanceof Error ? error.message : String(error)}`,
+      !isAbortError(error),
+    );
+  } finally {
+    if (activeCatalogController === controller) activeCatalogController = null;
+    setCatalogBusy(false);
+  }
 }
 
 /**
@@ -7372,7 +7412,17 @@ function renderCatalogSearchBatch(
     button.type = 'button';
     button.textContent = 'Baixar e abrir';
     button.addEventListener('click', () => void openOfficialFile(remote, remote.catalogQuery ?? auxiliaryQuery));
-    item.append(details, button);
+    // Salvar sem abrir é o caminho de quem vai usar o arquivo fora daqui.
+    const save = document.createElement('button');
+    save.className = 'text-button';
+    save.type = 'button';
+    save.textContent = 'Salvar .dbc';
+    save.title = `Baixar ${remote.name} para o computador, sem abrir`;
+    save.addEventListener('click', () => void saveOfficialFileToDisk(remote));
+    const buttons = document.createElement('div');
+    buttons.className = 'catalog-result-actions';
+    buttons.append(button, save);
+    item.append(details, buttons);
     catalogResults.append(item);
   }
   syncSelection();

@@ -1613,3 +1613,55 @@ test('uma seleção enorme pede confirmação antes de começar a espera', async
   await expect(page.locator('#catalog-status')).not.toContainText('Busca não iniciada', { timeout: 60_000 });
   expect(consultas).toBeGreaterThan(0);
 });
+
+test('o .dbc pode ser salvo direto do resultado da busca, sem abrir', async ({ page }) => {
+  // "Baixar e abrir" serve para tabular aqui. Quem vai levar o arquivo para o
+  // R, para o Python ou para outra máquina não precisa que o navegador monte
+  // uma tabulação antes — e num arquivo de 120 MB essa etapa é a que pesa.
+  const { zipSync, strToU8 } = await import('fflate');
+  const pacote = Buffer.from(zipSync({ 'DNBR1997.dbc': strToU8('microdado-de-teste') }, { level: 0 }));
+
+  await page.route('**/wp-content/ftp.php', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    body: JSON.stringify([{
+      arquivo: 'DNBR1997.dbc',
+      endereco: 'ftp://ftp.datasus.gov.br/dissemin/publicos/SINASC/NOV/DNRES/DNBR1997.dbc',
+      fonte: 'SINASC',
+      modalidade: 'Dados',
+    }]),
+  }));
+  await page.route('**/wp-content/download.php', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    headers: { 'access-control-allow-origin': '*' },
+    // A resposta real é um ARRAY de strings; um objeto passa despercebido pelo
+    // coletor e o download nem chega a começar.
+    body: JSON.stringify(['https://datasus.saude.gov.br/wp-content/zipupload/Arq_1/arquivo.zip']),
+  }));
+  await page.route('**/zipupload/**', (route) => route.fulfill({
+    status: 200,
+    contentType: 'application/zip',
+    headers: { 'access-control-allow-origin': '*', 'accept-ranges': 'none' },
+    body: pacote,
+  }));
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINASC');
+  await page.locator('#catalog-file-type').selectOption('DN');
+  await page.locator('#catalog-year').selectOption(['1997']);
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  const salvar = page.getByRole('button', { name: 'Salvar .dbc' });
+  await expect(salvar).toBeVisible();
+  const baixando = page.waitForEvent('download');
+  await salvar.click();
+  const arquivo = await baixando;
+  // Sai o .dbc de dentro do pacote, não o .zip como veio da rede.
+  expect(arquivo.suggestedFilename()).toBe('DNBR1997.dbc');
+
+  // E nenhuma tabulação foi montada: salvar não é abrir.
+  await expect(page.locator('#result-table tbody tr')).toHaveCount(0);
+});

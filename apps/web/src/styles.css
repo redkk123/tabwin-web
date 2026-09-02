@@ -525,6 +525,9 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .catalog-status.error { color: #94463f; }
 .catalog-results { display: grid; gap: 8px; margin-top: 5px; }
 .catalog-result { display: flex; align-items: center; gap: 13px; padding: 12px 13px; border: 1px solid #dfe1e3; border-radius: 6px; background: #f9f9fa; }
+/* Duas ações por resultado: abrir aqui, ou salvar para usar fora. A segunda
+   é de texto porque abrir continua sendo o caminho principal. */
+.catalog-result > .catalog-result-actions { display: flex; align-items: center; gap: 8px; flex: 0 0 auto; }
 .catalog-result > div { min-width: 0; flex: 1; }
 .catalog-result b, .catalog-result small { display: block; }
 .catalog-result b { overflow: hidden; text-overflow: ellipsis; color: var(--ink); font-size: 12px; }

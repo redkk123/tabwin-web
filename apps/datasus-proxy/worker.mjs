@@ -20,7 +20,13 @@ const DEFAULTS = Object.freeze({
   maxFormResponseBytes: 4 * 1024 * 1024,
   maxArchiveBytes: 512 * 1024 * 1024,
   formTimeoutMs: 30_000,
+  // Prazo para o DATASUS ENTREGAR A RESPOSTA, não para o cliente terminar de
+  // baixar. Ver `handleArchive`: já foi a segunda coisa, e cortava o corpo no
+  // meio de quem estava numa conexão lenta.
   archiveTimeoutMs: 180_000,
+  // Quanto se espera por UM pedaço do DATASUS, com a leitura já pendente.
+  // Limita origem travada sem punir cliente lento.
+  archiveIdleTimeoutMs: 60_000,
   maxRedirects: 3,
 });
 
@@ -66,6 +72,13 @@ function settings(environment) {
       DEFAULTS.archiveTimeoutMs,
       10_000,
       600_000,
+    ),
+    archiveIdleTimeoutMs: numericSetting(
+      environment,
+      'ARCHIVE_IDLE_TIMEOUT_MS',
+      DEFAULTS.archiveIdleTimeoutMs,
+      5_000,
+      300_000,
     ),
     maxRedirects: numericSetting(environment, 'MAX_REDIRECTS', DEFAULTS.maxRedirects, 0, 5),
   };
@@ -339,19 +352,36 @@ async function handleForm(routeName, request, environment, origin, proxySettings
   }
 }
 
-function boundedArchiveStream(body, maximum, dispose) {
+/**
+ * Repassa o corpo contando bytes, com relógio de OCIOSIDADE em vez de prazo total.
+ *
+ * O relógio corre apenas enquanto uma leitura ao DATASUS está pendente. Cliente
+ * lento não o aciona: com contrapressão, `pull` simplesmente demora a ser
+ * chamado de novo, e nesse intervalo não há leitura correndo. Origem travada,
+ * essa sim, deixa uma leitura pendente para sempre — e é o que se quer cortar.
+ *
+ * A versão anterior usava um prazo único armado antes do `fetch` e desarmado
+ * só no fim do fluxo. Como o sinal aborta a resposta de origem, ele limitava o
+ * download INTEIRO do cliente: a 0,6 MB/s o teto era ~108 MB, e o que passava
+ * disso chegava truncado — "invalid zip data" no navegador, sem pista nenhuma
+ * de que a causa era um relógio nosso.
+ */
+function boundedArchiveStream(body, maximum, guard) {
   const reader = body.getReader();
   let size = 0;
   let finished = false;
   const finish = () => {
     if (finished) return;
     finished = true;
-    dispose();
   };
   return new ReadableStream({
     async pull(controller) {
+      let ocioso = null;
       try {
+        ocioso = setTimeout(() => guard.abortStalled(), guard.idleMs);
         const { done, value } = await reader.read();
+        clearTimeout(ocioso);
+        ocioso = null;
         if (done) {
           finish();
           controller.close();
@@ -366,6 +396,7 @@ function boundedArchiveStream(body, maximum, dispose) {
         }
         controller.enqueue(value);
       } catch (error) {
+        if (ocioso !== null) clearTimeout(ocioso);
         finish();
         controller.error(error);
       }
@@ -377,6 +408,14 @@ function boundedArchiveStream(body, maximum, dispose) {
   });
 }
 
+/**
+ * Repassa o pacote oficial.
+ *
+ * O prazo vale até a RESPOSTA do DATASUS chegar e ser validada; a partir daí
+ * quem manda no ritmo é o cliente, e cliente lento não pode ser tratado como
+ * origem travada. Ver `boundedArchiveStream` para o que substitui o prazo
+ * depois disso.
+ */
 async function handleArchive(request, environment, origin, proxySettings) {
   const timed = timeoutController(proxySettings.archiveTimeoutMs);
   try {
@@ -419,7 +458,16 @@ async function handleArchive(request, environment, origin, proxySettings) {
       const value = safeUpstreamHeader(upstream.headers, name);
       if (value) headers.set(name, value);
     }
-    const stream = boundedArchiveStream(upstream.body, proxySettings.maxArchiveBytes, timed.dispose);
+    // A resposta chegou e passou pela validação: o prazo cumpriu o papel dele.
+    // Deixá-lo armado daqui para a frente seria dar ao CLIENTE um limite de
+    // tempo para terminar de baixar — que é exatamente o defeito consertado.
+    timed.dispose();
+    const stream = boundedArchiveStream(upstream.body, proxySettings.maxArchiveBytes, {
+      idleMs: proxySettings.archiveIdleTimeoutMs,
+      // O mesmo controlador continua servindo: desarmar o relógio não o aborta,
+      // então ele ainda é o jeito de cortar uma origem que parou de responder.
+      abortStalled: () => timed.controller.abort('upstream stalled'),
+    });
     // 206 é repassado como 206: transformar em 200 faria o cliente montar um
     // arquivo com um pedaço só, achando que tinha o inteiro.
     return new Response(stream, { status: partial ? 206 : 200, headers });

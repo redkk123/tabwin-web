@@ -80,6 +80,14 @@ Alguns pontos que economizam tempo:
   encontrado. **Comparar manifesto anterior** mostra o que apareceu ou sumiu
   desde a última vez — útil para acompanhar publicação de dados preliminares.
 
+### Salvar um arquivo sem abrir
+
+Cada resultado tem **Salvar .dbc** ao lado de **Baixar e abrir**. Ele grava o
+arquivo no seu computador e para por aí — não monta tabulação nenhuma. É o
+caminho de quem vai usar o dado no R, no Python ou em outra máquina, e num
+arquivo de mais de 100 MB é justamente a etapa de abrir que pesa. Sai o
+`.dbc` de dentro do pacote, não o `.zip` como veio da rede.
+
 ### Baixar em lote, e empacotar
 
 Com mais de um resultado aparece uma barra com uma **caixa por arquivo**

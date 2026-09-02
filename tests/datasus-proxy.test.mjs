@@ -319,3 +319,106 @@ test('o preflight passa a aceitar Range, senão o navegador barraria antes de te
   assert.equal(response.status, 204);
   assert.match(response.headers.get('Access-Control-Allow-Headers') ?? '', /Range/i);
 });
+
+/**
+ * Origem que entrega um pedaço e depois espera, sob controle do teste.
+ *
+ * Serve para colocar o proxy no estado que o defeito exigia: resposta já
+ * recebida, cliente ainda baixando.
+ */
+function origemQueSegura(primeiroPedaco, resto) {
+  let liberar;
+  const espera = new Promise((resolve) => { liberar = resolve; });
+  const corpo = new ReadableStream({
+    async pull(controller) {
+      if (!this.entregouPrimeiro) {
+        this.entregouPrimeiro = true;
+        controller.enqueue(primeiroPedaco);
+        return;
+      }
+      if (!this.entregouResto) {
+        this.entregouResto = true;
+        await espera;
+        controller.enqueue(resto);
+        return;
+      }
+      controller.close();
+    },
+  });
+  return { corpo, liberar: () => liberar() };
+}
+
+async function deixarFluir() {
+  for (let i = 0; i < 5; i++) await new Promise((resolve) => setImmediate(resolve));
+}
+
+test('o prazo do proxy não limita quanto o cliente demora para baixar', async (t) => {
+  // O defeito que isto tranca: o prazo era armado antes do `fetch` e desarmado
+  // só no fim do fluxo, e como o sinal aborta a resposta de origem, ele dava ao
+  // CLIENTE um limite de tempo. A 0,6 MB/s o teto era ~108 MB; o que passava
+  // disso chegava truncado e o navegador dizia "invalid zip data", sem nenhuma
+  // pista de que a causa era um relógio nosso.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const inicio = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
+  const fim = new Uint8Array([0x01, 0x02, 0x03]);
+  const origem = origemQueSegura(inicio, fim);
+  let sinal = null;
+
+  await withMockFetch(async (_input, init) => {
+    sinal = init.signal;
+    return new Response(origem.corpo, { headers: { 'Content-Type': 'application/zip' } });
+  }, async () => {
+    const response = await handleRequest(
+      request(`/archive?url=${encodeURIComponent(ARCHIVE_URL)}`, { method: 'GET' }),
+      { ...ENVIRONMENT, ARCHIVE_TIMEOUT_MS: '10000' },
+    );
+    assert.equal(response.status, 200);
+    const leitor = response.body.getReader();
+    const recebido = [...(await leitor.read()).value];
+    // Deixa o fluxo pedir o próximo pedaço: é só com uma leitura pendente que
+    // o relógio de ociosidade chega a ser armado. Sem isto o teste passaria
+    // por não haver relógio nenhum correndo, que não é o que se quer provar.
+    await deixarFluir();
+
+    // Passa muito do prazo de resposta, sem chegar perto do de ociosidade.
+    t.mock.timers.tick(30_000);
+    await deixarFluir();
+    assert.equal(sinal.aborted, false, 'lentidão do cliente não pode abortar a origem');
+
+    origem.liberar();
+    for (;;) {
+      const { done, value } = await leitor.read();
+      if (done) break;
+      recebido.push(...value);
+    }
+    assert.deepEqual(Uint8Array.from(recebido), Uint8Array.from([...inicio, ...fim]),
+      'o cliente lento precisa receber o arquivo INTEIRO, não um pedaço');
+  });
+});
+
+test('origem que para de responder ainda é cortada, por ociosidade', async (t) => {
+  // O prazo antigo também servia para isto, e trocá-lo por nada deixaria o
+  // proxy segurando uma conexão morta. A diferença é o que o relógio mede:
+  // agora ele só corre com uma leitura pendente ao DATASUS.
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const origem = origemQueSegura(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), new Uint8Array([0x09]));
+  let sinal = null;
+
+  await withMockFetch(async (_input, init) => {
+    sinal = init.signal;
+    return new Response(origem.corpo, { headers: { 'Content-Type': 'application/zip' } });
+  }, async () => {
+    const response = await handleRequest(
+      request(`/archive?url=${encodeURIComponent(ARCHIVE_URL)}`, { method: 'GET' }),
+      { ...ENVIRONMENT, ARCHIVE_TIMEOUT_MS: '10000', ARCHIVE_IDLE_TIMEOUT_MS: '20000' },
+    );
+    const leitor = response.body.getReader();
+    await leitor.read();
+    // A leitura seguinte fica pendente na origem: aqui o relógio corre.
+    await deixarFluir();
+    t.mock.timers.tick(25_000);
+    await deixarFluir();
+    assert.equal(sinal.aborted, true, 'origem travada precisa ser cortada');
+    origem.liberar();
+  });
+});

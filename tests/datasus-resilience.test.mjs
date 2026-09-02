@@ -179,3 +179,26 @@ test('cancelar no meio preserva o que terminou e marca o resto', async () => {
   assert.ok(resultado.succeeded > 0, 'o que já tinha terminado é preservado');
   assert.ok(resultado.succeeded < pedidos.length, 'e o resto não é dado como feito');
 });
+
+test('um pacote cortado no meio é recusado com o motivo, não repassado', async () => {
+  // Aconteceu de verdade: um relógio do nosso proxy abortava a resposta de
+  // origem no meio de downloads longos. O pedaço que chegava começava com a
+  // assinatura ZIP, passava pela validação de quatro bytes, ia para o cache, e
+  // só falhava lá na frente com "invalid zip data" — mensagem que não diz a
+  // ninguém o que houve nem o que fazer.
+  const { zipSync } = await import('fflate');
+  const inteiro = zipSync({
+    'DNBR1997.dbc': new Uint8Array(4096).fill(7),
+  }, { level: 0 });
+
+  assert.doesNotThrow(() => validateDatasusZipArchive(inteiro, 'application/zip'));
+
+  const cortado = inteiro.subarray(0, Math.floor(inteiro.length * 0.6));
+  assert.equal(cortado[0], 0x50, 'o pedaço truncado começa igual a um pacote bom');
+  assert.equal(cortado[1], 0x4b, 'e é por isso que quatro bytes não bastavam');
+  assert.throws(
+    () => validateDatasusZipArchive(cortado, 'application/zip'),
+    (error) => error instanceof InvalidDatasusArchiveError && /veio incompleto/.test(error.message),
+    'o corte precisa ser reconhecido como corte, e dito com essas palavras',
+  );
+});
