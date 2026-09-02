@@ -857,6 +857,17 @@ function updateColumnControls(): void {
 }
 
 function setControlsEnabled(enabled: boolean): void {
+  // Antes de um arquivo existir, a configuração de tabulação não é escolha da
+  // pessoa — é uma parede de campos cinzas. Ela some por inteiro.
+  //
+  // O que decide é haver um conjunto aberto, e não este `enabled`: os
+  // controles também são desligados durante a tabulação, e seguir o sinal cru
+  // faria o formulário piscar a cada "Tabular agora". Uma tabela portátil ou
+  // um .TAB abertos não trazem conjunto para configurar, e aí a área continua
+  // recolhida — é o caso em que `enabled` é falso e `dbfHeader` é nulo.
+  const comConjunto = enabled || Boolean(dbfHeader);
+  document.querySelector('.workspace')?.classList.toggle('workspace--empty', !comConjunto);
+
   for (const control of [fieldSearch, rowField, columnField, rowConversion, columnConversion, measureKind, measureField, filterField, filterMode,
     filterKind, filterValueSearch, filterMinimum, filterMaximum, filterIncludeMinimum, filterIncludeMaximum, startPosition, columnStartPosition,
     extraMeasureField, qualityField, qualityMinimum, qualityMaximum, suppressZero, suppressZeroColumns, discriminateUnclassified,
@@ -6451,6 +6462,11 @@ async function downloadCatalogEntries(
         : formatBytes(receivedBytes);
       onActivity?.();
       setCatalogStatus(`Baixando ${files.map((file) => file.name).join(', ')}… ${progress}`);
+    }, (esperando) => {
+      // O DATASUS entrega o endereço antes de terminar de montar o pacote. Sem
+      // esta linha a tela fica parada em 0% e parece travada.
+      onActivity?.();
+      setCatalogStatus(`O DATASUS está montando o pacote… ${Math.round(esperando / 1000)}s`);
     });
     archive = downloaded.value;
     attempts = prepared.attempts + downloaded.attempts;

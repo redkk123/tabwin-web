@@ -15,6 +15,7 @@ private-fixtures/
 dist-web-old/
 # Playwright run output. The report is a CI artifact, not a tracked file.
 test-results/
+.cache/
 playwright-report/
 blob-report/
 playwright/.cache/

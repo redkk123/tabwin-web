@@ -26,13 +26,13 @@
         </nav>
       </header>
 
-      <aside class="workspace" aria-label="Configuração da análise">
+      <aside class="workspace workspace--empty" aria-label="Configuração da análise">
         <div class="workspace-heading">
           <div>
             <span class="eyebrow">Área de trabalho</span>
             <h1>Nova análise</h1>
           </div>
-          <span class="compatibility-badge">TabWin 4.15</span>
+          <span class="compatibility-badge">Compatível com TabWin 4.15</span>
         </div>
 
         <label class="drop-zone" id="drop-zone" for="file-input">
@@ -56,7 +56,7 @@
           <span>Combinar próximos DBC/DBF somente quando o esquema for compatível</span>
         </label>
 
-        <details class="sidebar-group" id="group-export">
+        <details class="sidebar-group needs-dataset" id="group-export">
           <summary>Exportar o arquivo <span>DBF, CSV</span></summary>
           <div class="source-actions">
             <button class="secondary-button" id="source-dbf-button" type="button" disabled>Extrair DBF original</button>
@@ -111,7 +111,7 @@
         </p>
         </details>
 
-        <form id="analysis-form" class="analysis-form">
+        <form id="analysis-form" class="analysis-form needs-dataset">
           <label>
             <span>Buscar variável</span>
             <input id="field-search" type="search" placeholder="Nome técnico ou rótulo do DEF" disabled>
@@ -143,16 +143,6 @@
             <span>Campo para somar</span>
             <select id="measure-field" disabled></select>
           </label>
-          <details class="filter-builder extra-measures-builder">
-            <summary>Medidas adicionais lado a lado <span id="extra-measure-count">nenhuma</span></summary>
-            <p class="dialog-note extra-measures-note">G017: o TabWin permite somar vários incrementos ao mesmo tempo, cada um em sua própria coluna. A medida acima continua sendo a primeira coluna; as adicionadas aqui entram depois, na ordem em que forem incluídas.</p>
-            <div id="extra-measures-list"></div>
-            <label>
-              <span>Campo a adicionar</span>
-              <select id="extra-measure-field" disabled></select>
-            </label>
-            <button class="secondary-button" id="extra-measure-add" type="button" disabled>+ Adicionar medida</button>
-          </details>
           <details class="filter-builder">
             <summary>Filtros e seleções <span id="filter-count">nenhum</span></summary>
             <label>
@@ -178,280 +168,293 @@
             </div>
             <div class="active-filter-list" id="active-filter-list"></div>
           </details>
-          <details class="filter-builder quality-builder">
-            <summary>Limpeza assistida <span>não destrutiva</span></summary>
-            <label>
-              <span>Campo para examinar</span>
-              <select id="quality-field" disabled><option value="">Abra um DBC primeiro</option></select>
-            </label>
-            <div class="filter-info quality-summary" id="quality-summary">Escolha um campo para ver distribuição, ausências e valores extremos.</div>
-            <div class="filter-range">
-              <label><span>Mínimo válido</span><input id="quality-minimum" type="number" step="any" placeholder="Sem limite" disabled></label>
-              <label><span>Máximo válido</span><input id="quality-maximum" type="number" step="any" placeholder="Sem limite" disabled></label>
-            </div>
-            <div class="quality-actions">
-              <button class="text-button" id="quality-suggest-button" type="button" disabled>Preencher sugestão IQR</button>
-              <button class="secondary-button" id="quality-apply-button" type="button" disabled>Aplicar faixa manual</button>
-            </div>
-            <p class="quality-note">A sugestão apenas preenche os campos. Confira o contexto clínico antes de aplicar; o arquivo original nunca é alterado.</p>
-          </details>
-          <details class="filter-builder cross-field-builder">
-            <summary>Regras cruzadas <span id="cross-field-count">nenhuma</span></summary>
-            <label>
-              <span>Nome da regra</span>
-              <input id="cross-field-label" type="text" maxlength="120" placeholder="Ex.: combinação que exige revisão" disabled>
-            </label>
-            <div class="cross-field-condition" data-condition="1">
-              <strong>Condição 1</strong>
-              <label><span>Campo</span><select id="cross-field-field-1" disabled><option value="">Escolha um campo</option></select></label>
-              <label><span>Condição</span><select id="cross-field-operator-1" disabled>
-                <option value="equals">Igual a</option><option value="gte">Maior ou igual a</option>
-                <option value="gt">Maior que</option><option value="lte">Menor ou igual a</option>
-                <option value="lt">Menor que</option><option value="between">Entre, inclusive</option>
-              </select></label>
-              <label><span id="cross-field-value-label-1">Valor exato</span><input id="cross-field-value-1" type="text" disabled></label>
-              <label id="cross-field-second-value-wrap-1" hidden><span>Valor máximo</span><input id="cross-field-second-value-1" type="number" step="any" disabled></label>
-            </div>
-            <div class="cross-field-condition" data-condition="2">
-              <strong>Condição 2</strong>
-              <label><span>Campo</span><select id="cross-field-field-2" disabled><option value="">Escolha outro campo</option></select></label>
-              <label><span>Condição</span><select id="cross-field-operator-2" disabled>
-                <option value="equals">Igual a</option><option value="gte">Maior ou igual a</option>
-                <option value="gt">Maior que</option><option value="lte">Menor ou igual a</option>
-                <option value="lt">Menor que</option><option value="between">Entre, inclusive</option>
-              </select></label>
-              <label><span id="cross-field-value-label-2">Valor exato</span><input id="cross-field-value-2" type="text" disabled></label>
-              <label id="cross-field-second-value-wrap-2" hidden><span>Valor máximo</span><input id="cross-field-second-value-2" type="number" step="any" disabled></label>
-            </div>
-            <div class="quality-actions cross-field-actions">
-              <button class="secondary-button cross-field-action" id="cross-field-action" type="button" data-action="flag" disabled>Apenas sinalizar</button>
-              <button class="secondary-button" id="cross-field-add" type="button" disabled>Adicionar regra</button>
-            </div>
-            <div class="active-filter-list" id="active-cross-field-list"></div>
-            <p class="quality-note">As duas condições precisam ocorrer no mesmo registro. A regra é uma política explícita do usuário e fica registrada na análise.</p>
-          </details>
-          <details class="filter-builder combination-builder">
-            <summary>Combinações raras <span id="combination-count">não analisadas</span></summary>
-            <div class="filter-rule-row">
-              <label><span>Primeiro campo</span><select id="combination-field-1" disabled><option value="">Escolha um campo</option></select></label>
-              <label><span>Segundo campo</span><select id="combination-field-2" disabled><option value="">Escolha outro campo</option></select></label>
-            </div>
-            <div class="quality-actions">
-              <p class="filter-info" id="combination-summary">O perfil mostra frequência; raridade não significa erro.</p>
-              <button class="secondary-button" id="combination-profile-button" type="button" disabled>Analisar</button>
-            </div>
-            <div class="combination-list" id="combination-list"></div>
-            <p class="quality-note">“Criar regra” apenas prepara uma sinalização explícita para a combinação observada. Revise o contexto antes de alternar para exclusão.</p>
-          </details>
-          <details class="filter-builder transform-builder">
-            <summary>Transformar dados <span id="transform-count">nenhuma etapa</span></summary>
-            <p class="quality-note">Selecionar colunas, filtrar linhas, recodificar valores, marcar ausentes e remover duplicatas — como um pipeline reproduzível, pela interface. O arquivo original nunca é alterado; cada etapa fica no histórico abaixo até você aplicar.</p>
-            <label><span>Tipo de etapa</span><select id="transform-step-kind" disabled>
-              <option value="select-columns">Selecionar colunas</option>
-              <option value="filter-rows">Filtrar linhas</option>
-              <option value="recode">Recodificar valores</option>
-              <option value="missing-value-policy">Marcar ausentes</option>
-              <option value="dedupe">Remover duplicatas</option>
-              <option value="derive-column">Criar coluna por fórmula</option>
-              <option value="cast-type">Converter tipo</option>
-              <option value="date-part">Extrair parte de data</option>
-              <option value="text-normalize">Normalizar texto/código</option>
-              <option value="group-summarize">Agrupar e resumir</option>
-              <option value="bind-rows">Empilhar outra base</option>
-              <option value="join">Juntar outra base (chave)</option>
-            </select></label>
-
-            <div class="transform-step-config" id="transform-config-select-columns">
-              <label><span>Colunas a manter <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-select-fields" multiple size="6" disabled></select></label>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-filter-rows" hidden>
-              <label><span>Campo</span><select id="transform-filter-field" disabled></select></label>
-              <div class="filter-rule-row">
-                <label><span>Tipo</span><select id="transform-filter-kind" disabled>
-                  <option value="categories">Valores/categorias</option>
-                  <option value="numeric-range">Intervalo numérico</option>
-                </select></label>
-                <label><span>Modo</span><select id="transform-filter-mode" disabled>
-                  <option value="include">Manter correspondentes</option>
-                  <option value="exclude">Excluir correspondentes</option>
-                </select></label>
+          <details class="sidebar-group advanced-group" id="group-advanced">
+            <summary>Opções avançadas <span>medidas, limpeza, transformação</span></summary>
+            <details class="filter-builder extra-measures-builder">
+              <summary>Medidas adicionais lado a lado <span id="extra-measure-count">nenhuma</span></summary>
+              <p class="dialog-note extra-measures-note">G017: o TabWin permite somar vários incrementos ao mesmo tempo, cada um em sua própria coluna. A medida acima continua sendo a primeira coluna; as adicionadas aqui entram depois, na ordem em que forem incluídas.</p>
+              <div id="extra-measures-list"></div>
+              <label>
+                <span>Campo a adicionar</span>
+                <select id="extra-measure-field" disabled></select>
+              </label>
+              <button class="secondary-button" id="extra-measure-add" type="button" disabled>+ Adicionar medida</button>
+            </details>
+            <details class="filter-builder quality-builder">
+              <summary>Limpeza assistida <span>não destrutiva</span></summary>
+              <label>
+                <span>Campo para examinar</span>
+                <select id="quality-field" disabled><option value="">Abra um DBC primeiro</option></select>
+              </label>
+              <div class="filter-info quality-summary" id="quality-summary">Escolha um campo para ver distribuição, ausências e valores extremos.</div>
+              <div class="filter-range">
+                <label><span>Mínimo válido</span><input id="quality-minimum" type="number" step="any" placeholder="Sem limite" disabled></label>
+                <label><span>Máximo válido</span><input id="quality-maximum" type="number" step="any" placeholder="Sem limite" disabled></label>
               </div>
-              <label id="transform-filter-categories-wrap"><span>Valores aceitos <small>(separados por vírgula)</small></span><input id="transform-filter-categories" type="text" placeholder="1,2,3" disabled></label>
-              <div class="filter-rule-row" id="transform-filter-range-wrap" hidden>
-                <label><span>Mínimo</span><input id="transform-filter-minimum" type="number" step="any" disabled></label>
-                <label><span>Máximo</span><input id="transform-filter-maximum" type="number" step="any" disabled></label>
-              </div>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-recode" hidden>
-              <label><span>Campo</span><select id="transform-recode-field" disabled></select></label>
-              <div id="transform-recode-rows"></div>
-              <button class="text-button" id="transform-recode-add-row" type="button" disabled>+ Regra de/para</button>
-              <div class="filter-rule-row">
-                <label><span>Sem correspondência</span><select id="transform-recode-otherwise" disabled>
-                  <option value="keep">Manter valor original</option>
-                  <option value="missing">Virar ausente</option>
-                  <option value="category">Virar categoria…</option>
-                </select></label>
-                <label id="transform-recode-otherwise-label-wrap" hidden><span>Nome da categoria</span><input id="transform-recode-otherwise-label" type="text" disabled></label>
-              </div>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-missing-value-policy" hidden>
-              <label><span>Campo</span><select id="transform-missing-field" disabled></select></label>
-              <label><span>Valores a tratar como ausente <small>(separados por vírgula)</small></span><input id="transform-missing-values" type="text" placeholder="9,99,Ignorado" disabled></label>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-dedupe" hidden>
-              <label><span>Campos-chave <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-dedupe-fields" multiple size="6" disabled></select></label>
-              <p class="quality-note">Mantém a primeira ocorrência de cada combinação; a ordem é a do arquivo aberto.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-derive-column" hidden>
-              <label><span>Nome da nova coluna</span><input id="transform-derive-field" type="text" maxlength="60" placeholder="TAXA_100K" disabled></label>
-              <label><span>Fórmula</span><input id="transform-derive-formula" type="text" spellcheck="false" list="table-operation-function-list" placeholder="=TAXA([OBITOS]; [POPULACAO])" disabled></label>
-              <label><span>Divisão por zero</span><select id="transform-derive-zero" disabled>
-                <option value="error">Interromper</option>
-                <option value="zero">Usar zero</option>
-              </select></label>
-              <p class="quality-note">Mesma linguagem de fórmulas da coluna calculada, sobre os campos do registro. Um resultado não finito interrompe o pipeline; use <code>IFERROR(…; valor)</code> para dizer o que aquele registro deve mostrar.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-cast-type" hidden>
-              <label><span>Campo</span><select id="transform-cast-field" disabled></select></label>
-              <div class="filter-rule-row">
-                <label><span>Converter para</span><select id="transform-cast-to" disabled>
-                  <option value="number">Número</option>
-                  <option value="text">Texto</option>
-                  <option value="date">Data</option>
-                </select></label>
-                <label><span>Se não converter</span><select id="transform-cast-failure" disabled>
-                  <option value="keep">Manter valor original</option>
-                  <option value="missing">Marcar como ausente</option>
-                </select></label>
-              </div>
-              <p class="quality-note">Datas aceitas: <code>AAAAMMDD</code>, <code>AAAA-MM-DD</code>, <code>DD/MM/AAAA</code> e o campo de data do próprio DBF. Uma data impossível (31/02) não vira março em silêncio — conta como falha.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-date-part" hidden>
-              <label><span>Campo de data</span><select id="transform-datepart-field" disabled></select></label>
-              <div class="filter-rule-row">
-                <label><span>Parte</span><select id="transform-datepart-part" disabled>
-                  <option value="year">Ano</option>
-                  <option value="month">Mês</option>
-                  <option value="day">Dia</option>
-                  <option value="quarter">Trimestre</option>
-                  <option value="epidemiological-week">Semana epidemiológica</option>
-                  <option value="epidemiological-year">Ano epidemiológico</option>
-                </select></label>
-                <label><span>Nome da nova coluna</span><input id="transform-datepart-target" type="text" maxlength="60" placeholder="ANO_NOTIF" disabled></label>
-              </div>
-              <p class="quality-note">Semana epidemiológica pela regra MMWR/MS: a semana vai de domingo a sábado, e a SE 1 é a que tem pelo menos quatro dias em janeiro. Por isso o <strong>ano epidemiológico</strong> é uma coluna à parte — o começo de janeiro pode pertencer à última semana do ano anterior.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-text-normalize" hidden>
-              <label><span>Campo</span><select id="transform-text-field" disabled></select></label>
-              <label><span>Operações <small>(aplicadas nesta ordem)</small></span><select id="transform-text-operations" multiple size="6" disabled>
-                <option value="trim">Remover espaços nas pontas</option>
-                <option value="upper">Maiúsculas</option>
-                <option value="lower">Minúsculas</option>
-                <option value="ibge-municipality">Padronizar código IBGE de município (6 dígitos)</option>
-              </select></label>
-              <p class="quality-note">O código IBGE de 7 dígitos perde o dígito verificador; o de 5 ou menos ganha o zero à esquerda de volta. Um valor que não é código fica intacto e é contado — nunca apagado.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-group-summarize" hidden>
-              <label><span>Agrupar por <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-group-fields" multiple size="5" disabled></select></label>
-              <div id="transform-group-aggregations"></div>
-              <button class="text-button" id="transform-group-add-agg" type="button" disabled>+ Resumo</button>
-              <p class="quality-note">Uma linha por combinação dos campos escolhidos. Um grupo sem valor numérico para um campo resume como "—", nunca como zero inventado. Depois de agrupar, só as chaves e os resumos continuam existindo.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-bind-rows" hidden>
               <div class="quality-actions">
-                <span id="transform-bind-status" class="filter-info">Nenhuma segunda base carregada.</span>
-                <button class="secondary-button" id="transform-bind-file-button" type="button" disabled>Escolher CSV/TSV</button>
+                <button class="text-button" id="quality-suggest-button" type="button" disabled>Preencher sugestão IQR</button>
+                <button class="secondary-button" id="quality-apply-button" type="button" disabled>Aplicar faixa manual</button>
               </div>
-              <input id="transform-bind-file-input" type="file" accept=".csv,.tsv" hidden />
-              <label class="check-label"><input id="transform-bind-origin-check" type="checkbox"><span>Adicionar coluna de origem</span></label>
-              <div class="filter-rule-row" id="transform-bind-origin-row" hidden>
-                <label><span>Nome da coluna</span><input id="transform-bind-origin-field" type="text" maxlength="60" value="FONTE_ORIGEM"></label>
-                <label><span>Rótulo da base atual</span><input id="transform-bind-current-label" type="text" maxlength="60" value="atual"></label>
-              </div>
-              <p class="quality-note">Empilha uma segunda base (CSV/TSV) abaixo da atual, unindo as colunas. Coluna que só existe de um lado fica ausente ("—") do outro — nunca um valor inventado, nunca conversão de tipo silenciosa. Para empilhar DBC/DBF do mesmo esquema, use "Combinar" ao abrir o arquivo.</p>
-            </div>
-
-            <div class="transform-step-config" id="transform-config-join" hidden>
-              <div class="quality-actions">
-                <span id="transform-join-status" class="filter-info">Nenhuma segunda base carregada.</span>
-                <button class="secondary-button" id="transform-join-file-button" type="button" disabled>Escolher CSV/TSV</button>
-              </div>
-              <input id="transform-join-file-input" type="file" accept=".csv,.tsv" hidden />
-              <div class="filter-rule-row">
-                <label><span>Tipo de junção</span><select id="transform-join-type" disabled>
-                  <option value="left">Manter tudo da base atual (left)</option>
-                  <option value="inner">Só correspondentes (inner)</option>
-                  <option value="right">Manter tudo da segunda base (right)</option>
-                  <option value="full">Manter tudo dos dois lados (full)</option>
+              <p class="quality-note">A sugestão apenas preenche os campos. Confira o contexto clínico antes de aplicar; o arquivo original nunca é alterado.</p>
+            </details>
+            <details class="filter-builder cross-field-builder">
+              <summary>Regras cruzadas <span id="cross-field-count">nenhuma</span></summary>
+              <label>
+                <span>Nome da regra</span>
+                <input id="cross-field-label" type="text" maxlength="120" placeholder="Ex.: combinação que exige revisão" disabled>
+              </label>
+              <div class="cross-field-condition" data-condition="1">
+                <strong>Condição 1</strong>
+                <label><span>Campo</span><select id="cross-field-field-1" disabled><option value="">Escolha um campo</option></select></label>
+                <label><span>Condição</span><select id="cross-field-operator-1" disabled>
+                  <option value="equals">Igual a</option><option value="gte">Maior ou igual a</option>
+                  <option value="gt">Maior que</option><option value="lte">Menor ou igual a</option>
+                  <option value="lt">Menor que</option><option value="between">Entre, inclusive</option>
                 </select></label>
-                <label><span>Prefixo das colunas trazidas</span><input id="transform-join-prefix" type="text" maxlength="30" placeholder="ex.: sim_"></label>
+                <label><span id="cross-field-value-label-1">Valor exato</span><input id="cross-field-value-1" type="text" disabled></label>
+                <label id="cross-field-second-value-wrap-1" hidden><span>Valor máximo</span><input id="cross-field-second-value-1" type="number" step="any" disabled></label>
               </div>
+              <div class="cross-field-condition" data-condition="2">
+                <strong>Condição 2</strong>
+                <label><span>Campo</span><select id="cross-field-field-2" disabled><option value="">Escolha outro campo</option></select></label>
+                <label><span>Condição</span><select id="cross-field-operator-2" disabled>
+                  <option value="equals">Igual a</option><option value="gte">Maior ou igual a</option>
+                  <option value="gt">Maior que</option><option value="lte">Menor ou igual a</option>
+                  <option value="lt">Menor que</option><option value="between">Entre, inclusive</option>
+                </select></label>
+                <label><span id="cross-field-value-label-2">Valor exato</span><input id="cross-field-value-2" type="text" disabled></label>
+                <label id="cross-field-second-value-wrap-2" hidden><span>Valor máximo</span><input id="cross-field-second-value-2" type="number" step="any" disabled></label>
+              </div>
+              <div class="quality-actions cross-field-actions">
+                <button class="secondary-button cross-field-action" id="cross-field-action" type="button" data-action="flag" disabled>Apenas sinalizar</button>
+                <button class="secondary-button" id="cross-field-add" type="button" disabled>Adicionar regra</button>
+              </div>
+              <div class="active-filter-list" id="active-cross-field-list"></div>
+              <p class="quality-note">As duas condições precisam ocorrer no mesmo registro. A regra é uma política explícita do usuário e fica registrada na análise.</p>
+            </details>
+            <details class="filter-builder combination-builder">
+              <summary>Combinações raras <span id="combination-count">não analisadas</span></summary>
               <div class="filter-rule-row">
-                <label><span>Chave na base atual</span><select id="transform-join-key-current" disabled></select></label>
-                <label><span>Chave na segunda base</span><select id="transform-join-key-source" disabled></select></label>
+                <label><span>Primeiro campo</span><select id="combination-field-1" disabled><option value="">Escolha um campo</option></select></label>
+                <label><span>Segundo campo</span><select id="combination-field-2" disabled><option value="">Escolha outro campo</option></select></label>
               </div>
-              <p class="quality-note">Traz as colunas da segunda base para os registros atuais, casando pela chave (os nomes podem diferir dos dois lados). Uma chave N:N — duplicada nos dois lados — é bloqueada por padrão, porque multiplica linhas. Sem correspondência, os valores trazidos ficam "—", nunca inventados.</p>
-            </div>
+              <div class="quality-actions">
+                <p class="filter-info" id="combination-summary">O perfil mostra frequência; raridade não significa erro.</p>
+                <button class="secondary-button" id="combination-profile-button" type="button" disabled>Analisar</button>
+              </div>
+              <div class="combination-list" id="combination-list"></div>
+              <p class="quality-note">“Criar regra” apenas prepara uma sinalização explícita para a combinação observada. Revise o contexto antes de alternar para exclusão.</p>
+            </details>
+            <details class="filter-builder transform-builder">
+              <summary>Transformar dados <span id="transform-count">nenhuma etapa</span></summary>
+              <p class="quality-note">Selecionar colunas, filtrar linhas, recodificar valores, marcar ausentes e remover duplicatas — como um pipeline reproduzível, pela interface. O arquivo original nunca é alterado; cada etapa fica no histórico abaixo até você aplicar.</p>
+              <label><span>Tipo de etapa</span><select id="transform-step-kind" disabled>
+                <option value="select-columns">Selecionar colunas</option>
+                <option value="filter-rows">Filtrar linhas</option>
+                <option value="recode">Recodificar valores</option>
+                <option value="missing-value-policy">Marcar ausentes</option>
+                <option value="dedupe">Remover duplicatas</option>
+                <option value="derive-column">Criar coluna por fórmula</option>
+                <option value="cast-type">Converter tipo</option>
+                <option value="date-part">Extrair parte de data</option>
+                <option value="text-normalize">Normalizar texto/código</option>
+                <option value="group-summarize">Agrupar e resumir</option>
+                <option value="bind-rows">Empilhar outra base</option>
+                <option value="join">Juntar outra base (chave)</option>
+              </select></label>
 
-            <div class="quality-actions">
-              <span></span>
-              <button class="secondary-button" id="transform-add-step" type="button" disabled>Adicionar etapa</button>
+              <div class="transform-step-config" id="transform-config-select-columns">
+                <label><span>Colunas a manter <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-select-fields" multiple size="6" disabled></select></label>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-filter-rows" hidden>
+                <label><span>Campo</span><select id="transform-filter-field" disabled></select></label>
+                <div class="filter-rule-row">
+                  <label><span>Tipo</span><select id="transform-filter-kind" disabled>
+                    <option value="categories">Valores/categorias</option>
+                    <option value="numeric-range">Intervalo numérico</option>
+                  </select></label>
+                  <label><span>Modo</span><select id="transform-filter-mode" disabled>
+                    <option value="include">Manter correspondentes</option>
+                    <option value="exclude">Excluir correspondentes</option>
+                  </select></label>
+                </div>
+                <label id="transform-filter-categories-wrap"><span>Valores aceitos <small>(separados por vírgula)</small></span><input id="transform-filter-categories" type="text" placeholder="1,2,3" disabled></label>
+                <div class="filter-rule-row" id="transform-filter-range-wrap" hidden>
+                  <label><span>Mínimo</span><input id="transform-filter-minimum" type="number" step="any" disabled></label>
+                  <label><span>Máximo</span><input id="transform-filter-maximum" type="number" step="any" disabled></label>
+                </div>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-recode" hidden>
+                <label><span>Campo</span><select id="transform-recode-field" disabled></select></label>
+                <div id="transform-recode-rows"></div>
+                <button class="text-button" id="transform-recode-add-row" type="button" disabled>+ Regra de/para</button>
+                <div class="filter-rule-row">
+                  <label><span>Sem correspondência</span><select id="transform-recode-otherwise" disabled>
+                    <option value="keep">Manter valor original</option>
+                    <option value="missing">Virar ausente</option>
+                    <option value="category">Virar categoria…</option>
+                  </select></label>
+                  <label id="transform-recode-otherwise-label-wrap" hidden><span>Nome da categoria</span><input id="transform-recode-otherwise-label" type="text" disabled></label>
+                </div>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-missing-value-policy" hidden>
+                <label><span>Campo</span><select id="transform-missing-field" disabled></select></label>
+                <label><span>Valores a tratar como ausente <small>(separados por vírgula)</small></span><input id="transform-missing-values" type="text" placeholder="9,99,Ignorado" disabled></label>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-dedupe" hidden>
+                <label><span>Campos-chave <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-dedupe-fields" multiple size="6" disabled></select></label>
+                <p class="quality-note">Mantém a primeira ocorrência de cada combinação; a ordem é a do arquivo aberto.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-derive-column" hidden>
+                <label><span>Nome da nova coluna</span><input id="transform-derive-field" type="text" maxlength="60" placeholder="TAXA_100K" disabled></label>
+                <label><span>Fórmula</span><input id="transform-derive-formula" type="text" spellcheck="false" list="table-operation-function-list" placeholder="=TAXA([OBITOS]; [POPULACAO])" disabled></label>
+                <label><span>Divisão por zero</span><select id="transform-derive-zero" disabled>
+                  <option value="error">Interromper</option>
+                  <option value="zero">Usar zero</option>
+                </select></label>
+                <p class="quality-note">Mesma linguagem de fórmulas da coluna calculada, sobre os campos do registro. Um resultado não finito interrompe o pipeline; use <code>IFERROR(…; valor)</code> para dizer o que aquele registro deve mostrar.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-cast-type" hidden>
+                <label><span>Campo</span><select id="transform-cast-field" disabled></select></label>
+                <div class="filter-rule-row">
+                  <label><span>Converter para</span><select id="transform-cast-to" disabled>
+                    <option value="number">Número</option>
+                    <option value="text">Texto</option>
+                    <option value="date">Data</option>
+                  </select></label>
+                  <label><span>Se não converter</span><select id="transform-cast-failure" disabled>
+                    <option value="keep">Manter valor original</option>
+                    <option value="missing">Marcar como ausente</option>
+                  </select></label>
+                </div>
+                <p class="quality-note">Datas aceitas: <code>AAAAMMDD</code>, <code>AAAA-MM-DD</code>, <code>DD/MM/AAAA</code> e o campo de data do próprio DBF. Uma data impossível (31/02) não vira março em silêncio — conta como falha.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-date-part" hidden>
+                <label><span>Campo de data</span><select id="transform-datepart-field" disabled></select></label>
+                <div class="filter-rule-row">
+                  <label><span>Parte</span><select id="transform-datepart-part" disabled>
+                    <option value="year">Ano</option>
+                    <option value="month">Mês</option>
+                    <option value="day">Dia</option>
+                    <option value="quarter">Trimestre</option>
+                    <option value="epidemiological-week">Semana epidemiológica</option>
+                    <option value="epidemiological-year">Ano epidemiológico</option>
+                  </select></label>
+                  <label><span>Nome da nova coluna</span><input id="transform-datepart-target" type="text" maxlength="60" placeholder="ANO_NOTIF" disabled></label>
+                </div>
+                <p class="quality-note">Semana epidemiológica pela regra MMWR/MS: a semana vai de domingo a sábado, e a SE 1 é a que tem pelo menos quatro dias em janeiro. Por isso o <strong>ano epidemiológico</strong> é uma coluna à parte — o começo de janeiro pode pertencer à última semana do ano anterior.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-text-normalize" hidden>
+                <label><span>Campo</span><select id="transform-text-field" disabled></select></label>
+                <label><span>Operações <small>(aplicadas nesta ordem)</small></span><select id="transform-text-operations" multiple size="6" disabled>
+                  <option value="trim">Remover espaços nas pontas</option>
+                  <option value="upper">Maiúsculas</option>
+                  <option value="lower">Minúsculas</option>
+                  <option value="ibge-municipality">Padronizar código IBGE de município (6 dígitos)</option>
+                </select></label>
+                <p class="quality-note">O código IBGE de 7 dígitos perde o dígito verificador; o de 5 ou menos ganha o zero à esquerda de volta. Um valor que não é código fica intacto e é contado — nunca apagado.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-group-summarize" hidden>
+                <label><span>Agrupar por <small>(Ctrl/Cmd para múltiplos)</small></span><select id="transform-group-fields" multiple size="5" disabled></select></label>
+                <div id="transform-group-aggregations"></div>
+                <button class="text-button" id="transform-group-add-agg" type="button" disabled>+ Resumo</button>
+                <p class="quality-note">Uma linha por combinação dos campos escolhidos. Um grupo sem valor numérico para um campo resume como "—", nunca como zero inventado. Depois de agrupar, só as chaves e os resumos continuam existindo.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-bind-rows" hidden>
+                <div class="quality-actions">
+                  <span id="transform-bind-status" class="filter-info">Nenhuma segunda base carregada.</span>
+                  <button class="secondary-button" id="transform-bind-file-button" type="button" disabled>Escolher CSV/TSV</button>
+                </div>
+                <input id="transform-bind-file-input" type="file" accept=".csv,.tsv" hidden />
+                <label class="check-label"><input id="transform-bind-origin-check" type="checkbox"><span>Adicionar coluna de origem</span></label>
+                <div class="filter-rule-row" id="transform-bind-origin-row" hidden>
+                  <label><span>Nome da coluna</span><input id="transform-bind-origin-field" type="text" maxlength="60" value="FONTE_ORIGEM"></label>
+                  <label><span>Rótulo da base atual</span><input id="transform-bind-current-label" type="text" maxlength="60" value="atual"></label>
+                </div>
+                <p class="quality-note">Empilha uma segunda base (CSV/TSV) abaixo da atual, unindo as colunas. Coluna que só existe de um lado fica ausente ("—") do outro — nunca um valor inventado, nunca conversão de tipo silenciosa. Para empilhar DBC/DBF do mesmo esquema, use "Combinar" ao abrir o arquivo.</p>
+              </div>
+
+              <div class="transform-step-config" id="transform-config-join" hidden>
+                <div class="quality-actions">
+                  <span id="transform-join-status" class="filter-info">Nenhuma segunda base carregada.</span>
+                  <button class="secondary-button" id="transform-join-file-button" type="button" disabled>Escolher CSV/TSV</button>
+                </div>
+                <input id="transform-join-file-input" type="file" accept=".csv,.tsv" hidden />
+                <div class="filter-rule-row">
+                  <label><span>Tipo de junção</span><select id="transform-join-type" disabled>
+                    <option value="left">Manter tudo da base atual (left)</option>
+                    <option value="inner">Só correspondentes (inner)</option>
+                    <option value="right">Manter tudo da segunda base (right)</option>
+                    <option value="full">Manter tudo dos dois lados (full)</option>
+                  </select></label>
+                  <label><span>Prefixo das colunas trazidas</span><input id="transform-join-prefix" type="text" maxlength="30" placeholder="ex.: sim_"></label>
+                </div>
+                <div class="filter-rule-row">
+                  <label><span>Chave na base atual</span><select id="transform-join-key-current" disabled></select></label>
+                  <label><span>Chave na segunda base</span><select id="transform-join-key-source" disabled></select></label>
+                </div>
+                <p class="quality-note">Traz as colunas da segunda base para os registros atuais, casando pela chave (os nomes podem diferir dos dois lados). Uma chave N:N — duplicada nos dois lados — é bloqueada por padrão, porque multiplica linhas. Sem correspondência, os valores trazidos ficam "—", nunca inventados.</p>
+              </div>
+
+              <div class="quality-actions">
+                <span></span>
+                <button class="secondary-button" id="transform-add-step" type="button" disabled>Adicionar etapa</button>
+              </div>
+              <div class="active-filter-list" id="transform-step-list"></div>
+              <div class="transform-code-actions">
+                <button class="text-button" id="transform-code-toggle" type="button" disabled>Ver código equivalente</button>
+                <select id="transform-code-target" hidden>
+                  <option value="r">R (dplyr)</option>
+                  <option value="python">Python (pandas)</option>
+                </select>
+              </div>
+              <div class="transform-code" id="transform-code" hidden>
+                <p class="quality-note">Visão pedagógica, só leitura: o código é derivado do pipeline, não o contrário, e não é executado. Onde a semântica do TabWin Web difere do R/pandas (semana epidemiológica, código IBGE, funções de fórmula), há um comentário dizendo.</p>
+                <pre id="transform-code-output"></pre>
+              </div>
+              <div class="quality-actions">
+                <button class="secondary-button" id="transform-reset-button" type="button" disabled>Restaurar dados originais</button>
+                <button class="primary-button" id="transform-apply-button" type="button" disabled>Aplicar pipeline</button>
+              </div>
+              <div id="transform-result"></div>
+            </details>
+            <div class="form-row">
+              <label>
+                <span>Posição inicial da linha</span>
+                <input id="start-position" type="number" min="1" step="1" value="1" disabled />
+              </label>
+              <label>
+                <span>Posição inicial da coluna</span>
+                <input id="column-start-position" type="number" min="1" step="1" value="1" disabled />
+              </label>
+              <label class="check-label">
+                <input id="suppress-zero" type="checkbox" checked disabled />
+                <span>Ocultar linhas zeradas</span>
+              </label>
+              <label class="check-label">
+                <input id="suppress-zero-columns" type="checkbox" checked disabled />
+                <span>Ocultar colunas zeradas</span>
+              </label>
+              <label class="check-label">
+                <input id="discriminate-unclassified" type="checkbox" disabled />
+                <span>Não classificados nas linhas</span>
+              </label>
+              <label class="check-label">
+                <input id="discriminate-column-unclassified" type="checkbox" disabled />
+                <span>Não classificados nas colunas</span>
+              </label>
             </div>
-            <div class="active-filter-list" id="transform-step-list"></div>
-            <div class="transform-code-actions">
-              <button class="text-button" id="transform-code-toggle" type="button" disabled>Ver código equivalente</button>
-              <select id="transform-code-target" hidden>
-                <option value="r">R (dplyr)</option>
-                <option value="python">Python (pandas)</option>
-              </select>
-            </div>
-            <div class="transform-code" id="transform-code" hidden>
-              <p class="quality-note">Visão pedagógica, só leitura: o código é derivado do pipeline, não o contrário, e não é executado. Onde a semântica do TabWin Web difere do R/pandas (semana epidemiológica, código IBGE, funções de fórmula), há um comentário dizendo.</p>
-              <pre id="transform-code-output"></pre>
-            </div>
-            <div class="quality-actions">
-              <button class="secondary-button" id="transform-reset-button" type="button" disabled>Restaurar dados originais</button>
-              <button class="primary-button" id="transform-apply-button" type="button" disabled>Aplicar pipeline</button>
-            </div>
-            <div id="transform-result"></div>
           </details>
-          <div class="form-row">
-            <label>
-              <span>Posição inicial da linha</span>
-              <input id="start-position" type="number" min="1" step="1" value="1" disabled />
-            </label>
-            <label>
-              <span>Posição inicial da coluna</span>
-              <input id="column-start-position" type="number" min="1" step="1" value="1" disabled />
-            </label>
-            <label class="check-label">
-              <input id="suppress-zero" type="checkbox" checked disabled />
-              <span>Ocultar linhas zeradas</span>
-            </label>
-            <label class="check-label">
-              <input id="suppress-zero-columns" type="checkbox" checked disabled />
-              <span>Ocultar colunas zeradas</span>
-            </label>
-            <label class="check-label">
-              <input id="discriminate-unclassified" type="checkbox" disabled />
-              <span>Não classificados nas linhas</span>
-            </label>
-            <label class="check-label">
-              <input id="discriminate-column-unclassified" type="checkbox" disabled />
-              <span>Não classificados nas colunas</span>
-            </label>
-          </div>
           <button class="primary-button" id="run-button" type="submit" disabled>
             <span>Tabular agora</span><span aria-hidden="true">→</span>
           </button>
@@ -466,7 +469,7 @@
       <main class="results">
         <section class="hero" id="hero">
           <div>
-            <span class="eyebrow">Compatibilidade com transparência</span>
+            <span class="eyebrow">Dados públicos. Processamento local.</span>
             <h2>Microdados públicos.<br /><em>Leitura simples.</em></h2>
             <p>Abra um DBC do DATASUS e obtenha uma tabela imediatamente. Adicione DEF, CNV ou MAP para reproduzir classificações e mapas legados.</p>
           </div>

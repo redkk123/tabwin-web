@@ -33,7 +33,9 @@
     "e2e:headed": "playwright test --headed",
     "check:all": "npm run check && npm run e2e",
     "bench:columnar": "npm run build && node scripts/measure-columnar-cache.mjs",
-    "lab:sync": "node scripts/sync-lab.mjs"
+    "lab:sync": "node scripts/sync-lab.mjs",
+    "manual:data": "node scripts/fetch-manual-dataset.mjs",
+    "manual:capture": "node scripts/capture-manual.mjs"
   },
   "dependencies": {
     "@duckdb/duckdb-wasm": "^1.33.1-dev57.0",

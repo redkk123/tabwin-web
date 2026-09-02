@@ -26,6 +26,22 @@ async function openSidebarGroup(page: Page, group: 'export' | 'metadata' | 'save
   await expect(details).toHaveAttribute('open', '');
 }
 
+/**
+ * Abre "Opções avançadas".
+ *
+ * Limpeza assistida, regras cruzadas, combinações raras, transformação e
+ * posições iniciais passaram a viver sob um grupo fechado por padrão: a
+ * primeira tela não pode ser uma parede de controles desabilitados. O teste
+ * abre pelo cabeçalho, o mesmo caminho de quem usa, em vez de forçar `open`
+ * por script — senão deixaria de exercitar a interface que existe.
+ */
+async function openAdvanced(page: Page): Promise<void> {
+  const details = page.locator('#group-advanced');
+  if (await details.evaluate((element: HTMLDetailsElement) => element.open)) return;
+  await details.locator('> summary').click();
+  await expect(details).toHaveAttribute('open', '');
+}
+
 test('abre CSV local, passa pelo Worker e produz uma tabulação', async ({ page }) => {
   await tabulateFixture(page);
   const body = page.locator('#result-table tbody');
@@ -504,6 +520,7 @@ test('the transform pipeline recodes, marks missing, filters, dedupes and drops 
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   // Step 1: recode SEXO M/F into full words.
@@ -587,6 +604,7 @@ test('recipes save the applied pipeline, failures stop replay, and an empty tran
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   await page.locator('#transform-step-kind').selectOption('filter-rows');
@@ -708,6 +726,7 @@ test('the transform pipeline computes a new field with the same formula language
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/investigate-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   // mutate(): DIAS and IDADE are real fields of the record, not columns of a
@@ -743,6 +762,7 @@ test('the cleaning steps standardize an IBGE code and derive the epidemiological
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/limpeza-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   // The flagship example: 5300108 (7 digits, with check digit) and 11001
@@ -797,6 +817,7 @@ test('group-summarize collapses the dataset to one row per key, with N and a sum
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/grupo-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   // Keep only confirmed first, then N and total VALOR by UF - the shape of
@@ -838,6 +859,7 @@ test('"Ver código equivalente" renders the pipeline as dplyr and pandas, withou
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/grupo-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   // The button only means something once there is a pipeline to render.
@@ -875,6 +897,7 @@ test('bind-rows stacks a second base, unions columns, and marks each record\'s o
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/bind-a-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   await page.locator('#transform-step-kind').selectOption('bind-rows');
@@ -910,6 +933,7 @@ test('join brings a second base\'s column onto the records by key, keeping the l
   await page.goto('/');
   await page.locator('#file-input').setInputFiles('e2e/fixtures/join-casos-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
 
   await page.locator('#transform-step-kind').selectOption('join');
@@ -948,6 +972,7 @@ test('the epidemiology panel gives crude and age-standardized rates with confide
   await page.locator('#row-field').selectOption('FAIXA');
   await page.locator('#measure-kind').selectOption('sum');
   await page.locator('#measure-field').selectOption('OBITOS');
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
   for (const field of ['POP', 'PADRAO', 'TXREF']) {
     await page.locator('#extra-measure-field').selectOption(field);
@@ -988,6 +1013,7 @@ test('the indirect method reports observed against expected as an SMR, and reads
   await page.locator('#row-field').selectOption('FAIXA');
   await page.locator('#measure-kind').selectOption('sum');
   await page.locator('#measure-field').selectOption('OBITOS');
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
   for (const field of ['POP', 'PADRAO', 'TXREF']) {
     await page.locator('#extra-measure-field').selectOption(field);
@@ -1028,6 +1054,7 @@ test('the epidemiology panel refuses fractional events instead of rounding an in
   await page.locator('#row-field').selectOption('FAIXA');
   await page.locator('#measure-kind').selectOption('sum');
   await page.locator('#measure-field').selectOption('EVENTOS');
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
   await page.locator('#extra-measure-field').selectOption('POP');
   await page.locator('#extra-measure-add').click();
@@ -1050,6 +1077,7 @@ test('an epidemiology recipe restores method, scale and column bindings by key',
   await page.locator('#row-field').selectOption('FAIXA');
   await page.locator('#measure-kind').selectOption('sum');
   await page.locator('#measure-field').selectOption('OBITOS');
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
   for (const field of ['POP', 'PADRAO', 'TXREF']) {
     await page.locator('#extra-measure-field').selectOption(field);
@@ -1101,6 +1129,7 @@ test('statistical and epidemiological bindings follow column keys when columns m
   await page.locator('#row-field').selectOption('FAIXA');
   await page.locator('#measure-kind').selectOption('sum');
   await page.locator('#measure-field').selectOption('OBITOS');
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Medidas adicionais' }).click();
   for (const field of ['POP', 'PADRAO', 'TXREF']) {
     await page.locator('#extra-measure-field').selectOption(field);
@@ -1163,6 +1192,7 @@ test('a raw DATASUS file reads as prose, without hiding the technical field name
 
   // "Ano 1º Sintoma", which TabNet offers as a row, is derived here rather
   // than shipped: extracting the year from the date makes it a real field.
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
   await page.locator('#transform-step-kind').selectOption('date-part');
   await page.locator('#transform-datepart-field').selectOption('DT_SIN_PRI');
@@ -1225,6 +1255,7 @@ test('a saved recipe replays its transform pipeline, so it rebuilds the same tab
   await page.locator('#file-input').setInputFiles('e2e/fixtures/limpeza-e2e.csv');
   await expect(page.locator('#run-button')).toBeEnabled();
 
+  await openAdvanced(page);
   await page.locator('summary', { hasText: 'Transformar dados' }).click();
   await page.locator('#transform-step-kind').selectOption('date-part');
   await page.locator('#transform-datepart-field').selectOption('DT');
@@ -1858,21 +1889,23 @@ test('o topo leva ao manual, e ao Lab só quando ele está publicado', async ({ 
   await expect(manual).toBeVisible();
   await expect(manual).toHaveText('Manual');
 
-  // O Lab é copiado para `/lab/` por uma etapa à parte, e aqui não foi. Este
-  // servidor devolve o index.html com status 200 para qualquer caminho, então
-  // a asserção abaixo é justamente o caso difícil: quem checar só o status
-  // revela um link para lugar nenhum.
-  await expect(page.locator('#lab-link')).toBeHidden();
-
-  // Com o Lab publicado, o mesmo carregamento revela o link. A resposta é
-  // simulada aqui porque o conteúdo do Lab não é assunto deste repositório.
-  await page.route('**/lab/ORIGEM.json', (route) => route.fulfill({
-    status: 200, contentType: 'application/json', body: '{"repositorio":"tabwin-lab"}',
-  }));
-  await page.reload();
+  // O Lab está publicado em `/lab/`, então o link aparece.
   const lab = page.locator('#lab-link');
   await expect(lab).toBeVisible();
   await expect(lab).toHaveAttribute('href', './lab/');
+
+  // Sem o Lab publicado, o link some. Não basta o 404: um servidor com rota de
+  // fallback devolve o index.html com status 200 para qualquer caminho, e quem
+  // checar só o status oferece um link para lugar nenhum. Os dois casos.
+  for (const resposta of [
+    { status: 404, contentType: 'text/plain', body: 'nao encontrado' },
+    { status: 200, contentType: 'text/html', body: '<!doctype html><html></html>' },
+  ]) {
+    await page.route('**/lab/ORIGEM.json', (route) => route.fulfill(resposta));
+    await page.reload();
+    await expect(page.locator('#lab-link'), `resposta ${resposta.status} ${resposta.contentType}`).toBeHidden();
+    await page.unroute('**/lab/ORIGEM.json');
+  }
 });
 
 test('o manual publicado abre com as figuras que ele cita', async ({ page }) => {

@@ -5,6 +5,21 @@ export class InvalidDatasusArchiveError extends Error {
   }
 }
 
+/**
+ * O pacote chegou, mas cortado antes do fim.
+ *
+ * Separado do inválido genérico porque o desfecho é outro: HTML no lugar do
+ * ZIP significa que o pedido está errado e repetir não ajuda; um corte
+ * significa que a conexão caiu ou que o DATASUS ainda estava escrevendo o
+ * arquivo, e aí tentar de novo é justamente o que resolve.
+ */
+export class TruncatedDatasusArchiveError extends InvalidDatasusArchiveError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'TruncatedDatasusArchiveError';
+  }
+}
+
 function looksLikeHtml(bytes: Uint8Array): boolean {
   const prefix = new TextDecoder().decode(bytes.subarray(0, Math.min(bytes.length, 256))).trimStart().toLowerCase();
   return prefix.startsWith('<!doctype html') || prefix.startsWith('<html')
@@ -52,9 +67,9 @@ export function validateDatasusZipArchive(bytes: Uint8Array, contentType?: strin
   // data", que não diz a ninguém o que houve. O fim do índice central é o que
   // separa "veio inteiro" de "veio pela metade".
   if (!hasEndOfCentralDirectory(bytes)) {
-    throw new InvalidDatasusArchiveError(
+    throw new TruncatedDatasusArchiveError(
       'O download veio incompleto: o pacote do DATASUS foi cortado antes do fim.'
-      + ' Tente de novo — nada foi guardado no cache.',
+      + ' Nada foi guardado no cache.',
     );
   }
 }

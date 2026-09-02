@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Tabwin Lab</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <header>
+      <div>
+        <span class="eyebrow">Laboratório local-first</span>
+        <h1>Tabwin Lab</h1>
+        <p>Execuções canônicas em Python e R, locais no navegador — sem transformar o TabWin Web num notebook.</p>
+      </div>
+      <div class="header-actions">
+        <button id="import-notebook" class="secondary">Abrir .twlab</button>
+        <input id="notebook-file" type="file" accept=".twlab,application/json" hidden />
+        <button id="export-notebook">Salvar .twlab</button>
+        <button id="export-run" class="secondary" disabled>Salvar execução</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="card intro-grid">
+        <div>
+          <label for="notebook-title">Nome do caderno</label>
+          <input id="notebook-title" maxlength="120" />
+          <p id="save-status" class="muted" aria-live="polite"></p>
+          <div class="recovery-actions">
+            <button id="recover-notebook" class="secondary compact" type="button" hidden>Recuperar versão anterior</button>
+            <button id="force-save" class="secondary compact" type="button" hidden>Manter esta aba</button>
+          </div>
+        </div>
+        <div>
+          <label for="data-files">Dados locais desta sessão</label>
+          <input id="data-files" type="file" multiple accept=".csv,.json,.twtable,.dbf,.dbc,.arrow,.parquet" />
+          <ul id="data-file-list" class="file-list"><li>Nenhum arquivo em memória.</li></ul>
+          <p class="muted">Os bytes não entram no caderno, somam no máximo 64 MB e serão montados em <code>/data</code> na próxima execução.</p>
+        </div>
+      </section>
+
+      <section class="runtime-strip" aria-label="Runtimes científicos">
+        <article class="runtime-card">
+          <div><b>Python · Pyodide 314.0.6</b><span id="python-runtime-status" class="runtime-status" data-state="idle" aria-live="polite">não carregado</span></div>
+          <button id="load-python" class="secondary" type="button">Carregar Python</button>
+        </article>
+        <article class="runtime-card">
+          <div><b>R · webR 0.6.0</b><span id="r-runtime-status" class="runtime-status" data-state="idle" aria-live="polite">não carregado</span></div>
+          <button id="load-r" class="secondary" type="button">Carregar R</button>
+        </article>
+        <p id="runtime-note">Os runtimes só baixam após um clique ou execução explícita. Cada execução canônica reinicia os ambientes e percorre as células em ordem.</p>
+      </section>
+
+      <section class="notebook-heading">
+        <div><span class="eyebrow">Caderno</span><h2>Células e proveniência</h2></div>
+        <div class="notebook-actions">
+          <button id="reset-runtimes" class="secondary" type="button">Reiniciar ambientes</button>
+          <button id="run-all" type="button">Executar tudo</button>
+          <button id="add-cell" type="button">Adicionar célula</button>
+        </div>
+      </section>
+      <div id="cells" class="cells"></div>
+    </main>
+
+    <template id="cell-template">
+      <article class="cell card">
+        <div class="cell-toolbar">
+          <span class="cell-number"></span>
+          <label>Runtime
+            <select class="cell-runtime"><option value="python">Python</option><option value="r">R</option></select>
+          </label>
+          <button class="cell-move-up secondary compact" type="button">Subir</button>
+          <button class="cell-move-down secondary compact" type="button">Descer</button>
+          <button class="cell-delete secondary">Remover</button>
+        </div>
+        <textarea class="cell-code" spellcheck="false" aria-label="Código da célula"></textarea>
+        <div class="cell-footer">
+          <button class="cell-run">Executar até aqui</button>
+          <span class="cell-status" role="status" aria-live="polite">Código ainda não foi executado.</span>
+        </div>
+        <section class="cell-output" aria-live="polite" hidden>
+          <div class="output-heading"><strong>Saída</strong><span class="output-meta"></span></div>
+          <div class="output-block output-error" hidden><span>erro</span><pre></pre></div>
+          <div class="output-block output-stdout" hidden><span>stdout</span><pre></pre></div>
+          <div class="output-block output-stderr" hidden><span>stderr</span><pre></pre></div>
+          <div class="output-block output-conditions" hidden><span>condições R</span><pre></pre></div>
+          <div class="output-block output-result" hidden><span>resultado</span><pre></pre></div>
+          <p class="output-empty" hidden>Execução concluída sem saída textual.</p>
+          <details class="output-inputs" hidden><summary>Proveniência da execução</summary><ul></ul></details>
+        </section>
+      </article>
+    </template>
+
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>

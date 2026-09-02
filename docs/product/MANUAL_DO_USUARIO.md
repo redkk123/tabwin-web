@@ -173,7 +173,7 @@ Instalação, endereços que ele pode acessar e modelo de ameaça estão em
 
 ![Tabela cruzada de sexo por raça e cor, com totais por coluna](./manual/03-tabela-cruzada.png "Sexo cruzado com raça/cor. Os códigos aparecem como estão no arquivo porque nenhum CNV foi carregado — o programa não adivinha que `1` significa “masculino”.")
 
-![Painel lateral com linhas, colunas, medida, filtros, limpeza, regras cruzadas e transformações](./manual/04-controles.png "O painel de configuração. O texto ao lado de cada seção recolhida — “nenhum”, “não destrutiva”, “nenhuma etapa” — diz o estado sem precisar abrir.")
+![Painel lateral com linhas, colunas, rótulos, medida, filtros e um grupo recolhido de opções avançadas](./manual/04-controles.png "O painel de configuração depois que há dados. O caminho principal fica à vista; medidas extras, limpeza, regras cruzadas, combinações raras e transformação ficam em **Opções avançadas**, recolhido. O texto ao lado de cada seção — “nenhum”, “nenhuma etapa” — diz o estado sem precisar abrir.")
 
 | Controle | O que faz |
 | --- | --- |

@@ -15,7 +15,11 @@ import {
   type DatasusCatalogQueryResult,
   type DatasusSearchQuery,
 } from '../../../packages/acquisition/src/datasus.ts';
-import { validateDatasusZipArchive } from '../../../packages/acquisition/src/archive-validation.ts';
+import {
+  TruncatedDatasusArchiveError,
+  validateDatasusZipArchive,
+} from '../../../packages/acquisition/src/archive-validation.ts';
+import { waitForPreparedArchive } from '../../../packages/acquisition/src/prepared-archive.ts';
 import {
   planByteRanges,
   rangeHeaderValue,
@@ -120,6 +124,10 @@ async function datasusHttpError(response: Response, context: string): Promise<Da
  */
 function shouldRetryDatasus(error: unknown): boolean {
   if (error instanceof StreamIdleTimeoutError || error instanceof HeaderTimeoutError) return true;
+  // Um pacote cortado é acidente de percurso — conexão que caiu, ou o DATASUS
+  // ainda escrevendo o ZIP. Repetir é o que resolve, e era o que se pedia à
+  // pessoa fazer à mão.
+  if (error instanceof TruncatedDatasusArchiveError) return true;
   return error instanceof DatasusHttpError ? TRANSIENT_HTTP.has(error.status)
     : error instanceof DatasusTimeoutError || error instanceof TypeError;
 }
@@ -491,8 +499,17 @@ export function fetchOfficialArchiveDetailed(
   url: string,
   signal?: AbortSignal,
   onProgress?: (progress: ArchiveDownloadProgress) => void,
+  onWaitingForOrigin?: (elapsedMs: number) => void,
 ): Promise<RetrySuccess<Uint8Array>> {
-  return retryWithPolicy(() => fetchOfficialArchiveOnce(url, signal, onProgress), {
+  return retryWithPolicy(async () => {
+    await waitForPreparedArchive({
+      url: archiveEndpoint(url),
+      fetchImpl: fetch,
+      ...(signal ? { signal } : {}),
+      ...(onWaitingForOrigin ? { onWait: onWaitingForOrigin } : {}),
+    });
+    return fetchOfficialArchiveOnce(url, signal, onProgress);
+  }, {
     ...(signal ? { signal } : {}), maxAttempts: 3, shouldRetry: shouldRetryDatasus,
   });
 }
