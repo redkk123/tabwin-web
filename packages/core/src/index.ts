@@ -8,6 +8,7 @@ export * from './portable-table.js';
 export * from './spatial-selection.js';
 export * from './duckdb-plan.js';
 export * from './columnar-cache.js';
+export * from './phase-timings.js';
 export * from './version-watch.js';
 export * from './axis-bounds.js';
 export * from './differential-seed.js';

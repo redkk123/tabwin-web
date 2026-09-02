@@ -28,6 +28,8 @@ import {
   type TabulationResult,
   type TotalPolicy,
   type RecipeTransformStep,
+  createPhaseTimings,
+  describePhaseTimings,
   watchPublishedVersion,
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
@@ -622,6 +624,16 @@ const tableRowAggregate = element<HTMLButtonElement>('#table-row-aggregate');
 const tableRowSuppress = element<HTMLButtonElement>('#table-row-suppress');
 const chart = element<HTMLElement>('#chart');
 const auditOutput = element<HTMLElement>('#audit-output');
+
+/**
+ * Onde o tempo foi, na última abertura vinda do DATASUS.
+ *
+ * "Demorou" não é diagnóstico: o portal montando o pacote, a rede e a
+ * descompressão têm custos muito diferentes e se consertam de jeitos
+ * diferentes. Também é o que torna possível comparar com outra ferramenta
+ * fase a fase, em vez de número contra número.
+ */
+const temposDoDownload = createPhaseTimings();
 const tabulationLogCount = element<HTMLElement>('#tabulation-log-count');
 const tabulationLogList = element<HTMLElement>('#tabulation-log-list');
 const tabulationLogCopyAll = element<HTMLButtonElement>('#tabulation-log-copy-all');
@@ -2515,7 +2527,12 @@ function updateDatasetStats(): void {
 }
 
 async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: LoadedSource): Promise<void> {
-  const header = await openDatasetFile(bytes, file, isDbc);
+  // A fase que o R chama de `read.dbc`: descompressão do DBC mais leitura do
+  // DBF. É a única do caminho que compara diretamente com outra ferramenta.
+  const header = await temposDoDownload.measure(
+    isDbc ? `leitura do DBC` : `leitura do DBF`,
+    () => openDatasetFile(bytes, file, isDbc),
+  );
 
   // Admit the source only after decoding succeeds. Cancellation or malformed
   // input must leave the previous dataset and its provenance intact.
@@ -3718,6 +3735,10 @@ async function downloadSelectedDbf(): Promise<void> {
 
 async function loadFiles(files: File[]): Promise<void> {
   if (!files.length) return;
+  // Cada gesto de abrir recomeça a conta. Somar a sessão inteira faria os
+  // tempos crescerem sem parar e deixariam de dizer quanto custou este
+  // arquivo, que é a pergunta que eles existem para responder.
+  temposDoDownload.reset();
   try {
     // Metadata first lets a DEF/CNV influence the automatic first analysis even
     // when the user selected all files in one gesture.
@@ -5417,6 +5438,11 @@ function renderAudit(): void {
       columns: currentResult.columns.length,
       warnings: currentResult.warnings,
     } : null,
+    // Cobre a abertura mais recente. Um arquivo local traz só a leitura; um
+    // vindo do catálogo traz também o preparo e a rede, que costumam dominar.
+    ...(describePhaseTimings(temposDoDownload.samples()).length
+      ? { temposDaAquisicao: describePhaseTimings(temposDoDownload.samples()) }
+      : {}),
   };
   auditOutput.textContent = JSON.stringify(audit, null, 2);
 }
@@ -6457,10 +6483,11 @@ async function downloadCatalogEntries(
     let prepared = files.length === 1 && files[0]?.preparedUrl && files[0].preparedAt
       && Date.now() - files[0].preparedAt < 4 * 60 * 1000
       ? { value: files[0].preparedUrl, attempts: 0 }
-      : await prepareOfficialDownloadDetailed(files, signal);
+      : await temposDoDownload.measure('preparo no DATASUS',
+        () => prepareOfficialDownloadDetailed(files, signal));
 
     const baixar = (url: string): Promise<{ value: Uint8Array; attempts: number }> =>
-      fetchOfficialArchiveDetailed(url, signal, ({ receivedBytes, totalBytes }) => {
+      temposDoDownload.measure('download', () => fetchOfficialArchiveDetailed(url, signal, ({ receivedBytes, totalBytes }) => {
       const progress = totalBytes
         ? `${Math.min(100, Math.round(receivedBytes / totalBytes * 100))}% · ${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`
         : formatBytes(receivedBytes);
@@ -6471,7 +6498,7 @@ async function downloadCatalogEntries(
       // esta linha a tela fica parada em 0% e parece travada.
       onActivity?.();
       setCatalogStatus(`O DATASUS está montando o pacote… ${Math.round(esperando / 1000)}s`);
-    });
+    }));
 
     let downloaded: { value: Uint8Array; attempts: number };
     try {
@@ -6491,7 +6518,7 @@ async function downloadCatalogEntries(
     const bytes = downloaded.value;
     archive = bytes;
     attempts = prepared.attempts + downloaded.attempts;
-    const archiveSha256 = await sha256(bytes);
+    const archiveSha256 = await temposDoDownload.measure('impressão SHA-256', () => sha256(bytes));
     try {
       summary = await writeCachedArchive(cacheKey, bytes, {
         sha256: archiveSha256,
@@ -6797,6 +6824,9 @@ async function openOfficialFile(
   const controller = new AbortController();
   activeCatalogController = controller;
   setCatalogBusy(true);
+  // Um arquivo por vez na conta. Em lote, cada item recomeça: o que se quer
+  // saber é quanto custou este, e não quanto a sessão inteira já consumiu.
+  if (!batchContext) temposDoDownload.reset();
   let manualAuxiliariesOffered = false;
   // Antes havia aqui um `setTimeout` de 120 s sobre o fluxo INTEIRO — auxiliares,
   // preparação, download, extração e abertura. Relógio de parede: media quanto
