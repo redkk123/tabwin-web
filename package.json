@@ -9,7 +9,7 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "typecheck:web": "tsc -p web.tsconfig.json",
     "web:dev": "vite --config vite.config.ts",
-    "web:build": "vite build --config vite.config.ts && node scripts/build-manual-page.mjs",
+    "web:build": "vite build --config vite.config.ts && node scripts/build-manual-page.mjs && node scripts/write-version.mjs",
     "web:preview": "vite preview --config vite.config.ts",
     "proxy:check": "wrangler deploy --dry-run --config apps/datasus-proxy/wrangler.jsonc --outdir dist/datasus-proxy",
     "proxy:dev": "wrangler dev --config apps/datasus-proxy/wrangler.jsonc",

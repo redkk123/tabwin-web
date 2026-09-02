@@ -205,6 +205,36 @@ test('upstream failures use normalized JSON instead of leaking response bodies',
   });
 });
 
+test('um 404 do DATASUS chega como 404, e não escondido dentro de um 502', async () => {
+  // O DATASUS devolve o endereço do pacote preparado antes de terminar de
+  // escrevê-lo, e nesse intervalo o arquivo responde 404. O cliente usa esse
+  // status para esperar; achatado em 502, ele lê "falha do servidor" e tenta
+  // de novo à toa, sem nunca dar tempo de o pacote ficar pronto.
+  await withMockFetch(async () => new Response('nao encontrado', { status: 404 }), async () => {
+    const response = await handleRequest(
+      request('/archive?url=' + encodeURIComponent('https://datasus.saude.gov.br/wp-content/zipupload/Arq_1/arquivo.zip')),
+      ENVIRONMENT,
+    );
+    assert.equal(response.status, 404);
+    assert.equal(await errorCode(response), 'upstream_not_found');
+  });
+});
+
+test('erros do DATASUS que não são 404 continuam virando 502', async () => {
+  // A distinção só vale se for estreita: 500, 403 e afins são problema de
+  // verdade lá em cima, e o cliente não deve ficar esperando por eles.
+  for (const status of [403, 500, 503]) {
+    await withMockFetch(async () => new Response('erro', { status }), async () => {
+      const response = await handleRequest(
+        request('/archive?url=' + encodeURIComponent('https://datasus.saude.gov.br/wp-content/zipupload/Arq_1/arquivo.zip')),
+        ENVIRONMENT,
+      );
+      assert.equal(response.status, 502, `status ${status} devia virar 502`);
+      assert.equal(await errorCode(response), 'upstream_http_error');
+    });
+  }
+});
+
 test('archive responses are content-checked, bounded and streamed with safe headers', async () => {
   const zip = new Uint8Array([0x50, 0x4b, 0x03, 0x04]);
   await withMockFetch(async (input, init) => {

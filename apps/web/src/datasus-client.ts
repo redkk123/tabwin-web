@@ -495,6 +495,20 @@ async function fetchOfficialArchiveOnce(
   return archive;
 }
 
+/**
+ * O pacote preparado não existe.
+ *
+ * O DATASUS entrega o endereço do ZIP antes de montá-lo, e o `waitForPrepared`
+ * cobre a espera normal. Quando o 404 sobrevive à espera, a montagem falhou lá
+ * em cima: aquele endereço não vai passar a existir, e o que resolve é pedir
+ * outro. Predicado em vez da classe de erro porque o que o chamador precisa
+ * saber é isto, não o formato interno da falha HTTP.
+ */
+export function preparedArchiveIsMissing(error: unknown): boolean {
+  const cause = retryCause(error);
+  return cause instanceof DatasusHttpError && cause.status === 404;
+}
+
 export function fetchOfficialArchiveDetailed(
   url: string,
   signal?: AbortSignal,

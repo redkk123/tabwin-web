@@ -307,6 +307,13 @@ function normalizedUnexpectedFailure(error, signal) {
 }
 
 function upstreamHttpFailure(status) {
+  // Um 404 passa como 404. O DATASUS responde o endereço do pacote preparado
+  // antes de terminar de escrevê-lo, e nesse intervalo o arquivo não existe:
+  // "ainda não" é informação que o cliente usa para esperar, enquanto 502 diz
+  // apenas "deu ruim lá em cima" e faz ele tentar de novo à toa.
+  if (status === 404) {
+    return new ProxyFailure(404, 'upstream_not_found', 'DATASUS returned HTTP 404');
+  }
   return new ProxyFailure(502, 'upstream_http_error', `DATASUS returned HTTP ${status}`);
 }
 

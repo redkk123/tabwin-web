@@ -18,6 +18,10 @@
         </a>
         <div class="privacy-pill"><span aria-hidden="true">●</span> Seus dados ficam neste aparelho</div>
         <nav class="topbar-links" aria-label="Recursos">
+          <!-- Aparece só quando o site publicado ficou mais novo que esta
+               aba. Recarregar é a ação inteira, então o botão é a mensagem. -->
+          <button class="topbar-update" id="reload-button" type="button" hidden
+            title="O site foi atualizado depois que esta aba foi aberta">Atualizar</button>
           <a href="./manual.html" target="_blank" rel="noopener">Manual</a>
           <!-- O Lab é publicado por uma etapa separada. O link só aparece se
                a pasta existir de fato, para não oferecer um 404. -->

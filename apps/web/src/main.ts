@@ -28,6 +28,7 @@ import {
   type TabulationResult,
   type TotalPolicy,
   type RecipeTransformStep,
+  watchPublishedVersion,
 } from '../../../packages/core/src/index.ts';
 import { diffTabulationResults, type TabulationDiff } from '../../../packages/core/src/tabulation-diff.ts';
 import {
@@ -144,6 +145,7 @@ import {
   extractSupportedArchiveFiles,
   fetchOfficialArchiveDetailed,
   prepareOfficialDownloadDetailed,
+  preparedArchiveIsMissing,
   searchOfficialAuxiliaries,
   searchOfficialCatalogBatch,
   type CatalogSearchProgress,
@@ -6452,11 +6454,13 @@ async function downloadCatalogEntries(
     // Private browsing or storage policies may disable IndexedDB; acquisition remains usable.
   }
   if (!archive) {
-    const prepared = files.length === 1 && files[0]?.preparedUrl && files[0].preparedAt
+    let prepared = files.length === 1 && files[0]?.preparedUrl && files[0].preparedAt
       && Date.now() - files[0].preparedAt < 4 * 60 * 1000
       ? { value: files[0].preparedUrl, attempts: 0 }
       : await prepareOfficialDownloadDetailed(files, signal);
-    const downloaded = await fetchOfficialArchiveDetailed(prepared.value, signal, ({ receivedBytes, totalBytes }) => {
+
+    const baixar = (url: string): Promise<{ value: Uint8Array; attempts: number }> =>
+      fetchOfficialArchiveDetailed(url, signal, ({ receivedBytes, totalBytes }) => {
       const progress = totalBytes
         ? `${Math.min(100, Math.round(receivedBytes / totalBytes * 100))}% · ${formatBytes(receivedBytes)} / ${formatBytes(totalBytes)}`
         : formatBytes(receivedBytes);
@@ -6468,11 +6472,28 @@ async function downloadCatalogEntries(
       onActivity?.();
       setCatalogStatus(`O DATASUS está montando o pacote… ${Math.round(esperando / 1000)}s`);
     });
-    archive = downloaded.value;
-    attempts = prepared.attempts + downloaded.attempts;
-    const archiveSha256 = await sha256(archive);
+
+    let downloaded: { value: Uint8Array; attempts: number };
     try {
-      summary = await writeCachedArchive(cacheKey, archive, {
+      downloaded = await baixar(prepared.value);
+    } catch (error) {
+      // 404 aqui significa que o pacote preparado não existe e não vai passar a
+      // existir: a montagem falhou do lado do DATASUS. Um endereço novo custa
+      // uma viagem e quase sempre resolve.
+      if (!preparedArchiveIsMissing(error)) throw error;
+      onActivity?.();
+      setCatalogStatus('O pacote preparado expirou; pedindo outro ao DATASUS…');
+      const refeito = await prepareOfficialDownloadDetailed(files, signal);
+      prepared = { value: refeito.value, attempts: prepared.attempts + refeito.attempts };
+      downloaded = await baixar(prepared.value);
+    }
+
+    const bytes = downloaded.value;
+    archive = bytes;
+    attempts = prepared.attempts + downloaded.attempts;
+    const archiveSha256 = await sha256(bytes);
+    try {
+      summary = await writeCachedArchive(cacheKey, bytes, {
         sha256: archiveSha256,
         role,
         sources: files.map(({ name, address, source, modality, catalogQuery }) => ({
@@ -8856,6 +8877,19 @@ void (async () => {
     /* sem Lab publicado, ou resposta que não é JSON: o link continua oculto */
   }
 })();
+
+// Uma aba aberta antes de um deploy segue rodando o código antigo. Sem este
+// aviso, quem testa uma correção recém-publicada recebe o comportamento
+// anterior e conclui que ela não funcionou — foi o que aconteceu em 02/09.
+const reloadButton = element<HTMLButtonElement>('#reload-button');
+reloadButton.addEventListener('click', () => window.location.reload());
+watchPublishedVersion({
+  fetchImpl: fetch,
+  onNewVersion: () => {
+    reloadButton.hidden = false;
+    showToast('O site foi atualizado — clique em Atualizar para usar a versão nova');
+  },
+});
 
 element<HTMLButtonElement>('#about-button').addEventListener('click', () => aboutDialog.showModal());
 element<HTMLButtonElement>('#dialog-close').addEventListener('click', () => aboutDialog.close());
