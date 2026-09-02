@@ -1703,6 +1703,11 @@ test('preparo demorado dá sinal de vida, em vez de parecer travado', async ({ p
   await page.locator('#catalog-year').selectOption(['1997']);
   await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
   await page.locator('.catalog-result').first().waitFor();
+
+  // O pedido do pacote é evidência durável de que o preparo deu lugar ao
+  // download. O texto "Baixando" some rápido demais numa máquina veloz, e
+  // asserir sobre ele seria uma corrida, não um teste.
+  const pacotePedido = page.waitForRequest(/zipupload/, { timeout: 25_000 });
   await page.locator('.catalog-result button', { hasText: 'Baixar e abrir' }).click();
 
   // Enquanto o preparo corre, a tela precisa dizer que ele corre — e o
@@ -1715,7 +1720,7 @@ test('preparo demorado dá sinal de vida, em vez de parecer travado', async ({ p
   // E o preparo dá lugar ao download, sem falso alarme de travamento. O
   // conteúdo aqui não é um DBC de verdade e não vai abrir — o que este teste
   // prova é que a espera não é confundida com travamento.
-  await expect(status).toContainText('Baixando', { timeout: 20_000 });
+  await pacotePedido;
   await expect(status).not.toContainText('parou de progredir');
 });
 
