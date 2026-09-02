@@ -124,10 +124,6 @@ async function datasusHttpError(response: Response, context: string): Promise<Da
  */
 function shouldRetryDatasus(error: unknown): boolean {
   if (error instanceof StreamIdleTimeoutError || error instanceof HeaderTimeoutError) return true;
-  // Um pacote cortado é acidente de percurso — conexão que caiu, ou o DATASUS
-  // ainda escrevendo o ZIP. Repetir é o que resolve, e era o que se pedia à
-  // pessoa fazer à mão.
-  if (error instanceof TruncatedDatasusArchiveError) return true;
   return error instanceof DatasusHttpError ? TRANSIENT_HTTP.has(error.status)
     : error instanceof DatasusTimeoutError || error instanceof TypeError;
 }
@@ -496,16 +492,26 @@ async function fetchOfficialArchiveOnce(
 }
 
 /**
- * O pacote preparado não existe.
+ * O pacote preparado não serve, e insistir nele não vai adiantar.
  *
- * O DATASUS entrega o endereço do ZIP antes de montá-lo, e o `waitForPrepared`
- * cobre a espera normal. Quando o 404 sobrevive à espera, a montagem falhou lá
- * em cima: aquele endereço não vai passar a existir, e o que resolve é pedir
- * outro. Predicado em vez da classe de erro porque o que o chamador precisa
- * saber é isto, não o formato interno da falha HTTP.
+ * Dois desfechos, mesma conclusão. **404**: o endereço nunca materializou, a
+ * montagem falhou do lado do DATASUS. **Cortado**: o pacote existe mas a
+ * leitura não chega ao fim.
+ *
+ * O corte parece ser do pacote, não da rede. Medido em 2026-09-02 com uma
+ * fatia de 16 MB do DNBR2025: relendo a mesma URL preparada, uma de três
+ * leituras veio cortada; com um preparo novo a cada leitura, três de três
+ * vieram inteiras. Antes disso, um benchmark de conexões mostrou o mesmo de
+ * forma mais crua — a primeira rodada passou e todas as seguintes sobre a
+ * mesma URL vieram cortadas, inclusive com uma conexão só, que descarta
+ * concorrência como explicação.
+ *
+ * Por isso repetir a mesma URL é a tentativa com **menos** chance de dar
+ * certo, e um endereço novo custa uma viagem.
  */
-export function preparedArchiveIsMissing(error: unknown): boolean {
+export function preparedArchiveIsUnusable(error: unknown): boolean {
   const cause = retryCause(error);
+  if (cause instanceof TruncatedDatasusArchiveError) return true;
   return cause instanceof DatasusHttpError && cause.status === 404;
 }
 

@@ -145,7 +145,7 @@ import {
   extractSupportedArchiveFiles,
   fetchOfficialArchiveDetailed,
   prepareOfficialDownloadDetailed,
-  preparedArchiveIsMissing,
+  preparedArchiveIsUnusable,
   searchOfficialAuxiliaries,
   searchOfficialCatalogBatch,
   type CatalogSearchProgress,
@@ -6477,12 +6477,12 @@ async function downloadCatalogEntries(
     try {
       downloaded = await baixar(prepared.value);
     } catch (error) {
-      // 404 aqui significa que o pacote preparado não existe e não vai passar a
-      // existir: a montagem falhou do lado do DATASUS. Um endereço novo custa
-      // uma viagem e quase sempre resolve.
-      if (!preparedArchiveIsMissing(error)) throw error;
+      // Pacote inexistente ou cortado: nos dois casos, reler o mesmo endereço
+      // é a tentativa com menos chance de funcionar. Um preparo novo custa uma
+      // viagem e, medido, vem inteiro.
+      if (!preparedArchiveIsUnusable(error)) throw error;
       onActivity?.();
-      setCatalogStatus('O pacote preparado expirou; pedindo outro ao DATASUS…');
+      setCatalogStatus('O pacote do DATASUS não veio inteiro; pedindo outro…');
       const refeito = await prepareOfficialDownloadDetailed(files, signal);
       prepared = { value: refeito.value, attempts: prepared.attempts + refeito.attempts };
       downloaded = await baixar(prepared.value);
