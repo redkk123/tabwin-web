@@ -87,6 +87,7 @@ import {
   createStallWatchdog,
   type StallWatchdog,
 } from '../../../packages/acquisition/src/stall-watchdog.ts';
+import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
 import {
   bridgeWouldHelp,
   cancelBridgeDownload,
@@ -6471,16 +6472,23 @@ async function downloadCatalogEntries(
   };
 }
 
-async function loadVerifiedAuxiliaries(query: DatasusSearchQuery, signal?: AbortSignal): Promise<number> {
+async function loadVerifiedAuxiliaries(
+  query: DatasusSearchQuery,
+  signal?: AbortSignal,
+  onActivity?: () => void,
+): Promise<number> {
   const definitionName = suggestedDefinitionName(query.system, query.fileType);
   if (!definitionName) return 0;
   setCatalogStatus('Procurando arquivos DEF e CNV oficiais…');
+  onActivity?.();
   const remoteAuxiliaries = await searchOfficialAuxiliaries(query.system, signal);
+  onActivity?.();
   const bundle = chooseVerifiedAuxiliaryBundle(remoteAuxiliaries, query.system, query.fileType);
   if (!bundle) {
     throw new Error('Nenhum pacote auxiliar com associação verificada foi listado para esta seleção');
   }
-  const downloaded = await downloadCatalogEntries([bundle], signal, 7 * 24 * 60 * 60 * 1000, 'auxiliary');
+  const downloaded = await downloadCatalogEntries(
+    [bundle], signal, 7 * 24 * 60 * 60 * 1000, 'auxiliary', onActivity);
   const definitionEntry = downloaded.files.find(
     (entry) => displayBaseName(entry.name).toUpperCase() === definitionName.toUpperCase(),
   );
@@ -6741,6 +6749,7 @@ async function openOfficialFile(
     idleMs: DEFAULT_STALL_MS,
     onStall: () => controller.abort(),
   });
+  const onActivity = (): void => watchdog.nudge();
   try {
     let auxiliaryCount = 0;
     if (catalogAuxiliary.checked) {
@@ -6748,8 +6757,9 @@ async function openOfficialFile(
         try {
           const auxiliaryKey = `${query.system}\n${query.fileType}`;
           auxiliaryCount = batchContext
-            ? await batchContext.auxiliaries.getOrCreate(auxiliaryKey, () => loadVerifiedAuxiliaries(query, controller.signal))
-            : await loadVerifiedAuxiliaries(query, controller.signal);
+            ? await batchContext.auxiliaries.getOrCreate(
+              auxiliaryKey, () => loadVerifiedAuxiliaries(query, controller.signal, onActivity))
+            : await loadVerifiedAuxiliaries(query, controller.signal, onActivity);
         } catch (error) {
           if (isAbortError(error)) throw error;
           showToast(`Auxiliares verificados não carregados: ${error instanceof Error ? error.message : String(error)}`, true);
@@ -6766,15 +6776,20 @@ async function openOfficialFile(
     watchdog.nudge();
     setCatalogStatus(`Baixando ${remote.name} do DATASUS…`);
     const downloaded = await downloadCatalogEntries(
-      [remote], controller.signal, 24 * 60 * 60 * 1000, 'data', () => watchdog.nudge());
+      [remote], controller.signal, 24 * 60 * 60 * 1000, 'data', onActivity);
+    // Os bytes chegaram. Daqui para a frente é CPU — descompressão, montagem
+    // dos registros, tabulação — e nada disso observa o `AbortSignal`. Manter
+    // o vigia armado aqui permitia o pior dos mundos: ele marcava "travado" e
+    // abortava um controlador que ninguém escuta, o trabalho seguia, e a função
+    // podia terminar como SUCESSO com o vigia dizendo que falhou.
+    //
+    // Quem protege a rede agora é o prazo de ociosidade dentro do próprio
+    // leitor de fluxo, que mede só a rede e sabe cancelá-la.
+    watchdog.dispose();
     const wanted = downloaded.files.find((entry) => displayBaseName(entry.name).toLowerCase() === remote.name.toLowerCase())
       ?? downloaded.files.find((entry) => ['DBC', 'DBF'].includes(extensionOf(entry.name)));
     if (!wanted) throw new Error('O pacote oficial não contém um DBC ou DBF reconhecido');
-    // Descomprimir e abrir também são trabalho: num arquivo de centenas de MB
-    // essa etapa sozinha pode passar do limite de silêncio.
-    watchdog.nudge();
     await loadFile(archiveFile(wanted));
-    watchdog.nudge();
     const source = loadedSources.find((item) => item.name.toLowerCase() === displayBaseName(wanted.name).toLowerCase());
     if (source) {
       source.origin = remote.address;
@@ -6807,16 +6822,16 @@ async function openOfficialFile(
   } catch (error) {
     const cause = retryCause(error);
     const message = isAbortError(error)
-      ? watchdog.stalled
+      ? watchdog.stalled || error instanceof StreamIdleTimeoutError
         ? `O download parou de progredir por ${Math.round(watchdog.idleMs / 1000)} segundos e foi interrompido.`
           + ' Nada foi guardado pela metade; tente de novo.'
         : 'Operação cancelada.'
       : cause instanceof Error ? cause.message : String(cause);
-    setCatalogStatus(message, !isAbortError(error) || watchdog.stalled);
+    setCatalogStatus(message, !isAbortError(error) || watchdog.stalled || error instanceof StreamIdleTimeoutError);
     if (!isAbortError(error)) offerBridgeAfterFailure(remote, cause);
     return {
       ok: false,
-      status: isAbortError(error) && !watchdog.stalled
+      status: isAbortError(error) && !watchdog.stalled && !(error instanceof StreamIdleTimeoutError)
         ? 'CANCELLED'
         : cause instanceof InvalidDatasusArchiveError ? 'INVALID_FILE' : 'DOWNLOAD_FAILED',
       error: message,

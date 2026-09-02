@@ -17,7 +17,6 @@ import {
 } from '../../../packages/acquisition/src/datasus.ts';
 import { validateDatasusZipArchive } from '../../../packages/acquisition/src/archive-validation.ts';
 import {
-  assembleRangedParts,
   planByteRanges,
   rangeHeaderValue,
   readRangeSupport,
@@ -25,6 +24,8 @@ import {
   type DownloadStrategy,
   type RangeSupport,
 } from '../../../packages/acquisition/src/ranged-download.ts';
+import { downloadInRanges } from '../../../packages/acquisition/src/ranged-download-runner.ts';
+import { readStreamWithIdleTimeout } from '../../../packages/acquisition/src/stream-reader.ts';
 import { resolveMicrodatasusCompatibleCandidates } from '../../../packages/acquisition/src/microdatasus-resolver.ts';
 import {
   runDatasusBatch,
@@ -376,24 +377,14 @@ async function fetchArchiveInParts(
     return null;
   }
 
-  let receivedBytes = 0;
-  const parts = await Promise.all(ranges.map(async (range) => {
-    const response = await fetch(downloadUrl, {
-      headers: { Range: rangeHeaderValue(range) },
-      ...(signal ? { signal } : {}),
-    });
-    if (response.status !== 206) {
-      throw new Error(`parte ${range.start}-${range.end}: servidor respondeu ${response.status}`);
-    }
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    receivedBytes += bytes.byteLength;
-    onProgress?.({ receivedBytes, totalBytes: support.totalBytes });
-    return { range, bytes };
-  }));
-
-  // Montagem confere tamanho e sequência; qualquer desencontro lança, e o
-  // chamador cai no caminho simples em vez de aceitar bytes suspeitos.
-  const archive = assembleRangedParts(parts, support.totalBytes);
+  const archive = await downloadInRanges({
+    url: downloadUrl,
+    ranges,
+    totalBytes: support.totalBytes,
+    fetchImpl: fetch,
+    ...(signal ? { signal } : {}),
+    ...(onProgress ? { onProgress } : {}),
+  });
   lastDownloadTransport = { strategy: 'partes paralelas', parts: ranges.length };
   return archive;
 }
@@ -436,20 +427,19 @@ async function fetchOfficialArchiveOnce(
     return bytes;
   }
 
-  const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let receivedBytes = 0;
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    receivedBytes += value.byteLength;
-    if (receivedBytes > MAX_ARCHIVE_BYTES) {
-      await reader.cancel('archive limit exceeded');
-      throw new Error('Arquivo remoto excede o limite de segurança');
-    }
-    chunks.push(value);
-    onProgress?.({ receivedBytes, ...(totalBytes ? { totalBytes } : {}) });
-  }
+  await readStreamWithIdleTimeout(response.body, {
+    onChunk: (chunk) => {
+      receivedBytes += chunk.byteLength;
+      if (receivedBytes > MAX_ARCHIVE_BYTES) {
+        throw new Error('Arquivo remoto excede o limite de segurança');
+      }
+      chunks.push(chunk);
+      onProgress?.({ receivedBytes, ...(totalBytes ? { totalBytes } : {}) });
+    },
+    ...(signal ? { signal } : {}),
+  });
   const archive = new Uint8Array(receivedBytes);
   let offset = 0;
   for (const chunk of chunks) {

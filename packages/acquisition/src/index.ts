@@ -6,5 +6,8 @@ export * from './retry-policy.js';
 export * from './bridge-policy.js';
 export * from './bridge-client.js';
 export * from './ranged-download.js';
+export * from './range-stream-writer.js';
 export * from './selection-advice.js';
 export * from './stall-watchdog.js';
+export * from './stream-reader.js';
+export * from './ranged-download-runner.js';
