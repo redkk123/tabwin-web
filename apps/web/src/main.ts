@@ -89,6 +89,7 @@ import {
 } from '../../../packages/acquisition/src/stall-watchdog.ts';
 import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
 import {
+  catalogQueryKey,
   describeCatalogMemory,
   planCatalogLookups,
 } from '../../../packages/acquisition/src/catalog-memory.ts';
@@ -7503,14 +7504,52 @@ async function executeCatalogQueries(
     // — porque cancelar era a única forma de o lote devolver o parcial.
     const parcial = document.createElement('p');
     parcial.className = 'filter-info';
+
+    // As combinações são conhecidas antes de qualquer viagem. Mostrar a lista
+    // agora, com cada linha em "verificando", é o que evita alguém que quer
+    // 1996 esperar 2026 a 1997 responderem — e é honesto, porque cada linha
+    // diz que ainda não foi confirmada.
+    const linhas = new Map<string, HTMLElement>();
+    const listaOtimista = document.createElement('div');
+    listaOtimista.className = 'catalog-pending';
+    for (const query of plano.toFetch) {
+      const linha = document.createElement('div');
+      linha.className = 'catalog-pending-row';
+      const nome = document.createElement('b');
+      nome.textContent = catalogQueryLabel(query);
+      const estado = document.createElement('span');
+      estado.className = 'catalog-pending-state';
+      estado.textContent = 'verificando…';
+      linha.append(nome, estado);
+      linhas.set(catalogQueryKey(query), linha);
+      listaOtimista.append(linha);
+    }
+    if (plano.toFetch.length > 1) catalogResults.append(listaOtimista);
+
     const renderParcial = (progress: CatalogSearchProgress): void => {
       parcial.textContent = `Consultando… ${integerFormat.format(progress.completed)} de `
         + `${integerFormat.format(progress.total)} · `
         + `${integerFormat.format(progress.files.length)} arquivo(s) encontrado(s) até agora`;
       if (!parcial.isConnected) catalogResults.prepend(parcial);
+      const linha = linhas.get(catalogQueryKey(progress.resolved.query));
+      if (!linha) return;
+      const estado = linha.querySelector('.catalog-pending-state');
+      if (!estado) return;
+      if (progress.resolved.answer === 'found') {
+        estado.textContent = progress.resolved.files.map((f) => f.name).join(', ');
+        linha.classList.add('achou');
+      } else if (progress.resolved.answer === 'missing') {
+        estado.textContent = 'sem publicação confirmada';
+        linha.classList.add('vazio');
+      } else {
+        estado.textContent = 'falhou ao consultar';
+        linha.classList.add('falhou');
+      }
     };
     const resultado = await searchOfficialCatalogBatch(plano.toFetch, controller.signal, renderParcial);
     parcial.remove();
+    // A lista provisória cumpriu o papel; o resultado definitivo a substitui.
+    listaOtimista.remove();
 
     // Guardar inclusive o "não encontrado": é ele que economiza a próxima
     // busca, e é justamente ele que um cache ingênuo não lembra. Só respostas

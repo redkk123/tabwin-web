@@ -1725,3 +1725,48 @@ test('a segunda busca não repete as viagens que já foram respondidas', async (
   await expect(page.locator('#catalog-results')).toContainText('DNBR1996.dbc');
   expect(consultas).toBe(primeira * 2);
 });
+
+test('a lista de combinações aparece antes das respostas, e cada linha se resolve', async ({ page }) => {
+  // Quem quer o arquivo de 1996 não deveria esperar 2026, 2025 e 2024
+  // responderem para saber que ele existe.
+  let liberar;
+  const segura = new Promise((resolve) => { liberar = resolve; });
+  await page.route(/\/catalog(\?|$)|wp-content\/ftp\.php/, async (route) => {
+    const corpo = route.request().postData() ?? '';
+    // 1996 responde na hora; os demais só depois que o teste mandar.
+    if (!corpo.includes('1996')) await segura;
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': '*' },
+      body: corpo.includes('1996')
+        ? JSON.stringify([{
+          arquivo: 'DNBR1996.dbc',
+          endereco: 'ftp://ftp.datasus.gov.br/x/DNBR1996.dbc',
+          fonte: 'SINASC',
+          modalidade: 'Dados',
+        }])
+        : '[]',
+    });
+  });
+
+  await page.goto('/');
+  await page.locator('#catalog-button').click();
+  await page.locator('#catalog-system').selectOption('SINASC');
+  await page.locator('#catalog-file-type').selectOption('DN');
+  await page.locator('#catalog-year').selectOption(['1996', '1997', '1998', '1999']);
+  await page.locator('#catalog-form').evaluate((form: HTMLFormElement) => form.requestSubmit());
+
+  // As quatro linhas existem antes de qualquer resposta.
+  const linhas = page.locator('.catalog-pending-row');
+  await expect(linhas).toHaveCount(4);
+  // E a de 1996 já se resolveu, com as outras ainda pendentes.
+  await expect(page.locator('.catalog-pending-row.achou')).toContainText('DNBR1996.dbc');
+  await expect(page.locator('.catalog-pending-row').filter({ hasText: 'verificando' }))
+    .toHaveCount(3);
+
+  liberar();
+  await expect(page.locator('#catalog-results')).toContainText('DNBR1996.dbc');
+  // A lista provisória sai quando o resultado definitivo entra.
+  await expect(linhas).toHaveCount(0);
+});

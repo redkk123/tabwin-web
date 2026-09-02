@@ -168,6 +168,17 @@ export interface CatalogSearchProgress {
   total: number;
   /** Arquivos encontrados até agora, na ordem em que apareceram. */
   files: DatasusRemoteFile[];
+  /**
+   * A combinação que acabou de ser resolvida, e o que o catálogo respondeu.
+   *
+   * Sem isto a interface só sabe "12 de 48", e não consegue resolver a linha
+   * daquele ano específico. Quem quer 1996 não deveria esperar 2026 responder.
+   */
+  resolved: {
+    query: DatasusSearchQuery;
+    answer: 'found' | 'missing' | 'failed';
+    files: DatasusRemoteFile[];
+  };
 }
 
 /**
@@ -257,10 +268,21 @@ export async function searchOfficialCatalogBatch(
     ...(onProgress
       ? {
         onProgress: (progress) => {
-          if (progress.item.status === 'FOUND') found.push(...(progress.item.value ?? []));
+          const encontrados = progress.item.value ?? [];
+          if (progress.item.status === 'FOUND') found.push(...encontrados);
           // Uma cópia: quem desenha não pode segurar referência para um vetor
           // que ainda vai crescer por baixo dele.
-          onProgress({ completed: progress.completed, total: progress.total, files: [...found] });
+          onProgress({
+            completed: progress.completed,
+            total: progress.total,
+            files: [...found],
+            resolved: {
+              query: progress.item.request,
+              answer: progress.item.status === 'FOUND' ? 'found'
+                : progress.item.status === 'NOT_PUBLISHED' ? 'missing' : 'failed',
+              files: [...encontrados],
+            },
+          });
         },
       }
       : {}),

@@ -524,6 +524,16 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .def-inspector-unknown { font-size: 12px; padding: 6px 9px; border-radius: 4px; background: #f9ebe9; color: #984d46; margin-bottom: 4px; font-family: 'DejaVu Sans Mono', Consolas, monospace; }
 .catalog-status.error { color: #94463f; }
 .catalog-results { display: grid; gap: 8px; margin-top: 5px; }
+/* Lista provisoria: existe entre apertar Procurar e o catalogo responder.
+   Cada linha diz que ainda nao foi confirmada, e se resolve sozinha. */
+.catalog-pending { display: grid; gap: 4px; margin-bottom: 10px; }
+.catalog-pending-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 6px 11px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-2); font-size: 12px; }
+.catalog-pending-row b { color: var(--muted); font-weight: 500; }
+.catalog-pending-state { color: var(--faint); font-size: 11px; text-align: right; }
+.catalog-pending-row.achou { border-color: var(--brand-line); background: var(--brand-soft); }
+.catalog-pending-row.achou b, .catalog-pending-row.achou .catalog-pending-state { color: var(--brand-ink); }
+.catalog-pending-row.vazio { opacity: .62; }
+.catalog-pending-row.falhou .catalog-pending-state { color: var(--danger); }
 .catalog-result { display: flex; align-items: center; gap: 13px; padding: 12px 13px; border: 1px solid #dfe1e3; border-radius: 6px; background: #f9f9fa; }
 /* Duas ações por resultado: abrir aqui, ou salvar para usar fora. A segunda
    é de texto porque abrir continua sendo o caminho principal. */
