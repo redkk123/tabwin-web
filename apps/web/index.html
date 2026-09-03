@@ -910,7 +910,8 @@
       <h2>TabWin Web</h2>
       <p>Uma reimplementação moderna, local e auditável dos fluxos analíticos do TabWin. Projeto independente; os resultados de compatibilidade são validados contra o TabWin 4.15 real, com tolerância zero.</p>
       <p><a class="dialog-link" href="./manual.html">Manual do usuário</a> — como tabular, filtrar, transformar, calcular taxas e auditar a procedência.</p>
-      <p class="dialog-note">Seus dados não saem deste aparelho: a leitura e o cálculo acontecem no navegador. Projeto não oficial, sem afiliação ao DATASUS ou ao Ministério da Saúde.</p>
+      <p class="dialog-note">A decodificação do formato <code>.DBC</code> usa <a class="dialog-link" href="https://www.npmjs.com/package/@precisa-saude/datasus-dbc" target="_blank" rel="noopener">@precisa-saude/datasus-dbc</a>; os pacotes <code>.zip</code> do portal passam por <a class="dialog-link" href="https://github.com/101arrowz/fflate" target="_blank" rel="noopener">fflate</a>, e a consulta SQL por <a class="dialog-link" href="https://duckdb.org/docs/api/wasm/overview" target="_blank" rel="noopener">DuckDB-WASM</a>.</p>
+      <p class="dialog-note">Seus dados não saem deste aparelho: a leitura e o cálculo acontecem no navegador. Projeto não oficial, sem afiliação ao DATASUS ou ao Ministério da Saúde. Código sob licença MIT.</p>
     </dialog>
 
     <dialog id="geojson-import-dialog">

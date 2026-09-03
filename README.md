@@ -104,7 +104,19 @@ termos de uso do órgão. Este repositório **não** redistribui microdados nem 
 binário original do TabWin 4.15 — as capturas em `fixtures/golden/` são
 resultados de referência, não os arquivos de origem.
 
-> **Licença ainda não definida.** Sem um arquivo `LICENSE`, o padrão legal é
-> "todos os direitos reservados": ninguém pode reusar, modificar ou
-> redistribuir este código. Se a intenção é que o projeto seja utilizável por
-> outras pessoas, escolher e adicionar uma licença é um passo pendente.
+## Sobre o que este projeto se apoia
+
+Três dependências de runtime, e vale nomear o que cada uma faz:
+
+- **[`@precisa-saude/datasus-dbc`](https://www.npmjs.com/package/@precisa-saude/datasus-dbc)**
+  decodifica o formato `.DBC` — xBase DBF comprimido com PKWARE DCL Implode.
+  É a capacidade que este projeto anuncia primeiro, e quem a entrega é ele.
+  TypeScript puro, navegador e Node, sem dependências próprias.
+- **[`fflate`](https://github.com/101arrowz/fflate)** lê e escreve os `.zip`
+  que o portal do DATASUS monta.
+- **[`@duckdb/duckdb-wasm`](https://duckdb.org/docs/api/wasm/overview)** move a
+  aba de consulta SQL, carregado sob demanda.
+
+## Licença
+
+MIT — ver [LICENSE](./LICENSE).

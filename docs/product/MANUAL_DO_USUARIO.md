@@ -482,3 +482,7 @@ tabular, ou trabalhe por período.
 - `docs/testing/` — os protocolos de captura e o corpus de goldens.
 - `docs/legacy/TABWIN_415_FEATURE_INVENTORY.md` — o inventário do programa
   original, que define o alvo de compatibilidade.
+- **Quem decodifica o `.DBC`** é o pacote
+  [`@precisa-saude/datasus-dbc`](https://www.npmjs.com/package/@precisa-saude/datasus-dbc).
+  Se você precisar ler DBC fora daqui — num script em Node, num pipeline —, é
+  ele que você quer, e não este programa.

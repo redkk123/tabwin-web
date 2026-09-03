@@ -41,7 +41,14 @@ function inline(text) {
 const splitRow = (line) => line.replace(/^\||\|$/g, '').split('|').map((cell) => cell.trim());
 
 function render(markdown) {
-  const lines = markdown.split('\n');
+  // Divide por `\r?\n`, não por `\n`. Um clone no Windows traz CRLF, e o `\r`
+  // que sobrava no fim de cada linha fazia `/^[-*]\s+(.*)$/` falhar — `.` não
+  // casa `\r`, e `$` exige o fim da string. A lista saía vazia, o `break` não
+  // avançava o índice, e o laço externo repetia a mesma linha até estourar a
+  // memória: 2,5 GB em 86 segundos. Não aparecia aqui porque este disco estava
+  // com LF, e o CI roda em Linux — precisou de uma auditoria em outra máquina
+  // para o defeito ficar visível.
+  const lines = markdown.split(/\r?\n/);
   const html = [];
   let index = 0;
 
