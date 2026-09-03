@@ -35,6 +35,19 @@ test('as partes cobrem o arquivo inteiro, sem furo e sem sobreposição', () => 
   }
 });
 
+test('duas partes, porque a terceira só cobra em link ruim', () => {
+  // Medido de um datacenter: 1 conexão 7,43 s, 2 conexões 4,13 s, 4 conexões
+  // 4,01 s numa fatia de 32 MB. O salto de 1 para 2 é enorme; de 2 para 4 é
+  // menos de 3%, dentro do ruído.
+  //
+  // O que decide não é esse 3%. Num link de celular a 1 MB/s uma conexão já
+  // satura a banda de quem baixa, então a terceira e a quarta não trazem byte
+  // nenhum — trazem handshake TLS, chance de travar e relógio de ociosidade.
+  // Subir este número troca ganho imperceptível por falha real onde ela dói.
+  assert.equal(MAX_RANGE_PARTS, 2);
+  assert.equal(planByteRanges(500 * MB).length, 2, 'nem o arquivo maior passa de duas');
+});
+
 test('o número de partes é pequeno de propósito, porque o servidor oscila', () => {
   assert.ok(planByteRanges(63 * MB).length <= MAX_RANGE_PARTS);
   assert.ok(planByteRanges(2000 * MB).length <= MAX_RANGE_PARTS);

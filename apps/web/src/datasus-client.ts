@@ -24,6 +24,7 @@ import {
   planByteRanges,
   rangeHeaderValue,
   readRangeSupport,
+  readRepresentationTag,
   type ByteRange,
   type DownloadStrategy,
   type RangeSupport,
@@ -374,7 +375,13 @@ function archiveEndpoint(url: string): string {
  * Qualquer falha aqui é respondida com "não dá" — a sondagem nunca pode ser o
  * motivo de o download não acontecer.
  */
-async function probeRangeSupport(downloadUrl: string, signal?: AbortSignal): Promise<RangeSupport> {
+interface ProbedRange {
+  support: RangeSupport;
+  /** Identidade da representação vista pela sondagem, para `If-Range`. */
+  tag?: string;
+}
+
+async function probeRangeSupport(downloadUrl: string, signal?: AbortSignal): Promise<ProbedRange> {
   const probe: ByteRange = { start: 0, end: 0 };
   try {
     const response = await fetch(downloadUrl, {
@@ -383,10 +390,14 @@ async function probeRangeSupport(downloadUrl: string, signal?: AbortSignal): Pro
     });
     // O corpo não interessa; soltar evita segurar a conexão.
     await response.body?.cancel();
-    return readRangeSupport(response.status, response.headers.get('content-range'), probe);
+    const tag = readRepresentationTag(response.headers);
+    return {
+      support: readRangeSupport(response.status, response.headers.get('content-range'), probe),
+      ...(tag ? { tag } : {}),
+    };
   } catch (error) {
     if (isAbortErrorLike(error) || signal?.aborted) throw error;
-    return { supported: false, reason: 'a sondagem de faixa falhou' };
+    return { support: { supported: false, reason: 'a sondagem de faixa falhou' } };
   }
 }
 
@@ -403,7 +414,8 @@ async function fetchArchiveInParts(
   signal?: AbortSignal,
   onProgress?: (progress: ArchiveDownloadProgress) => void,
 ): Promise<Uint8Array | null> {
-  const support = await probeRangeSupport(downloadUrl, signal);
+  const probed = await probeRangeSupport(downloadUrl, signal);
+  const support = probed.support;
   if (!support.supported) {
     lastDownloadTransport = { strategy: 'única conexão', parts: 1, reason: support.reason };
     return null;
@@ -422,6 +434,10 @@ async function fetchArchiveInParts(
     ranges,
     totalBytes: support.totalBytes,
     fetchImpl: fetch,
+    // Sem identidade, o download segue como antes: só o tamanho separa um
+    // arquivo do outro. Com ela, o servidor recusa servir faixa de um pacote
+    // diferente do que a sondagem viu.
+    ...(probed.tag ? { representationTag: probed.tag } : {}),
     ...(signal ? { signal } : {}),
     ...(onProgress ? { onProgress } : {}),
   });

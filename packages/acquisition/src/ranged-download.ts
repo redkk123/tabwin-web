@@ -40,18 +40,35 @@ export const MIN_BYTES_FOR_RANGED_DOWNLOAD = 8 * 1024 * 1024;
 /**
  * Teto de partes simultâneas.
  *
- * Medido contra o DATASUS real, com um arquivo de 25,5 MB:
+ * Medido contra o DATASUS real, duas vezes, de um datacenter:
  *
- * | conexão única | 4.245 ms |
- * | 2 partes      | 3.455 ms |
- * | 4 partes      | 3.397 ms |
- * | 8 partes      | 5.013 ms |
+ * | conexões | 25,5 MB  | fatia de 32 MB |
+ * | -------- | -------- | -------------- |
+ * | 1        | 4.245 ms | 7,43 s         |
+ * | 2        | 3.455 ms | 4,13 s         |
+ * | 4        | 3.397 ms | 4,01 s         |
  *
- * Quatro é o ponto de melhor retorno, e **oito é pior que não paralelizar** —
- * o servidor deixa de colaborar com conexões demais. Subir este número sem
- * repetir a medição seria trocar ganho por perda.
+ * O salto de 1 para 2 é enorme; de 2 para 4 é **menos de 3%**, dentro do ruído
+ * de rede. E as duas medições vêm de um link de datacenter, que responde "o
+ * que é mais rápido quando a banda sobra" — não "o que é mais confiável quando
+ * ela falta".
+ *
+ * Num link de celular a 1 MB/s, uma conexão já satura o cano: o limite é a
+ * banda de quem baixa, não o teto por conexão do servidor. Ali a segunda,
+ * terceira e quarta conexões não trazem byte nenhum a mais e trazem três
+ * handshakes TLS, três chances de travar e três relógios de ociosidade. Duas
+ * partes ficam com praticamente toda a velocidade e metade da superfície de
+ * falha, e é por isso que este número é 2 e não 4.
+ *
+ * Nota para quem for mexer: houve uma execução em que 8 partes falharam, e
+ * seria fácil concluir que o servidor deixa de colaborar com conexões demais.
+ * **Não era isso.** Era o limite de CPU do nosso próprio Worker Cloudflare
+ * cortando o stream, diagnosticado e corrigido em 2026-09-02; depois do
+ * conserto, 4 faixas voltaram a ser o caminho mais rápido e íntegro em 9 de 9
+ * tentativas. O motivo para não subir é o custo em link ruim, não uma recusa
+ * do DATASUS.
  */
-export const MAX_RANGE_PARTS = 4;
+export const MAX_RANGE_PARTS = 2;
 
 /** Nenhuma parte menor que isto, para não trocar banda por ida e volta. */
 export const MIN_PART_BYTES = 2 * 1024 * 1024;
@@ -131,6 +148,31 @@ export type RangeSupport =
  * é a única evidência aceita — `Accept-Ranges` sozinho é promessa, e há
  * servidor que promete e não cumpre.
  */
+/**
+ * Identidade da representação, para `If-Range`. **Só `ETag` forte.**
+ *
+ * `Last-Modified` seria o segundo candidato natural, e é o que o RFC permite.
+ * Não serve aqui, e a razão é medida: o DATASUS devolve a hora **atual** nesse
+ * cabeçalho. Seis sondagens seguidas ao mesmo pacote preparado, em 2026-09-03,
+ * deram seis valores diferentes, avançando com o relógio — e um `If-Range` com
+ * o valor colhido um segundo antes fez o servidor responder **200**, isto é,
+ * recusar a faixa. Enviar a data ali quebraria todo download em partes.
+ *
+ * Um `ETag` fraco — prefixo `W/` — também não serve: significa "equivalente
+ * para exibição", não "os mesmos bytes", que é exatamente a garantia
+ * necessária para costurar faixas.
+ *
+ * Sem `ETag` forte não há identidade, o `If-Range` não é enviado, e o download
+ * se comporta como sempre se comportou. A proteção passa a valer sozinha em
+ * origens que emitem `ETag` — um espelho em R2 ou S3, por exemplo.
+ */
+export function readRepresentationTag(headers: {
+  get(name: string): string | null;
+}): string | undefined {
+  const etag = headers.get('etag')?.trim();
+  return etag && !etag.startsWith('W/') ? etag : undefined;
+}
+
 export function readRangeSupport(
   status: number,
   contentRange: string | null,

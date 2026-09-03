@@ -176,8 +176,15 @@ test('total que muda no meio é recusado: seria um arquivo que nunca existiu', a
 test('servidor que ignora a faixa e devolve 200 é recusado, não montado', async () => {
   const { fetchImpl } = origemFalsa(() => 'recusa');
   await assert.rejects(
-    downloadInRanges({ url: 'https://exemplo/a.zip', ranges: FAIXAS, totalBytes: TOTAL, fetchImpl }),
-    /parte 0-9/,
+    downloadInRanges({
+      url: 'https://exemplo/a.zip', ranges: FAIXAS, totalBytes: TOTAL, fetchImpl,
+      sleep: async () => {},
+    }),
+    // O motivo é o que importa, não QUAL faixa o reportou: todas falham pelo
+    // mesmo motivo, e com retentativa por faixa quem chega primeiro ao fim das
+    // tentativas deixou de ser determinístico. Asserir a faixa testaria a
+    // ordem de agendamento das promessas, não a recusa.
+    /respondeu 200 em vez de 206/,
   );
 });
 
