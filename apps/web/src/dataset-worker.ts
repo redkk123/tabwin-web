@@ -33,7 +33,6 @@ import {
 import { fieldsUsedByPlan } from '../../../packages/core/src/plan-fields.ts';
 import {
   createColumnarProjectionBuilder,
-  chooseProjectionFields,
   createColumnarProjectionCache,
   executeColumnarProjection,
 } from '../../../packages/core/src/columnar-cache.ts';
@@ -474,21 +473,9 @@ function handle(request: DatasetRequest): void {
       // Primeira passagem sobre estes campos: tabula e monta a projeção na
       // MESMA leitura. Ler duas vezes para poder guardar seria pagar hoje o
       // que se quer economizar amanhã.
-      // Lê alguns campos ALÉM dos que o plano pede, e guarda todos.
-      //
-      // A pessoa que abre um DBC quase nunca quer uma tabela só: ela tabula
-      // por sexo, depois por raça/cor, depois por local de nascimento. Sem
-      // isto, cada uma dessas trocas custava uma passada inteira pelo arquivo
-      // — seis segundos no DNBR2024, toda vez. Com a projeção larga, a
-      // primeira tabela paga cerca de um terço a mais e as seguintes saem do
-      // cache, em centésimos de segundo.
-      const projectionFields = chooseProjectionFields(
-        planFields,
-        header?.fields.map((campo) => ({ name: campo.name, length: campo.length })) ?? [],
-      );
       const accumulator = createTabulationAccumulator(request.plan, conversions);
-      const builder = createColumnarProjectionBuilder(projectionFields);
-      streamAll(request.requestId, projectionFields, (batch) => {
+      const builder = createColumnarProjectionBuilder(planFields);
+      streamAll(request.requestId, planFields, (batch) => {
         accumulator.push(batch.records);
         builder.push(batch.records);
       });

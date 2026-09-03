@@ -4,9 +4,7 @@ import {
   buildColumnarProjection,
   compileQueryPlan,
   createColumnarProjectionBuilder,
-  chooseProjectionFields,
   createColumnarProjectionCache,
-  PROJECTION_FIELD_BUDGET,
   executeColumnarProjection,
   executeInMemory,
 } from '../dist/packages/core/src/index.js';
@@ -229,72 +227,4 @@ test('o orçamento é validado, porque zero ou negativo esvaziaria tudo em silê
   semTeto.set('a', buildColumnarProjection(records, ['UF']));
   assert.equal(semTeto.size, 1);
   assert.ok(semTeto.estimatedBytes > 0);
-});
-
-// Um cabeçalho parecido com o do SINASC: categóricos estreitos, códigos e
-// datas largos. A escolha só é útil se separar esses dois grupos.
-const CAMPOS = [
-  { name: 'SEXO', length: 1 },
-  { name: 'RACACOR', length: 1 },
-  { name: 'LOCNASC', length: 1 },
-  { name: 'ESTCIVMAE', length: 1 },
-  { name: 'GESTACAO', length: 1 },
-  { name: 'CODMUNNASC', length: 6 },
-  { name: 'CODESTAB', length: 7 },
-  { name: 'DTNASC', length: 8 },
-  { name: 'NUMERODN', length: 11 },
-];
-
-test('os campos do plano entram sempre na projeção', () => {
-  const escolhidos = chooseProjectionFields(['NUMERODN'], CAMPOS);
-  assert.ok(escolhidos.includes('NUMERODN'), 'o campo tabulado ficou de fora');
-});
-
-test('as vagas que sobram vão para os campos mais estreitos', () => {
-  // Largura é o indício de campo categórico que se tem de graça: ninguém
-  // tabula por data de nascimento, quase todo mundo tabula por sexo.
-  const escolhidos = chooseProjectionFields(['SEXO'], CAMPOS, 4);
-  assert.equal(escolhidos.length, 4);
-  for (const estreito of ['SEXO', 'ESTCIVMAE', 'GESTACAO', 'LOCNASC']) {
-    assert.ok(escolhidos.includes(estreito), `faltou ${estreito}`);
-  }
-  assert.ok(!escolhidos.includes('NUMERODN'), 'o mais largo entrou antes dos estreitos');
-});
-
-test('o orçamento é um teto, nunca ultrapassado', () => {
-  // Estourá-lo devolveria a lentidão que a escolha existe para evitar: a
-  // curva medida dispara depois de uma dúzia de campos.
-  for (const teto of [1, 2, 5, 12]) {
-    assert.ok(chooseProjectionFields(['SEXO'], CAMPOS, teto).length <= teto, `teto ${teto}`);
-  }
-});
-
-test('um plano maior que o orçamento não perde campo nenhum', () => {
-  // Cortar aqui daria uma projeção que não responde à tabulação que a pediu —
-  // pior do que não guardar nada.
-  const plano = ['SEXO', 'RACACOR', 'LOCNASC', 'DTNASC'];
-  const escolhidos = chooseProjectionFields(plano, CAMPOS, 2);
-  for (const campo of plano) assert.ok(escolhidos.includes(campo), `perdeu ${campo}`);
-});
-
-test('nenhum campo aparece duas vezes', () => {
-  const escolhidos = chooseProjectionFields(['SEXO', 'sexo', ' SEXO '], CAMPOS, 5);
-  assert.equal(new Set(escolhidos).size, escolhidos.length);
-});
-
-test('empate de largura é desfeito pelo nome, não pela ordem do arquivo', () => {
-  // Sem isso, dois arquivos com os mesmos campos em ordem diferente gerariam
-  // projeções diferentes, e o cache erraria entre eles.
-  const a = chooseProjectionFields([], [{ name: 'B', length: 1 }, { name: 'A', length: 1 }], 1);
-  const b = chooseProjectionFields([], [{ name: 'A', length: 1 }, { name: 'B', length: 1 }], 1);
-  assert.deepEqual(a, b);
-});
-
-test('cabeçalho vazio devolve só o plano, sem quebrar', () => {
-  assert.deepEqual(chooseProjectionFields(['SEXO'], []), ['SEXO']);
-});
-
-test('o orçamento padrão é o que a medição sustenta', () => {
-  // Doze é onde a curva medida ainda cobra pouco (1,33x contra 2,75x em 40).
-  assert.equal(PROJECTION_FIELD_BUDGET, 12);
 });
