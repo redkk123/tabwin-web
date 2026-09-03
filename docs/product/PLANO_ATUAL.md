@@ -130,8 +130,9 @@ falta só a interface.
 
 ## Bloco 4 — Pendências antigas
 
-- [ ] Segredo `CLOUDFLARE_API_TOKEN` no GitHub, para o workflow do Worker
-      publicar sozinho. **Depende do usuário.**
+- [x] Segredo `CLOUDFLARE_API_TOKEN` no GitHub ✅ (03/09/2026). Conferido
+      rodando o workflow à mão: publicou sozinho, e o `/health` respondeu com
+      a revisão nova. O Worker não depende mais de publicação manual.
 - ~~Drive: 6 duplicatas antigas na pasta `SIDS_R95`.~~ **Decidido em
   03/09/2026: ficam onde estão.** São sobra de um handoff antigo, não afetam
   nada do projeto, e limpá-las custaria mais atenção do que vale.
