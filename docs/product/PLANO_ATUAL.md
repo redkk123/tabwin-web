@@ -235,7 +235,17 @@ Ordem por valor sobre esforço, não por ordem de chegada.
       Pedido do usuário em 03/09/2026, com a ressalva de que vale **só para o
       mapa** — não para as outras abas.
 
-- [ ] **Partes retomáveis em OPFS**, para conexão de celular que cai no meio.
+- [x] **Partes retomáveis em OPFS** ✅, para conexão de celular que cai no meio.
+      Verificado no ar em 2026-09-03 com o DNBR2023: 20 MB gravados, conexão
+      cortada, retomada devolveu `206 · bytes 20971520-125549171/125549172`,
+      99,7 MB baixados depois, 119,7 MB montados e **SHA-256 conferindo**.
+
+      Vale **só para o espelho**, e o motivo é de segurança: retomar exige
+      saber que o arquivo do servidor ainda é o mesmo, senão colar um pedaço
+      velho num novo produz um arquivo corrompido que *parece* íntegro. No
+      espelho o hash chega no manifesto antes do download, então ele vira a
+      chave da parte guardada — e isso resolve a validade sozinho, sem carimbo
+      de tempo: parte do arquivo de hash X só serve para o arquivo de hash X.
       Menos urgente depois do conserto do Worker, mas ainda é o que protege
       quem está no 4G num arquivo de 108 MB.
 
