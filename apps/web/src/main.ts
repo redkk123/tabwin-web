@@ -6117,6 +6117,22 @@ function renderMap(): void {
  */
 let mapResult: TabulationResult | null = null;
 let mapGeoField: GeographicCandidate | null = null;
+/**
+ * O que o `mapResult` guardado respondia.
+ *
+ * Guardar a tabulação do mapa sem guardar as condições dela deixava o mapa
+ * mostrando o dado sem filtro enquanto a tabela já mostrava o filtrado — duas
+ * respostas diferentes na mesma tela, e nenhuma delas dizendo que divergia.
+ *
+ * A assinatura resolve na fonte: em vez de lembrar de invalidar em cada um dos
+ * lugares que mexem em filtro, o cache simplesmente não serve quando as
+ * condições mudam.
+ */
+let mapResultSignature = '';
+
+function mapInputSignature(): string {
+  return JSON.stringify([configuredFilters, configuredCrossFieldRules]);
+}
 /** UF isolada no mapa. Vazio quer dizer o Brasil inteiro, por estado. */
 let mapUfFilter = '';
 
@@ -6274,13 +6290,20 @@ async function ensureMap(): Promise<void> {
   if (daTela) {
     mapResult = null;
     mapGeoField = null;
-  } else if (!mapResult) {
+  } else if (!mapResult || mapResultSignature !== mapInputSignature()) {
     // Não é: o mapa vai atrás do campo geográfico sozinho. Antes disto, a aba
     // pedia à pessoa que reconfigurasse a análise só para ver um mapa.
     mapMessage.hidden = false;
-    mapMessage.textContent = 'Procurando a geografia neste arquivo…';
+    mapMessage.textContent = mapResult
+      ? 'Refazendo o mapa com os filtros novos…'
+      : 'Procurando a geografia neste arquivo…';
+    activeMap = null;
     try {
       mapResult = await tabulateForMap();
+      mapResultSignature = mapInputSignature();
+      // Filtro novo pode ter esvaziado o estado que estava isolado; deixar o
+      // recorte antigo daria um mapa em branco sem explicar por quê.
+      mapUfFilter = '';
     } catch (error) {
       mapMessage.textContent = `Não deu para montar o mapa: ${error instanceof Error ? error.message : String(error)}`;
       return;
