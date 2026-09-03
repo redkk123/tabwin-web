@@ -6611,6 +6611,15 @@ async function downloadCatalogEntries(
           : formatBytes(recebidos);
         setCatalogStatus(`Baixando ${files[0]?.name} do espelho… ${pedaco}`);
       },
+      // Dizer que está retomando importa: sem isso, a barra começando em 60%
+      // parece defeito, e a pessoa recarrega a página — jogando fora
+      // justamente o que a retomada acabou de recuperar.
+      onResume: (deBytes, total) => {
+        setCatalogStatus(
+          `Continuando o download de ${files[0]?.name} de onde parou: `
+          + `${formatBytes(deBytes)} de ${formatBytes(total)} já estavam neste aparelho.`,
+        );
+      },
     });
     if (doEspelho) {
       // O espelho entrega o `.dbc` direto, não o `.zip` do portal. O resto do

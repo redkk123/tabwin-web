@@ -126,3 +126,120 @@ test('o progresso é informado enquanto o espelho entrega', async () => {
   });
   assert.deepEqual(avisos, [[CONTEUDO.length, CONTEUDO.length]]);
 });
+
+/** Armazenamento de partes em memória, para a retomada ser exercitável. */
+function armazenamento(inicial = null) {
+  const guardado = inicial ? new Map([[inicial.sha256, inicial.bytes]]) : new Map();
+  const chamadas = [];
+  return {
+    guardado,
+    chamadas,
+    store: {
+      read: async (sha, total) => {
+        chamadas.push(`read:${sha.slice(0, 6)}`);
+        const bytes = guardado.get(sha);
+        return bytes ? { sha256: sha, bytes: bytes.byteLength, totalBytes: total } : null;
+      },
+      readBytes: async (sha, esperados) => {
+        const bytes = guardado.get(sha);
+        return bytes && bytes.byteLength === esperados ? bytes : null;
+      },
+      write: async (sha, bytes) => { chamadas.push('write'); guardado.set(sha, bytes); },
+      delete: async (sha) => { chamadas.push('delete'); guardado.delete(sha); },
+    },
+  };
+}
+
+/** Origem que honra `Range`, como o R2 faz. */
+function origemComFaixa({ arquivo = CONTEUDO, ignoraFaixa = false } = {}) {
+  const pedidos = [];
+  return {
+    pedidos,
+    fetchImpl: async (url, init) => {
+      pedidos.push({ url: String(url), range: init?.headers?.Range ?? null });
+      if (String(url).includes('mirror.json')) return { ok: true, text: async () => manifesto() };
+      const faixa = init?.headers?.Range;
+      if (!faixa || ignoraFaixa) {
+        return { ok: true, status: 200, headers: { get: () => null }, body: corpo(arquivo) };
+      }
+      const de = Number(/bytes=(\d+)-/.exec(faixa)[1]);
+      return {
+        ok: true,
+        status: 206,
+        headers: { get: (n) => (n.toLowerCase() === 'content-range' ? `bytes ${de}-${arquivo.length - 1}/${arquivo.length}` : null) },
+        body: corpo(arquivo.subarray(de)),
+      };
+    },
+  };
+}
+
+test('um download interrompido continua de onde parou', async () => {
+  // O caso que a retomada existe para socorrer: 40 dos 64 bytes já estavam
+  // neste aparelho, e a origem só precisa mandar os 24 que faltam.
+  resetMirrorCache();
+  const { store } = armazenamento({ sha256: HASH, bytes: CONTEUDO.subarray(0, 40) });
+  const { fetchImpl, pedidos } = origemComFaixa();
+  globalThis.fetch = fetchImpl;
+  const retomadas = [];
+  const r = await fetchFromMirror('DNBR2024.dbc', sha256, {
+    fetchImpl, partials: store, onResume: (de, total) => retomadas.push([de, total]),
+  });
+  assert.ok(r, 'a retomada não entregou o arquivo');
+  assert.deepEqual(r.bytes, CONTEUDO, 'o arquivo montado difere do original');
+  assert.deepEqual(retomadas, [[40, 64]]);
+  assert.equal(pedidos.at(-1).range, 'bytes=40-');
+});
+
+test('a origem que ignora a faixa não produz um arquivo do dobro do tamanho', async () => {
+  // Somar o guardado a uma resposta 200 daria 104 bytes de um arquivo de 64,
+  // e o hash denunciaria — mas tarde, depois de baixar tudo de novo.
+  resetMirrorCache();
+  const { store } = armazenamento({ sha256: HASH, bytes: CONTEUDO.subarray(0, 40) });
+  const { fetchImpl } = origemComFaixa({ ignoraFaixa: true });
+  globalThis.fetch = fetchImpl;
+  const r = await fetchFromMirror('DNBR2024.dbc', sha256, { fetchImpl, partials: store });
+  assert.ok(r);
+  assert.deepEqual(r.bytes, CONTEUDO);
+});
+
+test('a parte guardada é apagada quando o arquivo completa', async () => {
+  // Sem isto o espaço cresce para sempre, e num celular apertado isso é a
+  // diferença entre o aplicativo servir e atrapalhar.
+  resetMirrorCache();
+  const { store, guardado } = armazenamento({ sha256: HASH, bytes: CONTEUDO.subarray(0, 40) });
+  const { fetchImpl } = origemComFaixa();
+  globalThis.fetch = fetchImpl;
+  await fetchFromMirror('DNBR2024.dbc', sha256, { fetchImpl, partials: store });
+  assert.equal(guardado.size, 0);
+});
+
+test('parte que leva a hash errado é apagada, para o erro não se repetir', async () => {
+  resetMirrorCache();
+  const { store, guardado } = armazenamento({ sha256: HASH, bytes: new Uint8Array(40).fill(7) });
+  const { fetchImpl } = origemComFaixa();
+  globalThis.fetch = fetchImpl;
+  assert.equal(await fetchFromMirror('DNBR2024.dbc', sha256, { fetchImpl, partials: store }), null);
+  assert.equal(guardado.size, 0, 'a parte ruim ficou guardada e envenenaria a próxima tentativa');
+});
+
+test('sem parte guardada, nada muda: nenhum Range é pedido', async () => {
+  resetMirrorCache();
+  const { store } = armazenamento();
+  const { fetchImpl, pedidos } = origemComFaixa();
+  globalThis.fetch = fetchImpl;
+  const r = await fetchFromMirror('DNBR2024.dbc', sha256, { fetchImpl, partials: store });
+  assert.ok(r);
+  assert.equal(pedidos.at(-1).range, null);
+});
+
+test('um navegador sem OPFS baixa igual, pelo mesmo caminho', async () => {
+  // O armazenamento vazio é o padrão em navegador sem suporte; ele não pode
+  // virar um desvio de código que ninguém testa.
+  resetMirrorCache();
+  const { NO_PARTIAL_STORE } = await import('../dist/packages/acquisition/src/partial-download.js');
+  const { fetchImpl } = origemComFaixa();
+  globalThis.fetch = fetchImpl;
+  const r = await fetchFromMirror('DNBR2024.dbc', sha256, { fetchImpl, partials: NO_PARTIAL_STORE });
+  assert.ok(r);
+  assert.deepEqual(r.bytes, CONTEUDO);
+});
