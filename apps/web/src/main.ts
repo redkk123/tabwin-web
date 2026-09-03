@@ -2578,6 +2578,47 @@ function updateDatasetStats(): void {
   datasetStats.hidden = false;
 }
 
+/**
+ * Zera tudo o que pertencia ao arquivo anterior.
+ *
+ * Existia em triplicata — em `decodeDbf`, `decodeDelimitedFile` e
+ * `openPortableTable` — e as três cópias divergiram. O caminho do DBC zerava
+ * o estado do mapa e do recorte geográfico; os do CSV e da tabela salva não.
+ * Na prática: abrir um DBC de óbitos, olhar o mapa, e então abrir um CSV
+ * deixava o painel "Onde" listando os municípios do arquivo ANTERIOR, e o
+ * mapa podia pintar os números dele.
+ *
+ * Uma função só não é arrumação: é o que impede a próxima variável de estado
+ * de nascer zerada em dois dos três caminhos.
+ */
+function resetAnalysisState(): void {
+  configuredFilters = [];
+  configuredCrossFieldRules = [];
+  extraMeasures = [];
+  lastInvestigateResult = null;
+  dismissedInvestigateSignalIds.clear();
+  transformSteps = [];
+  appliedTransformSteps = [];
+  transformRecodeRows = [{ from: '', to: '' }];
+  transformGroupAggRows = [{ kind: 'count', field: '', as: 'N' }];
+  transformBindSource = null;
+  transformJoinSource = null;
+  // A geografia é do arquivo: guardá-la entre arquivos mostraria o mapa de um
+  // com os números do outro.
+  mapResult = null;
+  mapGeoField = null;
+  mapUfFilter = '';
+  mapGeoFieldChoice = '';
+  geoSelection = { states: [], municipalities: [] };
+  geoPicker = null;
+  geoFilter.hidden = true;
+  // Esconder não basta: a lista do arquivo anterior continuava no documento,
+  // pronta para reaparecer se qualquer coisa mostrasse o painel sem
+  // reconstruí-lo. Estado escondido é estado esperando para enganar alguém.
+  geoFilterList.replaceChildren();
+  geoFilterSearch.value = '';
+}
+
 async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: LoadedSource): Promise<void> {
   // A fase que o R chama de `read.dbc`: descompressão do DBC mais leitura do
   // DBF. É a única do caminho que compara diretamente com outra ferramenta.
@@ -2595,30 +2636,11 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   currentDatasetFile = file;
   currentCompatibilityProfile = 'tabwin-4.15';
   sourceDbfButton.disabled = false;
-  configuredFilters = [];
-  // A geografia é do arquivo: guardá-la entre arquivos mostraria o mapa de um
-  // com os números do outro.
-  mapResult = null;
-  mapGeoField = null;
-  mapUfFilter = '';
-  geoSelection = { states: [], municipalities: [] };
-  geoPicker = null;
-  geoFilter.hidden = true;
-  mapGeoFieldChoice = '';
+  resetAnalysisState();
   // Em segundo plano: a leitura pelo campo geográfico custa uma passada, e
   // segurar a abertura do arquivo por causa de um painel lateral trocaria uma
   // comodidade por uma espera que todo mundo paga.
   void refreshGeoFilter();
-  configuredCrossFieldRules = [];
-  extraMeasures = [];
-  lastInvestigateResult = null;
-  dismissedInvestigateSignalIds.clear();
-  transformSteps = [];
-  appliedTransformSteps = [];
-  transformRecodeRows = [{ from: '', to: '' }];
-  transformGroupAggRows = [{ kind: 'count', field: '', as: 'N' }];
-  transformBindSource = null;
-  transformJoinSource = null;
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -3001,14 +3023,7 @@ async function decodeDelimitedFile(bytes: Uint8Array, file: File, source: Loaded
   currentDatasetFile = null;
   currentCompatibilityProfile = 'modern';
   sourceDbfButton.disabled = true;
-  configuredFilters = [];
-  configuredCrossFieldRules = [];
-  extraMeasures = [];
-  lastInvestigateResult = null;
-  dismissedInvestigateSignalIds.clear();
-  transformSteps = [];
-  appliedTransformSteps = [];
-  transformRecodeRows = [{ from: '', to: '' }];
+  resetAnalysisState();
   renderConfiguredFilters();
   renderCrossFieldRules();
   renderExtraMeasures();
@@ -8878,14 +8893,7 @@ async function openPortableTable(file: File): Promise<void> {
   selectedDbfButton.disabled = true;
   microdatasusCsvButton.disabled = true;
   labPackageButton.disabled = true;
-  configuredFilters = [];
-  configuredCrossFieldRules = [];
-  extraMeasures = [];
-  lastInvestigateResult = null;
-  dismissedInvestigateSignalIds.clear();
-  transformSteps = [];
-  appliedTransformSteps = [];
-  transformRecodeRows = [{ from: '', to: '' }];
+  resetAnalysisState();
   renderCrossFieldRules();
   renderExtraMeasures();
   clearCombinationProfile();

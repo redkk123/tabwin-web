@@ -734,3 +734,12 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .geo-municipality span { flex: 1; }
 .geo-municipality small { color: var(--faint); font-variant-numeric: tabular-nums; }
 .geo-municipality input:disabled + span { color: var(--faint); }
+
+/* Alvo de toque mínimo, WCAG 2.2 (2.5.8 Target Size Minimum, nível AA).
+   Medido no celular: "todos"/"todas" do catálogo tinham 44x19 e "Limpar
+   cache" 72x16 — abaixo dos 24x24 exigidos, e justamente no atalho que todo
+   mundo usa para marcar os anos. O texto continua do mesmo tamanho; o que
+   cresce é a área que o dedo precisa acertar. */
+.select-all-button { min-height: 24px; padding-block: 3px; }
+.catalog-recent-actions .text-button,
+#catalog-cache-clear { min-height: 24px; padding-block: 4px; }
