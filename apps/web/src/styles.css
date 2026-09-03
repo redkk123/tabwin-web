@@ -715,3 +715,8 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .tabnet-notas { font-size: 11px; color: var(--faint); margin-top: 10px; }
 .tabnet-notas li { margin-bottom: 3px; }
 .tabnet-erro { font-size: 12px; padding: 8px 11px; border-radius: 5px; background: #f9ebe9; color: #984d46; }
+
+/* Recorte do mapa: Brasil por estado, ou um estado por município. */
+/* O rótulo embrulha o seletor, como os outros controles do mapa. */
+.map-uf-label { display: grid; gap: 3px; }
+#map-uf { max-width: 260px; }

@@ -132,8 +132,9 @@ falta só a interface.
 
 - [ ] Segredo `CLOUDFLARE_API_TOKEN` no GitHub, para o workflow do Worker
       publicar sozinho. **Depende do usuário.**
-- [ ] Drive: 6 duplicatas antigas na pasta `SIDS_R95`; o envio da versão
-      corrigida nunca completou.
+- ~~Drive: 6 duplicatas antigas na pasta `SIDS_R95`.~~ **Decidido em
+  03/09/2026: ficam onde estão.** São sobra de um handoff antigo, não afetam
+  nada do projeto, e limpá-las custaria mais atenção do que vale.
 - [ ] `REMAINING_IMPLEMENTATION_PLAN.md` está defasado (baseline R05.1).
 - [ ] **Python do lab não carrega no celular, e o erro não diz nada.** Visto em
       `tabweb.me/lab/` no Android: o R sobe (webR 0.6.0), o Python fica em

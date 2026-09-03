@@ -98,6 +98,12 @@ import {
 import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
 import { checkIngestBudget } from '../../../packages/analysis/src/duckdb-surface.ts';
 import {
+  belongsToUf,
+  findGeographicFields,
+  ufCodeOf,
+  type GeographicCandidate,
+} from '../../../packages/analysis/src/geographic-fields.ts';
+import {
   exportQuery,
   loadRecordsAsTable,
   quoteIdentifier,
@@ -530,6 +536,8 @@ const chartZoomReset = element<HTMLButtonElement>('#chart-zoom-reset');
 const chartPrintButton = element<HTMLButtonElement>('#chart-print-button');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
+const mapUfSelect = element<HTMLSelectElement>('#map-uf');
+const mapUfLabel = element<HTMLLabelElement>('.map-uf-label');
 const mapClassCount = element<HTMLSelectElement>('#map-class-count');
 const mapManualBreaksLabel = element<HTMLElement>('#map-manual-breaks-label');
 const mapManualBreaks = element<HTMLInputElement>('#map-manual-breaks');
@@ -2570,6 +2578,11 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   currentCompatibilityProfile = 'tabwin-4.15';
   sourceDbfButton.disabled = false;
   configuredFilters = [];
+  // A geografia é do arquivo: guardá-la entre arquivos mostraria o mapa de um
+  // com os números do outro.
+  mapResult = null;
+  mapGeoField = null;
+  mapUfFilter = '';
   configuredCrossFieldRules = [];
   extraMeasures = [];
   lastInvestigateResult = null;
@@ -5816,8 +5829,46 @@ function applyMapSelectionAsFilter(): void {
   }
 }
 
+/**
+ * A moldura do mapa: o Brasil, ou só o estado isolado.
+ *
+ * O arquivo de municípios traz os 5.570 do país, então desenhar sempre pelos
+ * limites dele deixaria um estado isolado como uma mancha pequena no meio do
+ * Brasil. Quando há estado escolhido, a moldura sai das áreas DAQUELE estado.
+ *
+ * Cai de volta nos limites do mapa inteiro se por algum motivo nenhuma área
+ * casar — uma moldura vazia daria divisão por zero na escala.
+ */
+function boundsForDrawnArea(): { west: number; east: number; south: number; north: number } {
+  const inteiro = activeMap!.bounds;
+  if (!mapUfFilter || mapGeoField?.level !== 'municipality') return inteiro;
+
+  let west = Number.POSITIVE_INFINITY;
+  let east = Number.NEGATIVE_INFINITY;
+  let south = Number.POSITIVE_INFINITY;
+  let north = Number.NEGATIVE_INFINITY;
+  for (const objeto of activeMap!.objects) {
+    if (!belongsToUf(objeto.geocode.trim(), mapUfFilter)) continue;
+    for (const ponto of objeto.points) {
+      if (ponto.x < west) west = ponto.x;
+      if (ponto.x > east) east = ponto.x;
+      if (ponto.y < south) south = ponto.y;
+      if (ponto.y > north) north = ponto.y;
+    }
+  }
+  if (!(east > west) || !(north > south)) return inteiro;
+  // Uma folga de 4% evita o estado encostar na borda da tela.
+  const folgaX = (east - west) * 0.04;
+  const folgaY = (north - south) * 0.04;
+  return { west: west - folgaX, east: east + folgaX, south: south - folgaY, north: north + folgaY };
+}
+
 function renderMap(): void {
   if (!activeMap || !currentResult) return;
+  // O que o mapa pinta é o resultado DELE, que só coincide com o da tela
+  // quando a variável de linha por acaso é geográfica.
+  const desenhavel = mapDrawableResult();
+  if (!desenhavel) return;
   const parent = mapCanvas.parentElement;
   if (!parent) return;
   const cssWidth = Math.max(parent.clientWidth, 320);
@@ -5830,7 +5881,10 @@ function renderMap(): void {
   context.scale(scale, scale);
   context.clearRect(0, 0, cssWidth, cssHeight);
 
-  const { west, east, south, north } = activeMap.bounds;
+  // Isolar um estado é enquadrar nele, não pintá-lo dentro do Brasil inteiro.
+  // Sem isto o Pará aparecia como uma mancha verde num mapa nacional, que é
+  // exatamente o que a pessoa pediu para não ver.
+  const { west, east, south, north } = boundsForDrawnArea();
   const sourceWidth = east - west;
   const sourceHeight = north - south;
   const padding = 18;
@@ -5847,8 +5901,8 @@ function renderMap(): void {
   });
 
   const values = new Map<string, number>();
-  currentResult.rows.forEach((row, index) => {
-    const value = cellValue(currentResult!, index);
+  desenhavel.rows.forEach((row, index) => {
+    const value = cellValue(desenhavel, index);
     values.set(row.key.trim().toLowerCase(), value);
     values.set(normalizeLabel(row.label), value);
   });
@@ -6000,10 +6054,24 @@ function renderMap(): void {
     context.restore();
   }
 
-  mapMessage.hidden = matched > 0;
-  mapMessage.textContent = matched > 0
-    ? ''
-    : `O mapa foi aberto, mas nenhum código ou nome coincide com as ${integerFormat.format(currentResult.rows.length)} linhas atuais.`;
+  // O mapa deixou de seguir a tabela, então ele precisa dizer o que mostra.
+  // Sem isto a pessoa vê um mapa de óbitos por município ao lado de uma tabela
+  // por sexo e não tem como saber que são recortes diferentes do mesmo
+  // arquivo — ou pior, acha que a tabela virou o mapa.
+  mapMessage.hidden = false;
+  if (matched > 0) {
+    mapMessage.textContent = mapGeoField
+      ? `Mapa por ${mapGeoField.reason} (${mapGeoField.field})`
+        + `${mapUfFilter ? `, em ${ufNameForCode(mapUfFilter)}` : ', por estado'}`
+        + ` · ${integerFormat.format(matched)} áreas com dado. A tabela ao lado continua como você a montou.`
+      : '';
+    mapMessage.hidden = !mapGeoField;
+  } else {
+    // O número tem que ser o das linhas que o MAPA tentou casar, não o da
+    // tabela da tela: são coisas diferentes desde que o mapa ficou autônomo.
+    mapMessage.textContent = 'O mapa foi aberto, mas nenhum código ou nome coincide com as '
+      + `${integerFormat.format(desenhavel.rows.length)} linhas atuais.`;
+  }
   mapLegend.hidden = false;
   mapLegend.replaceChildren();
   const title = document.createElement('strong');
@@ -6039,17 +6107,212 @@ function renderMap(): void {
   renderAudit();
 }
 
+/**
+ * A tabulação que o MAPA desenha, que não é necessariamente a da tela.
+ *
+ * Separar as duas é o ponto inteiro: a pessoa tabulou por sexo e continua
+ * vendo sexo na aba Tabela; o mapa vai buscar o campo geográfico por conta
+ * própria e desenha o que ele sabe desenhar, sem reconfigurar nada do que ela
+ * pediu.
+ */
+let mapResult: TabulationResult | null = null;
+let mapGeoField: GeographicCandidate | null = null;
+/** UF isolada no mapa. Vazio quer dizer o Brasil inteiro, por estado. */
+let mapUfFilter = '';
+
+/**
+ * Tabula pelo campo geográfico do arquivo, sem tocar na tabela da tela.
+ *
+ * Devolve `null` quando não há campo geográfico — e aí a mensagem antiga
+ * continua valendo, porque nesse caso não há mesmo o que mapear.
+ */
+async function tabulateForMap(): Promise<TabulationResult | null> {
+  if (!dbfHeader) return null;
+  const candidatos = findGeographicFields(dbfHeader.fields);
+  const escolhido = candidatos[0];
+  if (!escolhido) return null;
+
+  // Os filtros da pessoa continuam valendo: o mapa mostra o mesmo recorte da
+  // análise, só que por geografia. Ignorá-los daria um mapa que contradiz a
+  // tabela ao lado.
+  const plan = compileQueryPlan({
+    compatibilityProfile: currentCompatibilityProfile,
+    rows: { field: escolhido.field },
+    measure: { kind: 'count' as const },
+    filters: configuredFilters.map(cloneFilter),
+    ...(configuredCrossFieldRules.length
+      ? { crossFieldRules: configuredCrossFieldRules.map(cloneCrossFieldRule) }
+      : {}),
+    suppressZeroRows: false,
+    suppressZeroColumns: false,
+  });
+  const { result } = await askDataset<{ result: TabulationResult; cached: boolean }>(
+    { type: 'tabulate', plan, conversions: conversionsForPlan(plan) },
+    {
+      label: 'Mapa',
+      // O progresso vai para a área do MAPA, não para o título do resultado.
+      // `datasetProgress` escreve no título, e usá-lo aqui apagava o nome da
+      // tabulação que a pessoa montou — o mapa passava por cima da análise
+      // dela para contar do próprio progresso.
+      progress: (lidos, total) => {
+        mapMessage.hidden = false;
+        mapMessage.textContent = total
+          ? `Lendo a geografia por ${escolhido.field}: ${integerFormat.format(lidos)}`
+            + ` de ${integerFormat.format(total)} registros…`
+          : `Lendo a geografia por ${escolhido.field}: ${integerFormat.format(lidos)} registros…`;
+      },
+    },
+  );
+  mapGeoField = escolhido;
+  return result;
+}
+
+/**
+ * Soma as linhas por UF, para o mapa nacional.
+ *
+ * O código do IBGE começa pelos dois dígitos da UF, então um campo de
+ * município desenha os dois níveis do mapa — nacional por estado, e um estado
+ * por município — sem precisar de um segundo campo no arquivo.
+ */
+function aggregateToUf(result: TabulationResult): TabulationResult {
+  const somas = new Map<string, number>();
+  result.rows.forEach((row, index) => {
+    const uf = ufCodeOf(row.key);
+    if (!uf) return;
+    somas.set(uf, (somas.get(uf) ?? 0) + cellValue(result, index));
+  });
+  const ordenadas = [...somas.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  return {
+    ...result,
+    rows: ordenadas.map(([uf]) => ({ key: uf, label: uf, source: 'derived' as const })),
+    columns: [{ key: 'total', label: 'Frequência', source: 'derived' as const }],
+    cells: ordenadas.map(([, total]) => [total]),
+  };
+}
+
+/** Só as linhas da UF isolada, para o mapa municipal. */
+function onlyUf(result: TabulationResult, uf: string): TabulationResult {
+  // rows e cells andam em paralelo: filtrar um sem o outro trocaria os valores
+  // de lugar, e o mapa pintaria cada município com o número do vizinho.
+  const mantidos = result.rows
+    .map((row, index) => ({ row, index }))
+    .filter(({ row }) => belongsToUf(row.key, uf));
+  return {
+    ...result,
+    rows: mantidos.map(({ row }) => row),
+    cells: mantidos.map(({ index }) => result.cells[index] ?? []),
+  };
+}
+
+/**
+ * Preenche o seletor de recorte com os estados que ESTE arquivo tem.
+ *
+ * Listar as 27 sempre ofereceria estados sem um único registro, e escolher um
+ * deles daria um mapa em branco que parece defeito. A lista sai dos dados.
+ */
+function renderMapUfOptions(): void {
+  const podeDescer = Boolean(mapResult) && mapGeoField?.level === 'municipality';
+  mapUfSelect.hidden = !podeDescer;
+  mapUfLabel.hidden = !podeDescer;
+  if (!podeDescer || !mapResult) return;
+
+  const presentes = new Map<string, number>();
+  mapResult.rows.forEach((row, index) => {
+    const uf = ufCodeOf(row.key);
+    if (uf) presentes.set(uf, (presentes.get(uf) ?? 0) + cellValue(mapResult!, index));
+  });
+
+  const anterior = mapUfSelect.value;
+  mapUfSelect.replaceChildren();
+  const brasil = document.createElement('option');
+  brasil.value = '';
+  brasil.textContent = `Brasil · ${presentes.size} estado(s), por estado`;
+  mapUfSelect.append(brasil);
+  for (const [uf, total] of [...presentes.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const opcao = document.createElement('option');
+    opcao.value = uf;
+    opcao.textContent = `${ufNameForCode(uf)} · ${integerFormat.format(total)} por município`;
+    mapUfSelect.append(opcao);
+  }
+  mapUfSelect.value = presentes.has(anterior) ? anterior : '';
+  mapUfFilter = mapUfSelect.value;
+}
+
+/** Sigla do estado a partir do código, lida do mapa incluído de UF. */
+const UF_POR_CODIGO: Readonly<Record<string, string>> = Object.freeze({
+  11: 'Rondônia', 12: 'Acre', 13: 'Amazonas', 14: 'Roraima', 15: 'Pará',
+  16: 'Amapá', 17: 'Tocantins', 21: 'Maranhão', 22: 'Piauí', 23: 'Ceará',
+  24: 'Rio Grande do Norte', 25: 'Paraíba', 26: 'Pernambuco', 27: 'Alagoas',
+  28: 'Sergipe', 29: 'Bahia', 31: 'Minas Gerais', 32: 'Espírito Santo',
+  33: 'Rio de Janeiro', 35: 'São Paulo', 41: 'Paraná', 42: 'Santa Catarina',
+  43: 'Rio Grande do Sul', 50: 'Mato Grosso do Sul', 51: 'Mato Grosso',
+  52: 'Goiás', 53: 'Distrito Federal',
+});
+
+function ufNameForCode(code: string): string {
+  return UF_POR_CODIGO[code] ?? `UF ${code}`;
+}
+
+/** O que o mapa desenha agora: nacional por estado, ou um estado por município. */
+function mapDrawableResult(): TabulationResult | null {
+  const base = mapResult;
+  if (!base) return currentResult;
+  if (mapGeoField?.level === 'uf') return base;
+  return mapUfFilter ? onlyUf(base, mapUfFilter) : aggregateToUf(base);
+}
+
 async function ensureMap(): Promise<void> {
   if (!currentResult) return;
-  if (activeMap) {
+
+  // A variável de linha da tela ainda serve, quando por acaso é geográfica:
+  // aí o mapa desenha exatamente a tabela que a pessoa montou, com as
+  // conversões dela, que é melhor do que refazer por fora.
+  const field = rowField.value.toUpperCase();
+  const daTela = field.includes('MUNIC')
+    ? 'br_municip.MAP'
+    : /(^|_)UF($|_)|ESTADO/.test(field) ? 'br_ufsigla.MAP' : '';
+  if (daTela) {
+    mapResult = null;
+    mapGeoField = null;
+  } else if (!mapResult) {
+    // Não é: o mapa vai atrás do campo geográfico sozinho. Antes disto, a aba
+    // pedia à pessoa que reconfigurasse a análise só para ver um mapa.
+    mapMessage.hidden = false;
+    mapMessage.textContent = 'Procurando a geografia neste arquivo…';
+    try {
+      mapResult = await tabulateForMap();
+    } catch (error) {
+      mapMessage.textContent = `Não deu para montar o mapa: ${error instanceof Error ? error.message : String(error)}`;
+      return;
+    }
+    if (!mapResult) {
+      mapMessage.textContent = 'Este arquivo não tem campo de município nem de UF, '
+        + 'então não há o que mapear. Abra um arquivo MAP do TabWin se a geografia estiver em outro campo.';
+      mapLegend.hidden = true;
+      mapPngButton.disabled = true;
+      return;
+    }
+  }
+
+  renderMapUfOptions();
+  // Município sem estado isolado vira mapa nacional por UF; com estado
+  // isolado, o mapa daquele estado.
+  const bundled = daTela || (mapGeoField?.level === 'uf' || !mapUfFilter
+    ? 'br_ufsigla.MAP'
+    : 'br_municip.MAP');
+
+  if (activeMap && activeMapSource === `incluído: ${bundled}`) {
     renderTable(currentResult);
     if (currentView === 'map') renderMap();
     return;
   }
-  const field = rowField.value.toUpperCase();
-  const bundled = field.includes('MUNIC')
-    ? 'br_municip.MAP'
-    : /(^|_)UF($|_)|ESTADO/.test(field) ? 'br_ufsigla.MAP' : '';
+  if (activeMap && !activeMapSource.startsWith('incluído:')) {
+    // Mapa que a pessoa abriu à mão manda: trocá-lo por um incluído seria
+    // desfazer uma escolha explícita dela.
+    renderTable(currentResult);
+    if (currentView === 'map') renderMap();
+    return;
+  }
   if (!bundled) {
     mapMessage.hidden = false;
     mapMessage.textContent = 'Escolha uma variável de município ou UF, ou abra um arquivo MAP do TabWin.';
@@ -9199,6 +9462,20 @@ for (const control of [mapClassification, mapClassCount, mapPalette]) {
     if (activeMap && currentResult) renderMap();
   });
 }
+// Trocar de recorte troca de MAPA — Brasil por estado usa um arquivo, um
+// estado por município usa outro. Por isso passa pelo `ensureMap`, e não
+// direto pelo `renderMap`: este último desenharia os municípios em cima do
+// contorno dos estados.
+mapUfSelect.addEventListener('change', () => {
+  mapUfFilter = mapUfSelect.value;
+  // O zoom e o deslocamento eram do mapa anterior; mantê-los deixaria a
+  // pessoa olhando para o lugar errado do mapa novo.
+  mapZoom = 1;
+  mapPanX = 0;
+  mapPanY = 0;
+  activeMap = null;
+  void ensureMap();
+});
 mapManualBreaks.addEventListener('input', () => {
   if (activeMap && currentResult && mapClassification.value === 'manual') renderMap();
 });
