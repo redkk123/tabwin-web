@@ -124,6 +124,13 @@ import { describeRecognition, recognizeArchive } from '../../../packages/acquisi
 import { fetchFromMirror } from './mirror-client.ts';
 import { fetchTabnetPreview, tabnetPreviewAvailable } from './tabnet-client.ts';
 import {
+  buildPicker,
+  codesForSelection,
+  describeSelection,
+  renderPicker,
+  type GeoSelection,
+} from './geo-filter.ts';
+import {
   createWorklist,
   describeWorklistPlan,
   parseWorklist,
@@ -537,6 +544,13 @@ const chartPrintButton = element<HTMLButtonElement>('#chart-print-button');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
 const mapUfSelect = element<HTMLSelectElement>('#map-uf');
+const geoFilter = element<HTMLDetailsElement>('#geo-filter');
+const geoFilterCount = element<HTMLElement>('#geo-filter-count');
+const geoFilterInfo = element<HTMLElement>('#geo-filter-info');
+const geoFilterSearch = element<HTMLInputElement>('#geo-filter-search');
+const geoFilterList = element<HTMLElement>('#geo-filter-list');
+const geoFilterClear = element<HTMLButtonElement>('#geo-filter-clear');
+const geoFilterApply = element<HTMLButtonElement>('#geo-filter-apply');
 const mapUfLabel = element<HTMLLabelElement>('.map-uf-label');
 const mapClassCount = element<HTMLSelectElement>('#map-class-count');
 const mapManualBreaksLabel = element<HTMLElement>('#map-manual-breaks-label');
@@ -2583,6 +2597,13 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   mapResult = null;
   mapGeoField = null;
   mapUfFilter = '';
+  geoSelection = { states: [], municipalities: [] };
+  geoPicker = null;
+  geoFilter.hidden = true;
+  // Em segundo plano: a leitura pelo campo geográfico custa uma passada, e
+  // segurar a abertura do arquivo por causa de um painel lateral trocaria uma
+  // comodidade por uma espera que todo mundo paga.
+  void refreshGeoFilter();
   configuredCrossFieldRules = [];
   extraMeasures = [];
   lastInvestigateResult = null;
@@ -6142,6 +6163,112 @@ let mapUfFilter = '';
  * Devolve `null` quando não há campo geográfico — e aí a mensagem antiga
  * continua valendo, porque nesse caso não há mesmo o que mapear.
  */
+/**
+ * O recorte geográfico: estado e município por NOME, não por código.
+ *
+ * Ele reaproveita a mesma tabulação que o mapa faz — uma leitura do arquivo
+ * pelo campo geográfico — em vez de pedir outra. Ler 2,4 milhões de registros
+ * duas vezes para responder à mesma pergunta seria cobrar do usuário o preço
+ * de uma comodidade nossa.
+ */
+let geoPicker: Awaited<ReturnType<typeof buildPicker>> = null;
+let geoSelection: GeoSelection = { states: [], municipalities: [] };
+
+/**
+ * Monta (ou esconde) o painel de recorte a partir do arquivo aberto.
+ *
+ * Só aparece quando há geografia: num arquivo sem município nem UF, um painel
+ * "Onde" vazio seria uma promessa que o dado não cumpre.
+ */
+async function refreshGeoFilter(): Promise<void> {
+  if (!dbfHeader) {
+    geoFilter.hidden = true;
+    geoPicker = null;
+    return;
+  }
+  const contagens = await geoCounts();
+  if (!contagens) {
+    geoFilter.hidden = true;
+    geoPicker = null;
+    return;
+  }
+  geoPicker = await buildPicker(contagens);
+  geoFilter.hidden = !geoPicker;
+  if (!geoPicker) return;
+
+  // Registros em código que nenhum município conhecido reconhece existem em
+  // arquivo do DATASUS — código extinto, exterior, ignorado. Declarar quantos
+  // são é o que impede a soma do recorte de não fechar com a da tabela sem
+  // ninguém entender por quê.
+  geoFilterInfo.textContent = geoPicker.unknownCount > 0
+    ? `${integerFormat.format(geoPicker.unknownCount)} registro(s) em código de município não reconhecido `
+      + 'ficam de fora de qualquer recorte daqui.'
+    : '';
+  geoFilterInfo.hidden = geoPicker.unknownCount === 0;
+  renderGeoList();
+}
+
+/** Contagem por código geográfico, vinda da mesma leitura que alimenta o mapa. */
+async function geoCounts(): Promise<Map<string, number> | null> {
+  if (!mapResult || mapResultSignature !== mapInputSignature()) {
+    const novo = await tabulateForMap();
+    if (!novo) return null;
+    mapResult = novo;
+    mapResultSignature = mapInputSignature();
+  }
+  if (mapGeoField?.level !== 'municipality') return null;
+  const contagens = new Map<string, number>();
+  mapResult.rows.forEach((row, index) => {
+    contagens.set(row.key.trim(), cellValue(mapResult!, index));
+  });
+  return contagens;
+}
+
+function renderGeoList(): void {
+  if (!geoPicker) return;
+  renderPicker(geoFilterList, geoPicker, geoSelection, geoFilterSearch.value, () => {
+    // Redesenha porque marcar um estado inteiro trava e marca os municípios
+    // dele; sem redesenhar, a tela contradiria a escolha guardada.
+    renderGeoList();
+    atualizarResumoGeo();
+  });
+  atualizarResumoGeo();
+}
+
+function atualizarResumoGeo(): void {
+  if (!geoPicker) return;
+  const escolheu = geoSelection.states.length > 0 || geoSelection.municipalities.length > 0;
+  geoFilterCount.textContent = describeSelection(geoPicker, geoSelection);
+  geoFilterApply.disabled = !escolheu;
+}
+
+/**
+ * Aplica o recorte como um filtro comum sobre o campo geográfico.
+ *
+ * Não é um caminho paralelo de execução: sai daqui o mesmo filtro de
+ * categorias que a pessoa poderia ter montado à mão, só que com os códigos
+ * certos. Isso mantém uma implementação só para o motor, e faz o recorte
+ * aparecer na procedência como qualquer outro filtro.
+ */
+function applyGeoFilter(): void {
+  if (!geoPicker || !mapGeoField) return;
+  const codigos = codesForSelection(geoPicker, geoSelection);
+  if (!codigos.length) return;
+
+  // Substitui um recorte anterior em vez de empilhar: dois filtros de
+  // inclusão sobre o mesmo campo se anulam, e a tabela viria vazia.
+  configuredFilters = configuredFilters.filter((filtro) => filtro.field !== mapGeoField!.field);
+  configuredFilters.push({
+    field: mapGeoField.field,
+    kind: 'categories',
+    mode: 'include',
+    acceptedCategories: codigos,
+  });
+  renderConfiguredFilters();
+  updateFilterCount();
+  void runAnalysis();
+}
+
 async function tabulateForMap(): Promise<TabulationResult | null> {
   if (!dbfHeader) return null;
   const candidatos = findGeographicFields(dbfHeader.fields);
@@ -9489,6 +9616,24 @@ for (const control of [mapClassification, mapClassCount, mapPalette]) {
 // estado por município usa outro. Por isso passa pelo `ensureMap`, e não
 // direto pelo `renderMap`: este último desenharia os municípios em cima do
 // contorno dos estados.
+geoFilterSearch.addEventListener('input', () => renderGeoList());
+geoFilterApply.addEventListener('click', () => applyGeoFilter());
+geoFilterClear.addEventListener('click', () => {
+  geoSelection = { states: [], municipalities: [] };
+  // Limpar a escolha também tira o recorte da análise: deixar a tabela
+  // filtrada com o painel dizendo "todo o Brasil" seria mentir na tela.
+  if (mapGeoField) {
+    const antes = configuredFilters.length;
+    configuredFilters = configuredFilters.filter((filtro) => filtro.field !== mapGeoField!.field);
+    if (configuredFilters.length !== antes) {
+      renderConfiguredFilters();
+      updateFilterCount();
+      void runAnalysis();
+    }
+  }
+  renderGeoList();
+});
+
 mapUfSelect.addEventListener('change', () => {
   mapUfFilter = mapUfSelect.value;
   // O zoom e o deslocamento eram do mapa anterior; mantê-los deixaria a

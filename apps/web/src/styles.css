@@ -720,3 +720,17 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 /* O rótulo embrulha o seletor, como os outros controles do mapa. */
 .map-uf-label { display: grid; gap: 3px; }
 #map-uf { max-width: 260px; }
+
+/* Recorte geográfico: estado abre nos municípios dele. */
+.geo-filter .filter-values { max-height: 320px; overflow: auto; }
+.geo-state { border-bottom: 1px solid var(--line); }
+.geo-state > summary { display: flex; align-items: center; gap: 7px; padding: 6px 4px; cursor: pointer; font-size: 12px; }
+.geo-state > summary::-webkit-details-marker { display: none; }
+.geo-state-name { flex: 1; font-weight: 600; color: var(--ink); }
+.geo-state > summary small { color: var(--faint); font-size: 11px; }
+.geo-municipality-list { padding: 2px 0 8px 24px; display: grid; gap: 1px; }
+.geo-municipality { display: flex; align-items: center; gap: 7px; font-size: 12px; padding: 3px 4px; border-radius: 3px; }
+.geo-municipality:hover { background: var(--surface-2); }
+.geo-municipality span { flex: 1; }
+.geo-municipality small { color: var(--faint); font-variant-numeric: tabular-nums; }
+.geo-municipality input:disabled + span { color: var(--faint); }

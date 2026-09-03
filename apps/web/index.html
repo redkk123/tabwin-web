@@ -161,6 +161,21 @@
             <span>Campo para somar</span>
             <select id="measure-field" disabled></select>
           </label>
+          <!-- Recorte geográfico, separado do construtor de filtros de
+               propósito: filtrar por lugar é o primeiro corte que quase todo
+               mundo faz em dado do SUS, e escondê-lo dentro de "Filtros e
+               seleções" — onde ainda seria preciso saber que Belém é 150140 —
+               é o que fazia essa operação simples parecer trabalho de perito. -->
+          <details class="filter-builder geo-filter" id="geo-filter" hidden>
+            <summary>Onde <span id="geo-filter-count">todo o Brasil</span></summary>
+            <div class="filter-info" id="geo-filter-info"></div>
+            <input id="geo-filter-search" class="filter-search" type="search" placeholder="Buscar estado ou município" aria-label="Buscar estado ou município">
+            <div class="filter-values" id="geo-filter-list"></div>
+            <div class="filter-actions">
+              <div><button class="text-button" id="geo-filter-clear" type="button">Limpar</button></div>
+              <button class="secondary-button" id="geo-filter-apply" type="button" disabled>Aplicar recorte</button>
+            </div>
+          </details>
           <details class="filter-builder">
             <summary>Filtros e seleções <span id="filter-count">nenhum</span></summary>
             <label>
