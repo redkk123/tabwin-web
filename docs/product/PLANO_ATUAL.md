@@ -212,6 +212,29 @@ Ordem por valor sobre esforço, não por ordem de chegada.
       materialização de registro. Ou se reduz o custo por registro no leitor,
       ou se evita a passada — e evitá-la sem construir dicionário é o que ainda
       não tem resposta.
+- [ ] **O mapa se monta sozinho, e desce até o município.** Hoje o mapa só
+      aparece se a variável de LINHA por acaso for de UF ou município — o
+      código casa o nome do campo contra `MUNIC`, `UF` e `ESTADO`
+      (`main.ts`, em `ensureMap`). Quem tabulou por sexo abre a aba Mapa e lê
+      "escolha uma variável de município ou UF", que é o aplicativo pedindo
+      para a pessoa fazer o que ele mesmo poderia fazer.
+
+      O que muda: **na aba Mapa, e só nela**, o aplicativo procura sozinho um
+      campo geográfico no arquivo aberto e desenha o mapa por conta própria,
+      sem exigir que a tabulação da tela seja aquela. A tabela que a pessoa
+      montou continua intacta; o mapa é uma leitura à parte, não uma
+      reconfiguração do que ela pediu.
+
+      E com profundidade: se o arquivo tem as 27 unidades da federação, mostra
+      as 27; se tem município, deixa descer até ele. A pessoa isola um estado e
+      vê os municípios daquele estado. Os dois mapas necessários já estão
+      incluídos (`apps/web/public/maps/br_ufsigla.MAP` e `br_municip.MAP`), e
+      o filtro por UF/município deve valer de cara, sem passar pelo painel de
+      filtros.
+
+      Pedido do usuário em 03/09/2026, com a ressalva de que vale **só para o
+      mapa** — não para as outras abas.
+
 - [ ] **Partes retomáveis em OPFS**, para conexão de celular que cai no meio.
       Menos urgente depois do conserto do Worker, mas ainda é o que protege
       quem está no 4G num arquivo de 108 MB.
