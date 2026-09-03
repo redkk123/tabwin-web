@@ -546,6 +546,7 @@ const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
 const mapUfSelect = element<HTMLSelectElement>('#map-uf');
 const mapValueColumn = element<HTMLSelectElement>('#map-value-column');
+const mapGeoFieldSelect = element<HTMLSelectElement>('#map-geo-field');
 const geoFilter = element<HTMLDetailsElement>('#geo-filter');
 const geoFilterCount = element<HTMLElement>('#geo-filter-count');
 const geoFilterInfo = element<HTMLElement>('#geo-filter-info');
@@ -2602,6 +2603,7 @@ async function decodeDbf(bytes: Uint8Array, file: File, isDbc: boolean, source: 
   geoSelection = { states: [], municipalities: [] };
   geoPicker = null;
   geoFilter.hidden = true;
+  mapGeoFieldChoice = '';
   // Em segundo plano: a leitura pelo campo geográfico custa uma passada, e
   // segurar a abertura do arquivo por causa de um painel lateral trocaria uma
   // comodidade por uma espera que todo mundo paga.
@@ -6318,11 +6320,54 @@ function applyGeoFilter(): void {
   void runAnalysis();
 }
 
+/** Campo geográfico que a pessoa escolheu. Vazio quer dizer "o padrão". */
+let mapGeoFieldChoice = '';
+
+/**
+ * Oferece os campos geográficos do arquivo, com o que cada um significa.
+ *
+ * Some quando há um só: escolher entre uma opção é ruído. Aparece quando há
+ * dois ou mais, que é o caso comum no SIM e no SINASC — residência e
+ * ocorrência convivem em quase todo arquivo.
+ */
+function renderGeoFieldOptions(candidatos: readonly GeographicCandidate[], escolhido: string): void {
+  const varios = candidatos.length > 1;
+  const rotulo = mapGeoFieldSelect.closest('label');
+  mapGeoFieldSelect.hidden = !varios;
+  if (rotulo) (rotulo as HTMLElement).hidden = !varios;
+  if (!varios) {
+    mapGeoFieldSelect.replaceChildren();
+    return;
+  }
+  const chaves = candidatos.map((c) => c.field).join('|');
+  // Só refaz quando os campos mudam; refazer a cada desenho tiraria o foco do
+  // teclado no meio de uma escolha.
+  if (mapGeoFieldSelect.dataset.chaves !== chaves) {
+    mapGeoFieldSelect.dataset.chaves = chaves;
+    mapGeoFieldSelect.replaceChildren();
+    for (const candidato of candidatos) {
+      const opcao = document.createElement('option');
+      opcao.value = candidato.field;
+      // O nome técnico junto do significado: quem conhece o arquivo procura
+      // CODMUNOCOR, quem não conhece procura "ocorrência".
+      opcao.textContent = `${candidato.reason} · ${candidato.field}`;
+      mapGeoFieldSelect.append(opcao);
+    }
+  }
+  mapGeoFieldSelect.value = escolhido;
+}
+
 async function tabulateForMap(): Promise<TabulationResult | null> {
   if (!dbfHeader) return null;
   const candidatos = findGeographicFields(dbfHeader.fields);
-  const escolhido = candidatos[0];
+  // O primeiro é o padrão — residência —, mas a pessoa manda. A diferença não
+  // é de gosto: óbito por município de RESIDÊNCIA mostra onde as famílias
+  // moram; por município de OCORRÊNCIA mostra onde ficam as maternidades e os
+  // hospitais de referência. Quem estuda rede de atenção quer o segundo, e até
+  // agora não tinha como pedir.
+  const escolhido = candidatos.find((c) => c.field === mapGeoFieldChoice) ?? candidatos[0];
   if (!escolhido) return null;
+  renderGeoFieldOptions(candidatos, escolhido.field);
 
   // Os filtros da pessoa continuam valendo: o mapa mostra o mesmo recorte da
   // análise, só que por geografia. Ignorá-los daria um mapa que contradiz a
@@ -9712,6 +9757,17 @@ geoFilterClear.addEventListener('click', () => {
     }
   }
   renderGeoList();
+});
+
+mapGeoFieldSelect.addEventListener('change', () => {
+  mapGeoFieldChoice = mapGeoFieldSelect.value;
+  // Campo novo é dado novo: a leitura anterior respondia por outro lugar, e
+  // aproveitá-la pintaria o mapa de residência com o rótulo de ocorrência.
+  mapResult = null;
+  mapUfFilter = '';
+  activeMap = null;
+  geoSelection = { states: [], municipalities: [] };
+  void ensureMap().then(() => refreshGeoFilter());
 });
 
 mapValueColumn.addEventListener('change', () => {
