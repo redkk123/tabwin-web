@@ -214,28 +214,58 @@ Ordem por valor sobre esforço, não por ordem de chegada.
       materialização de registro. Ou se reduz o custo por registro no leitor,
       ou se evita a passada — e evitá-la sem construir dicionário é o que ainda
       não tem resposta.
-- [ ] **O mapa se monta sozinho, e desce até o município.** Hoje o mapa só
-      aparece se a variável de LINHA por acaso for de UF ou município — o
-      código casa o nome do campo contra `MUNIC`, `UF` e `ESTADO`
-      (`main.ts`, em `ensureMap`). Quem tabulou por sexo abre a aba Mapa e lê
-      "escolha uma variável de município ou UF", que é o aplicativo pedindo
-      para a pessoa fazer o que ele mesmo poderia fazer.
+- [ ] **Filtro geográfico pronto, por nome, em cascata.** Hoje filtrar por
+      município exige saber o código do IBGE: quem quer Belém precisa digitar
+      `150140`. O aplicativo já tem tudo para resolver isso — `findGeographicFields`
+      acha o campo, e os mapas incluídos trazem os nomes (27 UF em
+      `br_ufsigla.MAP`, 5.570 municípios em `br_municip.MAP`, ambos com o
+      código como chave).
 
-      O que muda: **na aba Mapa, e só nela**, o aplicativo procura sozinho um
-      campo geográfico no arquivo aberto e desenha o mapa por conta própria,
-      sem exigir que a tabulação da tela seja aquela. A tabela que a pessoa
-      montou continua intacta; o mapa é uma leitura à parte, não uma
-      reconfiguração do que ela pediu.
+      O que fazer: um filtro que aparece sozinho quando o arquivo tem
+      geografia, listando **estado → município por nome**, com contagem ao
+      lado, e que vale para a análise inteira — tabela, mapa, estatística —
+      não só para o mapa. A pessoa vai escolhendo, sem digitar código.
 
-      E com profundidade: se o arquivo tem as 27 unidades da federação, mostra
-      as 27; se tem município, deixa descer até ele. A pessoa isola um estado e
-      vê os municípios daquele estado. Os dois mapas necessários já estão
-      incluídos (`apps/web/public/maps/br_ufsigla.MAP` e `br_municip.MAP`), e
-      o filtro por UF/município deve valer de cara, sem passar pelo painel de
-      filtros.
+      Dois cuidados que a implementação não pode perder: a lista sai dos
+      **dados**, não das 27 UF fixas, senão oferece estado vazio; e o nome é
+      só rótulo — o filtro guarda o código, porque nome de município repete
+      entre estados.
 
-      Pedido do usuário em 03/09/2026, com a ressalva de que vale **só para o
-      mapa** — não para as outras abas.
+      Pedido do usuário em 03/09/2026.
+
+- [ ] **Escolher qual campo geográfico o mapa usa.** A escolha hoje é
+      automática e privilegia residência, mas `CODMUNRES` e `CODMUNOCOR`
+      respondem perguntas diferentes, e quem estuda rede de atenção quer
+      ocorrência. Os candidatos já são calculados em ordem — falta expor a
+      lista num seletor, ao lado do de recorte. Pequeno.
+
+- [ ] **Desenhar só o estado isolado, como opção.** Hoje o estado isolado é
+      enquadrado mas os vizinhos continuam desenhados em contorno, o que dá
+      contexto e custa 5.570 polígonos. Num celular a versão que desenha só os
+      144 municípios do estado é bem mais leve. O usuário pediu as duas
+      formas; falta o interruptor e a medida que diga quanto pesa cada uma.
+
+- [x] **O mapa se monta sozinho, e desce até o município.** ✅ Feito em
+      03/09/2026. Antes ele só aparecia se a variável de linha por acaso fosse
+      de UF ou município; quem tabulou por sexo lia "escolha uma variável de
+      município ou UF" — o aplicativo pedindo à pessoa que fizesse o que ele já
+      tinha como fazer.
+
+      Verificado com o DOINF23: campo achado `CODMUNRES`, 27 estados no mapa
+      nacional, 136 municípios com dado ao isolar o Pará, e o título da tabela
+      seguiu dizendo `SEXO` o tempo todo — a análise da pessoa não é tocada.
+
+      A descida sai de graça do código do IBGE, cujos dois primeiros dígitos
+      são a UF: um campo só desenha os dois níveis. A escolha entre
+      `CODMUNRES` e `CODMUNOCOR` privilegia residência, que é decisão de
+      domínio — hospital de referência concentra internação de municípios
+      vizinhos inteiros, e mapear ocorrência sem dizer responde outra pergunta.
+
+      Um defeito introduzido no caminho e consertado no mesmo dia: a tabulação
+      do mapa era guardada sem as condições dela, então um filtro novo deixava
+      mapa e tabela discordando em silêncio. O cache passou a depender da
+      assinatura dos filtros. Medido: 27 estados sem filtro, 23 filtrando por
+      sexo.
 
 - [x] **Partes retomáveis em OPFS** ✅, para conexão de celular que cai no meio.
       Verificado no ar em 2026-09-03 com o DNBR2023: 20 MB gravados, conexão
