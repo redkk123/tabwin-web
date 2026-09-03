@@ -97,6 +97,24 @@ no DATASUS. As duas medições mediam este defeito. A lição é olhar
 - [ ] Drive: 6 duplicatas antigas na pasta `SIDS_R95`; o envio da versão
       corrigida nunca completou.
 - [ ] `REMAINING_IMPLEMENTATION_PLAN.md` está defasado (baseline R05.1).
+- [ ] **Python do lab não carrega no celular, e o erro não diz nada.** Visto em
+      `tabweb.me/lab/` no Android: o R sobe (webR 0.6.0), o Python fica em
+      "Falha ao carregar o worker Python". Já medido, para não repetir a
+      investigação: o `pyodide-worker.mjs` é servido (200), ele **sobe sem
+      erro**, e o `import()` do `pyodide.mjs` do jsDelivr funciona a partir de
+      `tabweb.me` — a versão fixada `314.0.6` é mesmo a `latest`. Ou seja, o
+      que falha é o `loadPyodide()` lá dentro, e o suspeito é memória: são
+      ~100 MB de wasm num Chrome de celular com dezenas de abas abertas.
+
+      Duas coisas a fazer, e a segunda vale independentemente da causa:
+      `apps/web/public/lab/src/runtimes/pyodide-worker.mjs` não instala
+      `addEventListener('error')` nem `unhandledrejection`, então tudo que
+      escapa do `await` de `boot()` chega ao adaptador como evento de erro sem
+      mensagem — e o adaptador cai no texto genérico
+      (`pyodide-adapter.js:247`). Envolver o `loadPyodide()` e postar o erro
+      real já transformaria "falhou" em algo acionável. Só depois disso dá para
+      saber se é mesmo memória e dar a ela uma mensagem própria, porque num
+      celular ela é esperada, não é defeito.
 
 ## Bloco 5 — Evolução sugerida na revisão
 
