@@ -17,3 +17,4 @@ export * from './question-parser.js';
 export * from './known-archive.js';
 export * from './worklist.js';
 export * from './tabnet-preview.js';
+export * from './mirror-manifest.js';

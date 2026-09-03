@@ -113,6 +113,7 @@ import {
 import { nextToPrepare } from '../../../packages/acquisition/src/prepare-ahead.ts';
 import { parseQuestion, type QuestionMatch } from '../../../packages/acquisition/src/question-parser.ts';
 import { describeRecognition, recognizeArchive } from '../../../packages/acquisition/src/known-archive.ts';
+import { fetchFromMirror } from './mirror-client.ts';
 import {
   createWorklist,
   describeWorklistPlan,
@@ -6590,6 +6591,31 @@ async function downloadCatalogEntries(
       window.clearInterval(batida);
     }
   };
+
+  // O espelho vem ANTES do preparo, porque é o preparo que ele existe para
+  // matar: ~11 s por arquivo montando um zip que já poderia estar pronto. Um
+  // arquivo só, porque o espelho guarda `.dbc` individuais e um lote combina
+  // pacotes — misturar as duas coisas daria um caminho difícil de auditar.
+  if (!archive && files.length === 1 && files[0]) {
+    const doEspelho = await fetchFromMirror(files[0].name, sha256, {
+      ...(signal ? { signal } : {}),
+      onProgress: (recebidos, total) => {
+        onActivity?.();
+        const pedaco = total
+          ? `${Math.min(100, Math.round(recebidos / total * 100))}% · ${formatBytes(recebidos)} / ${formatBytes(total)}`
+          : formatBytes(recebidos);
+        setCatalogStatus(`Baixando ${files[0]?.name} do espelho… ${pedaco}`);
+      },
+    });
+    if (doEspelho) {
+      // O espelho entrega o `.dbc` direto, não o `.zip` do portal. O resto do
+      // fluxo espera um pacote, então ele é embalado aqui — sem recompressão,
+      // porque o DBC já é comprimido por dentro.
+      archive = zipSync({ [files[0].name]: [doEspelho.bytes, { level: 0 }] });
+      temposDoDownload.add('espelho', 0);
+      setCatalogStatus(`${files[0].name} veio do espelho, com hash conferido.`);
+    }
+  }
 
   if (!archive) {
     let prepared = files.length === 1 && files[0]?.preparedUrl && files[0].preparedAt

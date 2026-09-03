@@ -1,0 +1,17 @@
+[
+  {
+    "name": "DNBR2024.dbc",
+    "path": "sinasc/DNBR2024.dbc",
+    "source": "ftp://ftp.datasus.gov.br/dissemin/publicos/SINASC/1996_/Dados/DNRES/DNBR2024.dbc"
+  },
+  {
+    "name": "DNBR2023.dbc",
+    "path": "sinasc/DNBR2023.dbc",
+    "source": "ftp://ftp.datasus.gov.br/dissemin/publicos/SINASC/1996_/Dados/DNRES/DNBR2023.dbc"
+  },
+  {
+    "name": "DOINF23.dbc",
+    "path": "sim/DOINF23.dbc",
+    "source": "ftp://ftp.datasus.gov.br/dissemin/publicos/SIM/CID10/DOFET/DOINF23.dbc"
+  }
+]
