@@ -3,6 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      A promessa deste projeto é que o microdado não sai do aparelho. Até aqui
+      isso se verificava lendo o código; com esta linha, quem impede é o
+      NAVEGADOR, e qualquer pessoa confere em segundos no DevTools.
+
+      `connect-src` governa fetch, XHR, WebSocket e sendBeacon — ou seja, todo
+      caminho por onde bytes poderiam sair. A lista é fechada e cada entrada
+      tem um motivo:
+
+        'self'            os próprios arquivos do site (mirror.json,
+                          geografia.json, os mapas, os workers)
+        …workers.dev      o proxy do DATASUS: catálogo, preparo, download e a
+                          prévia do TabNet. Ele repassa, não guarda
+        …r2.dev           o espelho dos pacotes, conferido por SHA-256
+        datasus.saude.gov.br  o portal oficial, usado direto quando não há
+                          proxy configurado
+        cdn.jsdelivr.net  o motor de consulta (DuckDB), baixado sob demanda
+        127.0.0.1         o downloader local opcional, que roda na máquina de
+                          quem usa
+
+      Não há aqui nenhum endereço de análise, telemetria ou log. Se algum dia
+      alguém acrescentar um, o navegador recusa a conexão até que a linha
+      mude — e a mudança aparece no histórico do repositório.
+
+      `form-action 'none'` porque este aplicativo não envia formulário para
+      lugar nenhum; `base-uri 'self'` impede que uma injeção reescreva a base
+      dos endereços relativos.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="
+      connect-src 'self' blob: data:
+        https://tabwin-web-datasus-proxy.tabwin-web.workers.dev
+        https://pub-41df939070d7465a8513416a16be8f88.r2.dev
+        https://datasus.saude.gov.br
+        https://cdn.jsdelivr.net
+        http://127.0.0.1:*;
+      form-action 'none';
+      base-uri 'self';
+    " />
     <meta name="theme-color" content="#071a28" />
     <meta name="description" content="Tabule microdados DATASUS localmente, direto no navegador." />
     <meta property="og:title" content="TabWin Web" />
