@@ -235,11 +235,21 @@ Ordem por valor sobre esforço, não por ordem de chegada.
 
       Pedido do usuário em 03/09/2026.
 
-- [ ] **Escolher qual campo geográfico o mapa usa.** A escolha hoje é
-      automática e privilegia residência, mas `CODMUNRES` e `CODMUNOCOR`
-      respondem perguntas diferentes, e quem estuda rede de atenção quer
-      ocorrência. Os candidatos já são calculados em ordem — falta expor a
-      lista num seletor, ao lado do de recorte. Pequeno.
+- [x] **Escolher qual campo geográfico o mapa usa.** ✅ 03/09/2026. Residência
+      segue como padrão, porque taxa se calcula sobre população residente; o
+      que mudou é existir a outra opção.
+
+      Medido no DOINF23, mesmos dados, só trocando o campo: Acre tem 245 por
+      residência e **267** por ocorrência, Amapá 271 e **278** — os dois
+      recebem casos. Rondônia (293 → 284), Amazonas (1204 → 1178) e Pará
+      (1897 → 1861) enviam. É a rede de referência aparecendo no dado, e até
+      então não havia como olhar para ela.
+
+- [x] **Inverter a cor do mapa.** ✅ 03/09/2026. A paleta carrega um
+      julgamento — escuro quer dizer "mais" — e num indicador em que o alto é
+      bom (cobertura vacinal, pré-natal adequado) ela pintava de escuro
+      justamente onde o resultado foi melhor. A inversão troca só as cores,
+      nunca os limites das classes, e entra na receita.
 
 - [ ] **Desenhar só o estado isolado, como opção.** Hoje o estado isolado é
       enquadrado mas os vizinhos continuam desenhados em contorno, o que dá
