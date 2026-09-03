@@ -177,7 +177,41 @@ Ordem por valor sobre esforço, não por ordem de chegada.
       bytes.
 - [ ] **Primeiro DBC absurdamente fluido.** A revisão apontou isto como o que
       vende o projeto sozinho: buscar no DATASUS → escolher → abrir → tabela,
-      sem atrito. Medir o caminho inteiro e atacar o pior trecho.
+      sem atrito.
+
+      **Medido no ar** (2026-09-03, DNBR2024: 112 MB, 2,39 milhões de
+      registros, cache local limpo):
+
+      | etapa | tempo |
+      |---|---|
+      | busca no catálogo | 0,5 s |
+      | download pelo espelho + SHA-256 | 8,0 s |
+      | abertura + primeira tabela | 12,3 s |
+      | **clique → tabela** | **21,0 s** |
+      | cada campo novo depois | 6,0 s |
+      | campo já tabulado | 0,1 s |
+
+      Dentro de uma passada, decodificar registro é 84–85% do tempo e
+      descomprimir é o resto (`npm run bench:decode-breakdown`). E o progresso
+      aparece na tela o tempo todo — 122 atualizações, uma a cada 65 ms — então
+      não há tela travada, só espera.
+
+      **Uma tentativa já foi feita e revertida.** A ideia era guardar uma dúzia
+      de campos na projeção em vez de só o tabulado, para as trocas seguintes
+      saírem do cache. Um benchmark offline dava suporte: 12 campos custavam
+      1,33× de um só. Em produção deu o contrário — primeira tabela 21 s → 31 s,
+      e campo fora do corte 6 s → 22,5 s.
+
+      O erro foi no que se mediu: o benchmark cronometrava **decodificar** N
+      campos, e o worker decodifica **e constrói** N colunas de dicionário. A
+      construção é a parte cara e não aparecia na curva. Um orçamento menor não
+      resolve, porque o custo escala com colunas construídas e o ganho só vale
+      para os campos adivinhados certo.
+
+      Por onde atacar de verdade, então: os 6 s de uma passada são
+      materialização de registro. Ou se reduz o custo por registro no leitor,
+      ou se evita a passada — e evitá-la sem construir dicionário é o que ainda
+      não tem resposta.
 - [ ] **Partes retomáveis em OPFS**, para conexão de celular que cai no meio.
       Menos urgente depois do conserto do Worker, mas ainda é o que protege
       quem está no 4G num arquivo de 108 MB.
