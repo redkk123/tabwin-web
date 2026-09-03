@@ -90,6 +90,44 @@ no DATASUS. As duas medições mediam este defeito. A lição é olhar
   navegador. `ftp.datasus.gov.br` só fala FTP, e navegador não fala FTP desde
   2021 — daí existir todo o caminho de preparo e ZIP.
 
+## Bloco 3.6 — Prévia pelo TabNet ✅
+
+O botão **Ver totais** aparece na linha do arquivo, ao lado de baixar, e
+responde em ~2 s o que o caminho do microdado cobra ~11 s de preparo mais
+105 MB para responder. Verificado no ar em 2026-09-03: SINASC/DN 2023
+devolveu as 27 unidades da federação e TOTAL 2.537.576 — o mesmo número
+medido antes por outro caminho, o que confirma que não é só "uma tabela",
+é a tabela certa.
+
+Três decisões que a verificação forçou, e que valem ficar escritas:
+
+- **O leitor busca o formulário do `.def` em vez de adivinhar os nomes.**
+  Cada `.def` nomeia as coisas do seu jeito (a medida do nascidos vivos é
+  `Nascim_p/resid.mãe`, o arquivo de 2023 é `nvuf23.dbf`) e nada disso se
+  deduz do par sistema/tipo. Fixar no código seria chute em cinco dos seis
+  `.def` do mapa. De brinde, a lista de anos é a real: 2027 aparece sozinho
+  quando o DATASUS publicar.
+- **O corpo do POST sai em latin-1.** `URLSearchParams.toString()`
+  percent-codifica em UTF-8 e "Região" viraria `Regi%C3%A3o`; o TabNet lê
+  byte a byte e devolveria erro, ou pior, a tabulação de outra coisa.
+- **O botão exige o proxy, não só o `.def`.** Medido: o TabNet não manda
+  nenhum cabeçalho CORS. Sem proxy o navegador recusa ler a resposta, então
+  o botão simplesmente não aparece — melhor do que oferecer e falhar.
+
+O diálogo diz em destaque que esta é a única parte do aplicativo em que a
+pergunta viaja. Isso não é ornamento: o resto do TabWin Web baixa o arquivo
+e tabula no aparelho sem contar a ninguém o que se quis saber, e perder
+isso de vista por conveniência seria trair o motivo do projeto existir.
+
+O que ficou de fora, de propósito: **SIH/RD**. O `sih/cnv/niuf.def` não
+conectou na sondagem, e uma prévia que erra é pior do que nenhuma. Quando
+responder, entra no mapa em `TABNET_DEFS` e o botão aparece sozinho.
+
+Aberto: a prévia usa sempre unidade da federação na linha e a primeira
+medida. Deixar quem usa escolher linha e coluna é o passo natural — o
+leitor do formulário já devolve as 23 opções de linha e as 22 de coluna,
+falta só a interface.
+
 ## Bloco 4 — Pendências antigas
 
 - [ ] Segredo `CLOUDFLARE_API_TOKEN` no GitHub, para o workflow do Worker
