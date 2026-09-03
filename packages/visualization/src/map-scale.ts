@@ -106,3 +106,40 @@ export function createMapScale(
     },
   };
 }
+
+/**
+ * Qual coluna o mapa pinta.
+ *
+ * Existe por causa de um resultado silenciosamente errado: o mapa somava
+ * TODAS as colunas da linha. Numa tabela com casos, população e taxa —
+ * exatamente o que se monta para ver densidade — ele pintava
+ * `casos + população + taxa`, um número sem significado nenhum, sem avisar.
+ *
+ * Somar só é correto quando há uma coluna, e aí a soma é ela mesma. Com mais
+ * de uma, alguém precisa escolher; escolher sozinho e calar seria repetir o
+ * defeito com outra aritmética.
+ */
+export interface MapColumnChoice {
+  /** Índice da coluna a pintar. */
+  index: number;
+  /** Se a escolha foi feita pelo aplicativo, e portanto precisa ser dita. */
+  automatic: boolean;
+}
+
+export function chooseMapColumn(
+  columnKeys: readonly string[],
+  requested: string | undefined,
+): MapColumnChoice {
+  if (columnKeys.length === 0) return { index: 0, automatic: true };
+
+  const pedido = requested ? columnKeys.indexOf(requested) : -1;
+  if (pedido >= 0) return { index: pedido, automatic: false };
+
+  // Uma coluna só não é escolha: não há o que perguntar nem o que declarar.
+  if (columnKeys.length === 1) return { index: 0, automatic: false };
+
+  // Várias e nenhuma pedida: a primeira, que é a ordem de leitura da tabela.
+  // Escolher a última seria adivinhar que a pessoa quer sempre a derivada, e
+  // ela nem sempre está no fim.
+  return { index: 0, automatic: true };
+}

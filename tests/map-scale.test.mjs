@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createMapScale } from '../dist/packages/visualization/src/map-scale.js';
+import {
+  createMapScale,
+  chooseMapColumn,
+} from '../dist/packages/visualization/src/map-scale.js';
 
 test('equal-interval map scale produces deterministic class boundaries', () => {
   const scale = createMapScale([0, 25, 50, 75, 100], 'equal-interval', 4, 'green');
@@ -42,4 +45,36 @@ test('manual map scale rejects ambiguous or out-of-range breaks', () => {
   assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [0] }), /strictly inside observed range/);
   assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [100] }), /strictly inside observed range/);
   assert.throws(() => createMapScale([0, 100], 'manual', 5, 'green', { manualBreaks: [101] }), /strictly inside observed range/);
+});
+
+test('com uma coluna só, o mapa pinta ela e não há escolha a declarar', () => {
+  const c = chooseMapColumn(['freq'], undefined);
+  assert.deepEqual(c, { index: 0, automatic: false });
+});
+
+test('com várias colunas e nenhuma pedida, escolhe a primeira e DIZ que escolheu', () => {
+  // O defeito que isto conserta era somar casos + população + taxa e pintar o
+  // resultado. Qualquer coluna é melhor que a soma, mas a escolha automática
+  // precisa aparecer na tela, senão o erro só troca de forma.
+  const c = chooseMapColumn(['casos', 'populacao', 'taxa'], undefined);
+  assert.equal(c.index, 0);
+  assert.equal(c.automatic, true);
+});
+
+test('a coluna pedida vale, e não é anunciada como automática', () => {
+  const c = chooseMapColumn(['casos', 'populacao', 'taxa'], 'taxa');
+  assert.deepEqual(c, { index: 2, automatic: false });
+});
+
+test('coluna pedida que não existe mais cai na automática', () => {
+  // Acontece ao trocar de arquivo ou desfazer a operação que criou a coluna;
+  // apontar para um índice inexistente pintaria o mapa de branco.
+  const c = chooseMapColumn(['casos', 'populacao'], 'taxa');
+  assert.equal(c.index, 0);
+  assert.equal(c.automatic, true);
+});
+
+test('sem coluna nenhuma não quebra', () => {
+  assert.equal(chooseMapColumn([], undefined).index, 0);
+  assert.equal(chooseMapColumn([], 'taxa').index, 0);
 });

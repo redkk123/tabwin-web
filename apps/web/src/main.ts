@@ -197,6 +197,7 @@ import {
   type CachedArchiveSummary,
 } from './archive-cache.ts';
 import { renderChartSvg, type ChartFontFamily, type ChartSeriesMode } from './chart-renderer.ts';
+import { chooseMapColumn } from '../../../packages/visualization/src/map-scale.ts';
 import type { ChartType } from '../../../packages/visualization/src/chart-model.ts';
 import {
   createMapScale,
@@ -544,6 +545,7 @@ const chartPrintButton = element<HTMLButtonElement>('#chart-print-button');
 const mapPngButton = element<HTMLButtonElement>('#map-png-button');
 const mapClassification = element<HTMLSelectElement>('#map-classification');
 const mapUfSelect = element<HTMLSelectElement>('#map-uf');
+const mapValueColumn = element<HTMLSelectElement>('#map-value-column');
 const geoFilter = element<HTMLDetailsElement>('#geo-filter');
 const geoFilterCount = element<HTMLElement>('#geo-filter-count');
 const geoFilterInfo = element<HTMLElement>('#geo-filter-info');
@@ -5884,6 +5886,37 @@ function boundsForDrawnArea(): { west: number; east: number; south: number; nort
   return { west: west - folgaX, east: east + folgaX, south: south - folgaY, north: north + folgaY };
 }
 
+/**
+ * Preenche o seletor de valor com as colunas da tabela que o mapa desenha.
+ *
+ * Some quando há uma coluna só: oferecer uma escolha com uma opção é ruído, e
+ * some também quando o mapa usa a tabulação própria dele, que sempre tem uma.
+ */
+function renderMapColumnOptions(result: TabulationResult, escolhido: number): void {
+  const varias = result.columns.length > 1;
+  mapValueColumn.hidden = !varias;
+  const rotulo = mapValueColumn.closest('label');
+  if (rotulo) (rotulo as HTMLElement).hidden = !varias;
+  if (!varias) {
+    mapValueColumn.replaceChildren();
+    return;
+  }
+  const chaves = result.columns.map((coluna) => coluna.key).join('|');
+  // Só refaz quando as colunas mudam: refazer a cada desenho perderia o foco
+  // do teclado no meio de uma escolha.
+  if (mapValueColumn.dataset.chaves !== chaves) {
+    mapValueColumn.dataset.chaves = chaves;
+    mapValueColumn.replaceChildren();
+    for (const coluna of result.columns) {
+      const opcao = document.createElement('option');
+      opcao.value = coluna.key;
+      opcao.textContent = coluna.label;
+      mapValueColumn.append(opcao);
+    }
+  }
+  mapValueColumn.value = result.columns[escolhido]?.key ?? '';
+}
+
 function renderMap(): void {
   if (!activeMap || !currentResult) return;
   // O que o mapa pinta é o resultado DELE, que só coincide com o da tela
@@ -5921,9 +5954,14 @@ function renderMap(): void {
     y: offsetY + (north - y) * fit,
   });
 
+  // A coluna que o mapa pinta é UMA, escolhida. Somar todas — que era o que
+  // acontecia aqui — pintava `casos + população + taxa` numa tabela de
+  // densidade: um número sem significado nenhum, e sem aviso.
+  const escolha = chooseMapColumn(desenhavel.columns.map((c) => c.key), mapValueColumn.value || undefined);
+  renderMapColumnOptions(desenhavel, escolha.index);
   const values = new Map<string, number>();
   desenhavel.rows.forEach((row, index) => {
-    const value = cellValue(desenhavel, index);
+    const value = desenhavel.cells[index]?.[escolha.index] ?? 0;
     values.set(row.key.trim().toLowerCase(), value);
     values.set(normalizeLabel(row.label), value);
   });
@@ -6081,12 +6119,23 @@ function renderMap(): void {
   // arquivo — ou pior, acha que a tabela virou o mapa.
   mapMessage.hidden = false;
   if (matched > 0) {
-    mapMessage.textContent = mapGeoField
-      ? `Mapa por ${mapGeoField.reason} (${mapGeoField.field})`
-        + `${mapUfFilter ? `, em ${ufNameForCode(mapUfFilter)}` : ', por estado'}`
-        + ` · ${integerFormat.format(matched)} áreas com dado. A tabela ao lado continua como você a montou.`
+    const colunaDita = desenhavel.columns.length > 1
+      ? ` · pintando ${desenhavel.columns[escolha.index]?.label ?? ''}`
+        + `${escolha.automatic ? ' (escolha automática entre ' + desenhavel.columns.length + ' colunas)' : ''}`
       : '';
-    mapMessage.hidden = !mapGeoField;
+    // O recorte (`por estado`, `em Pará`) só existe no mapa próprio. Dizê-lo
+    // no caminho da tabela seria descrever um agrupamento que não aconteceu:
+    // ali o mapa desenha as linhas que a pessoa tabulou, uma a uma.
+    const recorteDito = mapSource === 'proprio'
+      ? (mapUfFilter ? `, em ${ufNameForCode(mapUfFilter)}` : ', por estado')
+      : '';
+    mapMessage.textContent = mapGeoField
+      ? `Mapa por ${mapGeoField.reason} (${mapGeoField.field})${recorteDito}`
+        + ` · ${integerFormat.format(matched)} áreas com dado${colunaDita}. A tabela ao lado continua como você a montou.`
+      : colunaDita
+        ? `${integerFormat.format(matched)} áreas com dado${colunaDita}.`
+        : '';
+    mapMessage.hidden = !mapGeoField && !colunaDita;
   } else {
     // O número tem que ser o das linhas que o MAPA tentou casar, não o da
     // tabela da tela: são coisas diferentes desde que o mapa ficou autônomo.
@@ -6354,7 +6403,7 @@ function onlyUf(result: TabulationResult, uf: string): TabulationResult {
  * deles daria um mapa em branco que parece defeito. A lista sai dos dados.
  */
 function renderMapUfOptions(): void {
-  const podeDescer = Boolean(mapResult) && mapGeoField?.level === 'municipality';
+  const podeDescer = mapSource === 'proprio' && Boolean(mapResult) && mapGeoField?.level === 'municipality';
   mapUfSelect.hidden = !podeDescer;
   mapUfLabel.hidden = !podeDescer;
   if (!podeDescer || !mapResult) return;
@@ -6397,7 +6446,24 @@ function ufNameForCode(code: string): string {
 }
 
 /** O que o mapa desenha agora: nacional por estado, ou um estado por município. */
+/**
+ * De onde vem o que o mapa desenha.
+ *
+ * `tabela` quer dizer a tabulação que a pessoa montou — vale quando a
+ * variável de linha dela já é geográfica, e aí o mapa mostra exatamente o que
+ * ela pediu, com as conversões dela.
+ *
+ * `proprio` é a leitura que o mapa faz por conta.
+ *
+ * Isto precisa ser declarado e não deduzido: o painel de recorte também
+ * preenche `mapResult` para contar municípios, e deduzir "tem mapResult, logo
+ * use mapResult" fazia o filtro geográfico sequestrar o mapa de quem já estava
+ * tabulando por município.
+ */
+let mapSource: 'tabela' | 'proprio' = 'proprio';
+
 function mapDrawableResult(): TabulationResult | null {
+  if (mapSource === 'tabela') return currentResult;
   const base = mapResult;
   if (!base) return currentResult;
   if (mapGeoField?.level === 'uf') return base;
@@ -6407,16 +6473,30 @@ function mapDrawableResult(): TabulationResult | null {
 async function ensureMap(): Promise<void> {
   if (!currentResult) return;
 
-  // A variável de linha da tela ainda serve, quando por acaso é geográfica:
-  // aí o mapa desenha exatamente a tabela que a pessoa montou, com as
-  // conversões dela, que é melhor do que refazer por fora.
-  const field = rowField.value.toUpperCase();
-  const daTela = field.includes('MUNIC')
-    ? 'br_municip.MAP'
-    : /(^|_)UF($|_)|ESTADO/.test(field) ? 'br_ufsigla.MAP' : '';
+  // A variável de linha da tela ainda serve, quando ela é geográfica: aí o
+  // mapa desenha exatamente a tabela que a pessoa montou, com as conversões
+  // dela, que é melhor do que refazer por fora.
+  //
+  // A decisão usa `findGeographicFields`, e não uma heurística própria, para
+  // ter uma regra só. A heurística que estava aqui — `field.includes('MUNIC')`
+  // — era falsa justamente para os campos mais comuns do DATASUS:
+  // `CODMUNRES` é `CODMUN` + `RES`, sem o "I" de MUNIC, e o mesmo vale para
+  // `CODMUNOCOR`, `CODMUNNASC` e `ID_MN_RESI`. Na prática o caminho da tabela
+  // quase nunca era tomado no SIM e no SINASC.
+  const field = rowField.value.trim();
+  const daLinha = dbfHeader
+    ? findGeographicFields(dbfHeader.fields).find(
+      (candidato) => candidato.field.toUpperCase() === field.toUpperCase(),
+    )
+    : undefined;
+  const daTela = daLinha
+    ? (daLinha.level === 'municipality' ? 'br_municip.MAP' : 'br_ufsigla.MAP')
+    : '';
+  mapSource = daTela ? 'tabela' : 'proprio';
   if (daTela) {
-    mapResult = null;
-    mapGeoField = null;
+    // Não zera `mapResult`: ele é o que alimenta a contagem do painel de
+    // recorte, e refazê-lo custaria outra passada pelo arquivo.
+    mapUfFilter = '';
   } else if (!mapResult || mapResultSignature !== mapInputSignature()) {
     // Não é: o mapa vai atrás do campo geográfico sozinho. Antes disto, a aba
     // pedia à pessoa que reconfigurasse a análise só para ver um mapa.
@@ -6447,9 +6527,9 @@ async function ensureMap(): Promise<void> {
   renderMapUfOptions();
   // Município sem estado isolado vira mapa nacional por UF; com estado
   // isolado, o mapa daquele estado.
-  const bundled = daTela || (mapGeoField?.level === 'uf' || !mapUfFilter
-    ? 'br_ufsigla.MAP'
-    : 'br_municip.MAP');
+  const bundled = mapSource === 'tabela'
+    ? daTela
+    : (mapGeoField?.level === 'uf' || !mapUfFilter ? 'br_ufsigla.MAP' : 'br_municip.MAP');
 
   if (activeMap && activeMapSource === `incluído: ${bundled}`) {
     renderTable(currentResult);
@@ -9632,6 +9712,11 @@ geoFilterClear.addEventListener('click', () => {
     }
   }
   renderGeoList();
+});
+
+mapValueColumn.addEventListener('change', () => {
+  // Trocar de coluna não troca de mapa nem de dado: só repinta.
+  if (activeMap && currentResult) renderMap();
 });
 
 mapUfSelect.addEventListener('change', () => {
