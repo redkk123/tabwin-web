@@ -25,6 +25,37 @@ function respond(id, ok, payload = null, error = null) {
   self.postMessage({ id, ok, payload, error });
 }
 
+/**
+ * Rede de segurança para o que escapa das promessas.
+ *
+ * Sem isto, qualquer erro solto aqui dentro chegava ao adaptador como um
+ * evento `error` sem mensagem — porque o código que falha vem de outra
+ * origem (o CDN) e o navegador esconde o texto por segurança. O adaptador
+ * então caía no genérico "Falha ao carregar o worker Python", que não diz
+ * nada e não dá o que fazer a seguir.
+ *
+ * Aqui o motivo é postado como mensagem comum, que atravessa a fronteira de
+ * origem intacta. Nada de `preventDefault`: o evento continua subindo, para o
+ * caminho antigo seguir valendo se esta mensagem se perder.
+ */
+function reportarFatal(error) {
+  try {
+    self.postMessage({ id: null, fatal: true, error: plainError(error) });
+  } catch {
+    // Worker morrendo no meio de um postMessage. Nada a fazer, e insistir
+    // esconderia o erro original atrás de um segundo.
+  }
+}
+
+self.addEventListener('error', (event) => {
+  reportarFatal(event.error ?? new Error(
+    event.message || 'o worker Python parou sem dizer o motivo (erro de outra origem)',
+  ));
+});
+self.addEventListener('unhandledrejection', (event) => {
+  reportarFatal(event.reason ?? new Error('promessa rejeitada sem motivo no worker Python'));
+});
+
 function packageManifest(pyodide) {
   const loaded = pyodide?.loadedPackages;
   if (!loaded || typeof loaded !== 'object') return [];
@@ -45,7 +76,19 @@ function packageManifest(pyodide) {
 
 async function boot() {
   if (!pyodidePromise) {
-    pyodidePromise = loadPyodide({ indexURL: PYODIDE_INDEX_URL });
+    pyodidePromise = loadPyodide({ indexURL: PYODIDE_INDEX_URL }).catch((causa) => {
+      // A promessa guardada precisa ser esquecida: mantê-la rejeitada faria
+      // "Tentar novamente" devolver o mesmo erro sem tentar de novo.
+      pyodidePromise = null;
+      const detalhe = causa instanceof Error ? causa.message : String(causa);
+      const semMemoria = /memory|allocat|out of|RangeError|WebAssembly/i.test(detalhe);
+      throw new Error(
+        semMemoria
+          ? `o navegador não conseguiu reservar memória para o Python (${detalhe}). `
+            + 'Em celular costuma resolver fechar outras abas e tentar de novo.'
+          : `o runtime Python não carregou: ${detalhe}`,
+      );
+    });
   }
   const pyodide = await pyodidePromise;
   if (typeof pyodide.version !== 'string' || !pyodide.version) {

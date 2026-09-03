@@ -137,24 +137,26 @@ falta só a interface.
   03/09/2026: ficam onde estão.** São sobra de um handoff antigo, não afetam
   nada do projeto, e limpá-las custaria mais atenção do que vale.
 - [ ] `REMAINING_IMPLEMENTATION_PLAN.md` está defasado (baseline R05.1).
-- [ ] **Python do lab não carrega no celular, e o erro não diz nada.** Visto em
-      `tabweb.me/lab/` no Android: o R sobe (webR 0.6.0), o Python fica em
-      "Falha ao carregar o worker Python". Já medido, para não repetir a
-      investigação: o `pyodide-worker.mjs` é servido (200), ele **sobe sem
-      erro**, e o `import()` do `pyodide.mjs` do jsDelivr funciona a partir de
-      `tabweb.me` — a versão fixada `314.0.6` é mesmo a `latest`. Ou seja, o
-      que falha é o `loadPyodide()` lá dentro, e o suspeito é memória: são
-      ~100 MB de wasm num Chrome de celular com dezenas de abas abertas.
+- [x] **Python do lab: a mensagem passou a dizer o que houve.** ✅ 03/09/2026.
+      O sintoma era "Falha ao carregar o worker Python", que não diz nada.
 
-      Duas coisas a fazer, e a segunda vale independentemente da causa:
-      `apps/web/public/lab/src/runtimes/pyodide-worker.mjs` não instala
-      `addEventListener('error')` nem `unhandledrejection`, então tudo que
-      escapa do `await` de `boot()` chega ao adaptador como evento de erro sem
-      mensagem — e o adaptador cai no texto genérico
-      (`pyodide-adapter.js:247`). Envolver o `loadPyodide()` e postar o erro
-      real já transformaria "falhou" em algo acionável. Só depois disso dá para
-      saber se é mesmo memória e dar a ela uma mensagem própria, porque num
-      celular ela é esperada, não é defeito.
+      **Uma medida minha anterior estava errada e fica corrigida:** eu havia
+      anotado "~100 MB de wasm". São **6 MB** — 3,3 MB de `pyodide.asm.wasm`
+      mais 2,4 MB de `python_stdlib.zip`. Memória continua sendo suspeita
+      plausível (a memória linear do wasm não aparece nesse número), mas não
+      pela razão que eu tinha escrito.
+
+      Não consegui reproduzir a falha: aqui o `loadPyodide()` carrega em 5,6 s
+      e roda. Então o que foi entregue não é o conserto da causa, é fazer a
+      causa aparecer. O worker morrendo com código de OUTRA origem dispara um
+      evento `error` com `message` vazio — o navegador esconde o texto por
+      segurança —, e era daí que vinha o texto genérico. Agora o worker posta
+      o motivo por `postMessage`, que atravessa a fronteira de origem intacto,
+      e o adaptador usa esse motivo. Falta de memória ganha frase própria,
+      porque em celular ela é esperada e tem o que fazer a respeito.
+
+      Da próxima vez que acontecer no aparelho do usuário, a tela dirá qual é
+      o erro. Cinco testes travam o contrato.
 
 ## Bloco 5 — Evolução sugerida na revisão
 

@@ -204,6 +204,15 @@ export class PyodideAdapter {
     this.kind = 'python';
     this.version = PYODIDE_VERSION;
     this.workerFactory = options.workerFactory ?? defaultWorkerFactory;
+    /**
+     * O último motivo que o worker mandou antes de morrer.
+     *
+     * Declarado aqui, e não criado no caminho, porque um campo que só existe
+     * depois de uma falha é invisível para quem lê a classe — e este é
+     * justamente o que decide se a pessoa lê uma frase útil ou "Falha ao
+     * carregar o worker Python".
+     */
+    this.ultimoMotivoFatal = null;
     this.bootTimeoutMs = options.bootTimeoutMs ?? 180_000;
     this.runTimeoutMs = options.runTimeoutMs ?? 0;
     this.worker = null;
@@ -244,21 +253,42 @@ export class PyodideAdapter {
     });
     worker.addEventListener('error', (event) => {
       if (this.worker !== worker) return;
-      const message = event?.message || 'Falha ao carregar o worker Python';
-      const diagnostic = diagnosticFrom(event?.error ?? {
-        name: 'WorkerError',
-        message,
-        stack: '',
-      });
-      this.reset(attachRemoteDiagnostic(
-        new RuntimeUnavailableError(message, { remoteError: diagnostic }),
-        diagnostic,
-      ));
+      // O worker posta o motivo e o navegador dispara este evento; a ordem
+      // entre os dois não é garantida. Um instante de espera é o que separa
+      // "Falha ao carregar o worker Python" de uma frase que diz o que fazer.
+      window.setTimeout(() => {
+        if (this.worker !== worker) return;
+        this.encerrarPorErro(worker, event);
+      }, 60);
     });
     worker.addEventListener('messageerror', () => {
       if (this.worker === worker) this.reset(new RuntimeUnavailableError('Resposta inválida do worker Python'));
     });
     return worker;
+  }
+
+  /**
+   * Desiste do worker, usando o motivo que ele mandou — se mandou.
+   *
+   * O evento `error` de um worker que falhou executando código de outra origem
+   * chega com `message` vazio: o navegador esconde o texto por segurança. Era
+   * daí que vinha o "Falha ao carregar o worker Python", que não diz nada e
+   * não sugere o que fazer. O motivo real vem por `postMessage`, que atravessa
+   * a fronteira de origem intacto.
+   */
+  encerrarPorErro(worker, event) {
+    if (this.worker !== worker) return;
+    const message = this.ultimoMotivoFatal || event?.message
+      || 'Falha ao carregar o worker Python';
+    const diagnostic = diagnosticFrom(event?.error ?? {
+      name: 'WorkerError',
+      message,
+      stack: '',
+    });
+    this.reset(attachRemoteDiagnostic(
+      new RuntimeUnavailableError(message, { remoteError: diagnostic }),
+      diagnostic,
+    ));
   }
 
   request(type, payload = {}, transfer = [], timeoutMs = 0) {
@@ -282,6 +312,16 @@ export class PyodideAdapter {
   }
 
   receive(message) {
+    // Mensagem fatal: o worker avisando POR QUE vai morrer. Ela não responde a
+    // pedido nenhum, então não tem id — e é justamente o motivo que o evento
+    // `error` do navegador não consegue carregar quando o código que falhou
+    // veio de outra origem.
+    if (isRecord(message) && message.fatal === true) {
+      this.ultimoMotivoFatal = isRecord(message.error) && typeof message.error.message === 'string'
+        ? message.error.message
+        : null;
+      return;
+    }
     if (!isRecord(message) || !Number.isSafeInteger(message.id) || message.id < 1) {
       if (this.pending.size > 0) {
         this.reset(new RuntimeUnavailableError('Resposta malformada recebida do worker Python'));
