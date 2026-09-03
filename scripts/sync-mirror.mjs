@@ -69,8 +69,23 @@ async function prepararEEsperar(arquivo) {
   const corpo = new URLSearchParams();
   corpo.append('dados[0][arquivo]', arquivo.name);
   corpo.append('dados[0][link]', arquivo.source);
-  const url = (await postar('prepare', corpo)).flat(9)
-    .find((valor) => typeof valor === 'string' && valor.startsWith('http'));
+  // O proxy devolve `{ error }` quando o DATASUS estoura o prazo de 30 s, e
+  // ele estoura: o preparo do DNBR2024 varia de 11 s a mais de 30. Sem tratar,
+  // isso virava "flat is not a function" e escondia a causa real.
+  //
+  // Três tentativas com espera crescente, porque o preparo é a etapa mais
+  // instável do portal e refazê-la custa uma requisição pequena.
+  let url;
+  for (let tentativa = 1; tentativa <= 3 && !url; tentativa += 1) {
+    const resposta = await postar('prepare', corpo);
+    if (Array.isArray(resposta)) {
+      url = resposta.flat(9).find((valor) => typeof valor === 'string' && valor.startsWith('http'));
+    } else if (tentativa === 3) {
+      const motivo = resposta?.error?.message ?? JSON.stringify(resposta).slice(0, 120);
+      throw new Error(`o preparo falhou: ${motivo}`);
+    }
+    if (!url && tentativa < 3) await new Promise((r) => setTimeout(r, 5000 * tentativa));
+  }
   if (!url) throw new Error('o DATASUS não devolveu URL preparada');
 
   for (let tentativa = 0; tentativa < 30; tentativa += 1) {
@@ -124,8 +139,11 @@ for (const arquivo of lista) {
       const temporario = path.join('.cache', 'mirror', arquivo.name);
       fs.mkdirSync(path.dirname(temporario), { recursive: true });
       fs.writeFileSync(temporario, bytes);
+      // `shell: true` porque no Windows o `npx` é um `.cmd`, e sem shell o
+      // spawn não o encontra — falha com ENOENT sem dizer o porquê.
       execFileSync('npx', ['wrangler', 'r2', 'object', 'put',
-        `${bucket}/${destino}`, '--file', temporario, '--remote'], { stdio: 'pipe' });
+        `${bucket}/${destino}`, '--file', temporario, '--remote'],
+      { stdio: 'pipe', shell: true });
       fs.rmSync(temporario, { force: true });
     }
 
