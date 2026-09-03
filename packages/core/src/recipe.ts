@@ -82,6 +82,14 @@ export interface AnalysisRecipeV1 {
     mapManualBreaks?: number[];
     mapClassCount?: number;
     mapPalette?: 'green' | 'blue' | 'orange' | 'purple';
+    /**
+     * Rampa lida do escuro para o claro, para indicador em que o alto é bom.
+     *
+     * Precisa entrar na receita: sem ela, reabrir uma análise de cobertura
+     * vacinal devolveria o mapa com as cores trocadas, e a leitura invertida
+     * do indicador — que é o erro que a opção existe para evitar.
+     */
+    mapInvertPalette?: boolean;
     statisticsOperation?: 'descriptive' | 'correlation' | 'regression' | 'histogram' | 'epidemiology';
     statisticsXColumnKey?: string;
     statisticsYColumnKey?: string;

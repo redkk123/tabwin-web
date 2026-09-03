@@ -21,6 +21,14 @@ export interface MapScaleOptions {
    * classes. Breaks must be finite, strictly increasing and inside [min,max].
    */
   manualBreaks?: readonly number[];
+  /**
+   * Lê a rampa do escuro para o claro.
+   *
+   * Serve para variável em que o valor alto é bom — cobertura vacinal,
+   * proporção de pré-natal adequado. Sem isto a paleta pinta de escuro
+   * justamente onde o indicador foi melhor, e o mapa diz o contrário do dado.
+   */
+  invertPalette?: boolean;
 }
 
 const RAMPS: Record<MapPalette, [string, string]> = {
@@ -34,8 +42,18 @@ function rgb(hex: string): [number, number, number] {
   return [1, 3, 5].map((offset) => Number.parseInt(hex.slice(offset, offset + 2), 16)) as [number, number, number];
 }
 
-function rampColor(palette: MapPalette, ratio: number): string {
-  const [startHex, endHex] = RAMPS[palette];
+/**
+ * Cor de um ponto da rampa, do claro para o escuro — ou ao contrário.
+ *
+ * Inverter importa porque a paleta carrega um julgamento: escuro significa
+ * "mais", e "mais" nem sempre é pior. Num mapa de mortalidade o escuro no
+ * valor alto está certo; num de cobertura vacinal ele pinta de vermelho
+ * justamente onde a vacinação foi melhor, e quem bate o olho lê o oposto do
+ * que o dado diz.
+ */
+function rampColor(palette: MapPalette, ratio: number, inverted = false): string {
+  const [claro, escuro] = RAMPS[palette];
+  const [startHex, endHex] = inverted ? [escuro, claro] : [claro, escuro];
   const start = rgb(startHex);
   const end = rgb(endHex);
   const value = Math.min(1, Math.max(0, ratio));
@@ -89,7 +107,7 @@ export function createMapScale(
   const classes = Array.from({ length: actualClassCount }, (_, index) => ({
     lower: thresholds[index] ?? min,
     upper: thresholds[index + 1] ?? max,
-    color: rampColor(palette, actualClassCount === 1 ? 1 : index / (actualClassCount - 1)),
+    color: rampColor(palette, actualClassCount === 1 ? 1 : index / (actualClassCount - 1), options.invertPalette),
   }));
   return {
     min,
@@ -99,7 +117,7 @@ export function createMapScale(
       if (value === undefined || !Number.isFinite(value)) return '#dfe8e5';
       if (classification === 'continuous') {
         const ratio = max === min ? 1 : (value - min) / (max - min);
-        return rampColor(palette, Math.sqrt(Math.min(1, Math.max(0, ratio))));
+        return rampColor(palette, Math.sqrt(Math.min(1, Math.max(0, ratio))), options.invertPalette);
       }
       const index = classes.findIndex((item, classIndex) => value <= item.upper || classIndex === classes.length - 1);
       return classes[Math.max(0, index)]?.color ?? '#dfe8e5';

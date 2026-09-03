@@ -577,6 +577,7 @@ const mapSelectionField = element<HTMLSelectElement>('#map-selection-field');
 const mapSelectionApply = element<HTMLButtonElement>('#map-selection-apply');
 const mapSelectionClear = element<HTMLButtonElement>('#map-selection-clear');
 const mapPalette = element<HTMLSelectElement>('#map-palette');
+const mapInvertPalette = element<HTMLInputElement>('#map-invert-palette');
 const mapZoomOut = element<HTMLButtonElement>('#map-zoom-out');
 const mapZoomReset = element<HTMLButtonElement>('#map-zoom-reset');
 const mapZoomIn = element<HTMLButtonElement>('#map-zoom-in');
@@ -5985,11 +5986,15 @@ function renderMap(): void {
       manualBreakProblem ? 'quantile' : classification,
       Number(mapClassCount.value),
       mapPalette.value as MapPalette,
-      manualBreaks ? { manualBreaks } : {},
+      {
+        ...(manualBreaks ? { manualBreaks } : {}),
+        invertPalette: mapInvertPalette.checked,
+      },
     );
   } catch (error) {
     manualBreakProblem = error instanceof Error ? error.message : String(error);
-    scaleModel = createMapScale(values.values(), 'quantile', Number(mapClassCount.value), mapPalette.value as MapPalette);
+    scaleModel = createMapScale(values.values(), 'quantile', Number(mapClassCount.value),
+      mapPalette.value as MapPalette, { invertPalette: mapInvertPalette.checked });
   }
   mapManualBreaksNote.hidden = !manualBreakProblem;
   mapManualBreaksNote.textContent = manualBreakProblem ? `${manualBreakProblem}. Mapa desenhado por quantis.` : '';
@@ -8775,6 +8780,7 @@ function saveRecipe(): void {
         ? { mapManualBreaks: parsedManualMapBreaks() }
         : {}),
       mapPalette: mapPalette.value as MapPalette,
+      mapInvertPalette: mapInvertPalette.checked,
       statisticsOperation: statisticsOperation.value as 'descriptive' | 'correlation' | 'regression' | 'histogram' | 'epidemiology',
       ...(currentResult?.columns[Number(statisticsX.value)]?.key
         ? { statisticsXColumnKey: currentResult.columns[Number(statisticsX.value)]!.key }
@@ -9117,6 +9123,7 @@ async function openRecipe(file: File): Promise<void> {
   if (recipe.view?.mapClassCount) mapClassCount.value = String(recipe.view.mapClassCount);
   mapManualBreaks.value = recipe.view?.mapManualBreaks?.join('; ') ?? '';
   if (recipe.view?.mapPalette) mapPalette.value = recipe.view.mapPalette;
+  mapInvertPalette.checked = recipe.view?.mapInvertPalette === true;
   if (recipe.view?.statisticsOperation) statisticsOperation.value = recipe.view.statisticsOperation;
   if (recipe.view?.histogramBins) histogramBins.value = String(recipe.view.histogramBins);
   if (recipe.view?.histogramGaussian !== undefined) histogramGaussian.checked = recipe.view.histogramGaussian;
@@ -9731,7 +9738,7 @@ chartSvgButton.addEventListener('click', exportChartSvg);
 chartPngButton.addEventListener('click', () => void exportChartPng().catch((error) =>
   showToast(error instanceof Error ? error.message : String(error), true)));
 mapPngButton.addEventListener('click', exportMapPng);
-for (const control of [mapClassification, mapClassCount, mapPalette]) {
+for (const control of [mapClassification, mapClassCount, mapPalette, mapInvertPalette]) {
   control.addEventListener('change', () => {
     updateManualMapControls();
     if (activeMap && currentResult) renderMap();

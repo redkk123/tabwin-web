@@ -78,3 +78,30 @@ test('sem coluna nenhuma não quebra', () => {
   assert.equal(chooseMapColumn([], undefined).index, 0);
   assert.equal(chooseMapColumn([], 'taxa').index, 0);
 });
+
+test('inverter a rampa troca as pontas de lugar', () => {
+  // Existe para indicador em que o valor alto é BOM: sem isto a paleta pinta
+  // de escuro justamente onde a cobertura foi melhor, e quem bate o olho lê o
+  // contrário do que o dado diz.
+  const normal = createMapScale([1, 2, 3, 4, 5], 'quantile', 5, 'green');
+  const invertida = createMapScale([1, 2, 3, 4, 5], 'quantile', 5, 'green', { invertPalette: true });
+  assert.equal(normal.classes.at(0).color, invertida.classes.at(-1).color);
+  assert.equal(normal.classes.at(-1).color, invertida.classes.at(0).color);
+});
+
+test('inverter não mexe nos limites das classes, só nas cores', () => {
+  // Trocar os cortes junto mudaria quais áreas caem em qual classe, e aí o
+  // mapa invertido não seria mais o mesmo mapa.
+  const normal = createMapScale([1, 5, 9, 20, 100], 'quantile', 4, 'blue');
+  const invertida = createMapScale([1, 5, 9, 20, 100], 'quantile', 4, 'blue', { invertPalette: true });
+  assert.deepEqual(
+    normal.classes.map((c) => [c.minimum, c.maximum]),
+    invertida.classes.map((c) => [c.minimum, c.maximum]),
+  );
+});
+
+test('sem pedir inversão, nada muda', () => {
+  const a = createMapScale([1, 2, 3], 'quantile', 3, 'orange');
+  const b = createMapScale([1, 2, 3], 'quantile', 3, 'orange', {});
+  assert.deepEqual(a.classes.map((c) => c.color), b.classes.map((c) => c.color));
+});
