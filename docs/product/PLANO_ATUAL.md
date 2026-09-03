@@ -214,7 +214,7 @@ Ordem por valor sobre esforço, não por ordem de chegada.
       materialização de registro. Ou se reduz o custo por registro no leitor,
       ou se evita a passada — e evitá-la sem construir dicionário é o que ainda
       não tem resposta.
-- [ ] **Filtro geográfico pronto, por nome, em cascata.** Hoje filtrar por
+- [x] **Filtro geográfico pronto, por nome, em cascata.** ✅ 03/09/2026. Hoje filtrar por
       município exige saber o código do IBGE: quem quer Belém precisa digitar
       `150140`. O aplicativo já tem tudo para resolver isso — `findGeographicFields`
       acha o campo, e os mapas incluídos trazem os nomes (27 UF em
