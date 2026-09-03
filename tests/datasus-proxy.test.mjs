@@ -253,6 +253,57 @@ test('sem tamanho declarado, o limite volta a ser contado pedaço a pedaço', as
   });
 });
 
+test('a rota do formulário do TabNet busca o deftohtm, não o tabcgi', async () => {
+  // São dois CGIs distintos no mesmo host: um devolve o formulário, o outro
+  // tabula. Trocar um pelo outro devolveria uma página que parece certa e não
+  // tem as opções — falha silenciosa, do tipo que só aparece na tela do usuário.
+  const html = '<SELECT NAME="Linha"><OPTION VALUE="Sexo">Sexo</SELECT>';
+  let alvo = null;
+  let metodo = null;
+  await withMockFetch(async (input, init) => {
+    alvo = input?.url ?? String(input);
+    metodo = init?.method ?? input?.method ?? null;
+    return new Response(html, { status: 200, headers: { 'Content-Type': 'text/html' } });
+  }, async () => {
+    const response = await handleRequest(
+      request('/tabnet-form?def=sinasc/cnv/nvuf.def'),
+      ENVIRONMENT,
+    );
+    assert.equal(response.status, 200);
+    assert.equal(alvo, 'https://tabnet.datasus.gov.br/cgi/deftohtm.exe?sinasc/cnv/nvuf.def');
+    assert.equal(metodo, 'GET');
+    assert.match(await response.text(), /SELECT NAME="Linha"/);
+  });
+});
+
+test('a rota do formulário do TabNet usa a mesma trava de .def da tabulação', async () => {
+  for (const def of [
+    '../../etc/passwd',
+    'sinasc/cnv/nvuf.def?x=1',
+    'sinasc/nvuf.def',
+    'sinasc/cnv/nvuf.exe',
+    '',
+  ]) {
+    const response = await handleRequest(
+      request(`/tabnet-form?def=${encodeURIComponent(def)}`),
+      ENVIRONMENT,
+    );
+    assert.equal(response.status, 400, `aceitou ${def}`);
+    assert.equal(await errorCode(response), 'invalid_tabnet_def');
+  }
+});
+
+test('a rota do formulário do TabNet só aceita GET', async () => {
+  // A rota existe para ler; aceitar POST aqui abriria um segundo caminho para
+  // o mesmo host com corpo controlado pelo cliente, sem motivo.
+  const response = await handleRequest(
+    request('/tabnet-form?def=sinasc/cnv/nvuf.def', { method: 'POST', body: 'Linha=Sexo' }),
+    ENVIRONMENT,
+  );
+  assert.equal(response.status, 405);
+  assert.equal(response.headers.get('Allow'), 'GET');
+});
+
 test('a rota do TabNet repassa a tabulação agregada', async () => {
   const html = '<TABLE CLASS="tabdados"><TR><TH>Sexo<TH>Total<TR><TD>Masc<TD>10</TABLE>';
   let alvo = null;

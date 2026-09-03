@@ -161,3 +161,111 @@ export function buildTabnetBody(
   body.append('mostre', 'Mostra');
   return body;
 }
+
+/** Uma opção de um `<SELECT>` do formulário, como o TabNet a expõe. */
+export interface TabnetOption {
+  /** O que vai no corpo do POST. Vem em latin-1 e é usado byte a byte. */
+  value: string;
+  /** O rótulo legível, já sem entidades HTML. */
+  label: string;
+  selected: boolean;
+}
+
+export interface TabnetForm {
+  rows: TabnetOption[];
+  columns: TabnetOption[];
+  measures: TabnetOption[];
+  /** Períodos. O rótulo costuma ser o ano; o valor é o `.dbf` do TabNet. */
+  files: TabnetOption[];
+}
+
+/**
+ * Lê as opções do formulário de um `.def`.
+ *
+ * Existe porque cada `.def` expõe nomes próprios: o de nascidos vivos mede
+ * `Nascim_p/resid.mãe`, o de mortalidade mede outra coisa, e o nome do arquivo
+ * de um ano (`nvuf23.dbf`) também é específico. Fixar isso no código para os
+ * seis `.def` do mapa seria chute em cinco deles. Ler o formulário troca o
+ * chute por um fato, e de quebra a lista de anos passa a ser a real — quando o
+ * DATASUS publica 2027, ele aparece sozinho.
+ */
+export function parseTabnetForm(html: string): TabnetForm {
+  const bloco = (nome: string): TabnetOption[] => {
+    // O `NAME` vem sem aspas em parte das páginas, e os atributos antes dele
+    // variam (`class`, `scrolling`). Ancorar no nome, não na forma da tag.
+    // As barras vão dobradas porque isto é uma template literal: `\b` solto
+    // aqui seria o caractere de backspace, não a borda de palavra do regex.
+    const abre = new RegExp(`<select\\b[^>]*\\bname\\s*=\\s*["']?${nome}["']?[^>]*>`, 'i');
+    const inicio = abre.exec(html);
+    if (!inicio) return [];
+    const resto = html.slice(inicio.index + inicio[0].length);
+    const fim = resto.search(/<\/select>/i);
+    const corpo = fim < 0 ? resto : resto.slice(0, fim);
+
+    const opcoes: TabnetOption[] = [];
+    // O TabNet não fecha `<OPTION>`: o rótulo vai até a próxima tag ou o fim
+    // da linha. Casar `[^<\r\n]*` é o que respeita as duas terminações.
+    const padrao = /<option\b([^>]*)>([^<\r\n]*)/gi;
+    for (let achou = padrao.exec(corpo); achou; achou = padrao.exec(corpo)) {
+      const atributos = achou[1] ?? '';
+      const valor = /\bvalue\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/i.exec(atributos);
+      const bruto = valor?.[1] ?? valor?.[2] ?? valor?.[3];
+      if (bruto === undefined) continue;
+      opcoes.push({
+        value: bruto,
+        label: decodeTabnetText(achou[2] ?? '') || decodeTabnetText(bruto),
+        selected: /\bselected\b/i.test(atributos),
+      });
+    }
+    return opcoes;
+  };
+
+  return {
+    rows: bloco('Linha'),
+    columns: bloco('Coluna'),
+    measures: bloco('Incremento'),
+    files: bloco('Arquivos'),
+  };
+}
+
+/**
+ * Onde o TabNet publica cada conjunto que o aplicativo baixa.
+ *
+ * Só entram pares que foram sondados e responderam. `SIH/RD` ficou de fora de
+ * propósito: `sih/cnv/niuf.def` não conectou na sondagem, e oferecer uma prévia
+ * que erra é pior do que não oferecer nenhuma.
+ *
+ * A chave é `SISTEMA/TIPO`, o mesmo par que identifica o arquivo no catálogo.
+ */
+export const TABNET_DEFS: Readonly<Record<string, string>> = Object.freeze({
+  'SINASC/DN': 'sinasc/cnv/nvuf.def',
+  'SIM/DO': 'sim/cnv/obt10uf.def',
+  'SIM/DOINF': 'sim/cnv/inf10uf.def',
+  'SIM/DOMAT': 'sim/cnv/mat10uf.def',
+  'SIM/DOEXT': 'sim/cnv/ext10uf.def',
+  'SIASUS/PA': 'sia/cnv/qauf.def',
+});
+
+/** O `.def` do par, ou `undefined` quando o TabNet não cobre esse conjunto. */
+export function findTabnetDef(system: string, fileType: string): string | undefined {
+  return TABNET_DEFS[`${system.toUpperCase()}/${fileType.toUpperCase()}`];
+}
+
+/**
+ * Escolhe o período pelo ano, usando os rótulos que o formulário trouxe.
+ *
+ * O rótulo é o ano em quase todos os `.def`, mas em alguns vem como
+ * `2023 (parcial)` ou com o mês junto. Procurar o ano dentro do rótulo cobre
+ * os dois casos sem depender do formato do valor.
+ */
+export function selectTabnetFilesForYear(
+  files: readonly TabnetOption[],
+  year: number,
+): TabnetOption[] {
+  const ano = String(year);
+  const doAno = files.filter((arquivo) => new RegExp(`(^|\\D)${ano}(\\D|$)`).test(arquivo.label));
+  if (doAno.length > 0) return doAno;
+  // Alguns `.def` rotulam só com o mês e escondem o ano no valor (`nvuf23.dbf`).
+  const doisDigitos = ano.slice(-2);
+  return files.filter((arquivo) => new RegExp(`${doisDigitos}\\.dbf$`, 'i').test(arquivo.value));
+}

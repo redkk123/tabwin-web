@@ -20,6 +20,10 @@ const ROUTES = Object.freeze({
   '/prepare': Object.freeze({ name: 'prepare', method: 'POST' }),
   '/archive': Object.freeze({ name: 'archive', method: 'GET' }),
   '/tabnet': Object.freeze({ name: 'tabnet', method: 'POST' }),
+  // O formulário do `.def` é uma rota à parte, e não um GET na `/tabnet`,
+  // porque cada rota aqui declara um método só — e essa invariante é o que
+  // mantém o preflight e o 405 simples de conferir.
+  '/tabnet-form': Object.freeze({ name: 'tabnetForm', method: 'GET' }),
 });
 
 const DEFAULTS = Object.freeze({
@@ -153,7 +157,7 @@ function routeForRequest(requestUrl) {
   const url = new URL(requestUrl);
   const route = ROUTES[url.pathname];
   if (!route) throw new ProxyFailure(404, 'route_not_found', 'Proxy route not found');
-  if (route.name !== 'archive' && route.name !== 'tabnet' && url.search) {
+  if (route.name !== 'archive' && route.name !== 'tabnet' && route.name !== 'tabnetForm' && url.search) {
     throw new ProxyFailure(400, 'unexpected_query', 'This proxy route does not accept query parameters');
   }
   return { ...route, url };
@@ -180,10 +184,13 @@ export function validateArchiveTarget(candidate) {
 
 export function targetForRequest(requestUrl) {
   const { name, url } = routeForRequest(requestUrl);
-  if (name === 'tabnet') {
+  if (name === 'tabnet' || name === 'tabnetForm') {
     const def = new URL(requestUrl).searchParams.get('def') ?? '';
     if (!TABNET_DEF.test(def)) throw new ProxyFailure(400, 'invalid_tabnet_def', 'Unsupported TabNet definition');
-    return `${TABNET_ORIGIN}/cgi/tabcgi.exe?${def}`;
+    // `deftohtm.exe` devolve o formulário; `tabcgi.exe` tabula. Mesma
+    // allowlist de `.def` para os dois.
+    const cgi = name === 'tabnetForm' ? 'deftohtm.exe' : 'tabcgi.exe';
+    return `${TABNET_ORIGIN}/cgi/${cgi}?${def}`;
   }
   if (name === 'catalog') return `${DATASUS_ORIGIN}/wp-content/ftp.php`;
   if (name === 'prepare') return `${DATASUS_ORIGIN}/wp-content/download.php`;
@@ -202,6 +209,10 @@ function validateUpstreamTarget(routeName, target) {
   if (routeName === 'tabnet'
     && target.origin === TABNET_ORIGIN
     && target.pathname === '/cgi/tabcgi.exe'
+    && TABNET_DEF.test(target.search.slice(1))) return;
+  if (routeName === 'tabnetForm'
+    && target.origin === TABNET_ORIGIN
+    && target.pathname === '/cgi/deftohtm.exe'
     && TABNET_DEF.test(target.search.slice(1))) return;
   if (routeName === 'catalog' && target.href === `${DATASUS_ORIGIN}/wp-content/ftp.php`) return;
   if (routeName === 'prepare' && target.href === `${DATASUS_ORIGIN}/wp-content/download.php`) return;
@@ -338,16 +349,18 @@ function safeUpstreamHeader(source, name) {
   return value && !/[\r\n]/.test(value) ? value : null;
 }
 
-async function handleForm(routeName, request, environment, origin, proxySettings) {
-  const body = await readFormBody(request, proxySettings.maxFormBytes);
+async function handleForm(routeName, request, environment, origin, proxySettings, method = 'POST') {
+  // Numa rota GET não há corpo para ler nem `Content-Type` para declarar; mandar
+  // um corpo vazio faria o TabNet devolver o formulário sem as opções.
+  const body = method === 'POST' ? await readFormBody(request, proxySettings.maxFormBytes) : undefined;
   const timed = timeoutController(proxySettings.formTimeoutMs);
   try {
     const upstream = await fetchWithValidatedRedirects(routeName, targetForRequest(request.url), {
-      method: 'POST',
-      body,
+      method,
+      ...(body === undefined ? {} : { body }),
       headers: {
         Accept: 'application/json, text/plain, */*',
-        'Content-Type': FORM_CONTENT_TYPE,
+        ...(body === undefined ? {} : { 'Content-Type': FORM_CONTENT_TYPE }),
       },
     }, timed.controller.signal, proxySettings.maxRedirects);
     if (!upstream.ok) {
@@ -588,7 +601,7 @@ export async function handleRequest(request, environment = {}) {
 
     const proxySettings = settings(environment);
     if (route.name === 'archive') return await handleArchive(request, environment, origin, proxySettings);
-    return await handleForm(route.name, request, environment, origin, proxySettings);
+    return await handleForm(route.name, request, environment, origin, proxySettings, route.method);
   } catch (error) {
     return errorResponse(normalizedUnexpectedFailure(error), origin);
   }

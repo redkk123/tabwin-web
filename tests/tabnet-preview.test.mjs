@@ -3,7 +3,14 @@ import fs from 'node:fs';
 import test from 'node:test';
 
 import {
-  buildTabnetBody, decodeTabnetText, parseTabnetNumber, parseTabnetTable,
+  buildTabnetBody,
+  decodeTabnetText,
+  parseTabnetNumber,
+  parseTabnetTable,
+  parseTabnetForm,
+  selectTabnetFilesForYear,
+  findTabnetDef,
+  TABNET_DEFS,
 } from '../dist/packages/acquisition/src/tabnet-preview.js';
 
 /**
@@ -98,4 +105,80 @@ test('vários arquivos viram várias entradas, não uma lista concatenada', () =
     def: 'x.def', row: 'Sexo', measure: 'Óbitos', files: ['a.dbf', 'b.dbf'],
   });
   assert.deepEqual(body.getAll('Arquivos'), ['a.dbf', 'b.dbf']);
+});
+
+const FORMULARIO = [
+  '<SELECT NAME="Linha" ID="L" SIZE=4 >',
+  '    <OPTION VALUE="Regi\u00e3o" SELECTED>Regi&atilde;o',
+  '    <OPTION VALUE="Unidade_da_Federa\u00e7\u00e3o">Unidade da Federa&ccedil;&atilde;o',
+  '</SELECT>',
+  '<SELECT NAME="Coluna" ID="C" SIZE=4>',
+  '    <OPTION VALUE="--N\u00e3o-Ativa--" SELECTED>N&atilde;o ativa',
+  '</SELECT>',
+  '<SELECT NAME="Incremento" ID="I" SIZE=4 MULTIPLE>',
+  '    <OPTION VALUE="Nascim_p/resid.m\u00e3e" SELECTED>Nascim p/resid.m&atilde;e',
+  '</SELECT>',
+  '<SELECT scrolling="auto" class="fundo_select_tabnet" NAME="Arquivos" SIZE=4 MULTIPLE>',
+  '    <OPTION VALUE="nvuf24.dbf" SELECTED >2024',
+  '    <OPTION VALUE="nvuf23.dbf">2023',
+  '</SELECT>',
+].join('\r\n');
+
+test('o leitor de formulário extrai as quatro listas do .def', () => {
+  const form = parseTabnetForm(FORMULARIO);
+  assert.equal(form.rows.length, 2);
+  assert.equal(form.columns.length, 1);
+  assert.equal(form.measures.length, 1);
+  assert.equal(form.files.length, 2);
+});
+
+test('o rótulo vem sem entidades e o valor vem intacto para o POST', () => {
+  // O valor viaja byte a byte no corpo; "consertar" o acento nele faria o
+  // TabNet não reconhecer a opção. Só o rótulo é para gente ler.
+  const [primeira] = parseTabnetForm(FORMULARIO).rows;
+  assert.equal(primeira.label, 'Região');
+  assert.equal(primeira.value, 'Região');
+  assert.equal(primeira.selected, true);
+  assert.equal(parseTabnetForm(FORMULARIO).measures[0].label, 'Nascim p/resid.mãe');
+});
+
+test('o leitor acha o SELECT mesmo com atributos antes do NAME', () => {
+  // O de Arquivos vem com class e scrolling na frente; ancorar na forma da tag
+  // em vez do nome faria justamente esse — o dos anos — ser o que se perde.
+  const arquivos = parseTabnetForm(FORMULARIO).files;
+  assert.deepEqual(arquivos.map((a) => a.label), ['2024', '2023']);
+  assert.deepEqual(arquivos.map((a) => a.value), ['nvuf24.dbf', 'nvuf23.dbf']);
+});
+
+test('o leitor devolve lista vazia quando o SELECT não existe', () => {
+  assert.deepEqual(parseTabnetForm('<html>sem formulário</html>').rows, []);
+});
+
+test('o período é escolhido pelo ano que aparece no rótulo', () => {
+  const arquivos = parseTabnetForm(FORMULARIO).files;
+  assert.deepEqual(selectTabnetFilesForYear(arquivos, 2023).map((a) => a.value), ['nvuf23.dbf']);
+  assert.deepEqual(selectTabnetFilesForYear(arquivos, 1998), []);
+});
+
+test('um ano dentro de outro número não conta como o ano', () => {
+  // "12023" não é 2023. Sem as bordas, um rótulo com código junto casaria.
+  const enganoso = [{ value: 'x.dbf', label: '12023', selected: false }];
+  assert.deepEqual(selectTabnetFilesForYear(enganoso, 2023), []);
+});
+
+test('o mapa de .def só responde pelos pares que foram sondados', () => {
+  assert.equal(findTabnetDef('SINASC', 'DN'), 'sinasc/cnv/nvuf.def');
+  assert.equal(findTabnetDef('sinasc', 'dn'), 'sinasc/cnv/nvuf.def');
+  assert.equal(findTabnetDef('SIM', 'DOINF'), 'sim/cnv/inf10uf.def');
+  // SIH ficou de fora de propósito: o .def não respondeu na sondagem.
+  assert.equal(findTabnetDef('SIHSUS', 'RD'), undefined);
+  assert.equal(findTabnetDef('CNES', 'ST'), undefined);
+});
+
+test('todo .def do mapa tem a forma que o proxy aceita', () => {
+  // Se um .def entrar aqui fora do formato, a prévia falha com 400 e o motivo
+  // fica escondido no proxy. Melhor travar na fonte.
+  for (const def of Object.values(TABNET_DEFS)) {
+    assert.match(def, /^[a-z0-9_]+\/[a-z0-9_]+\/[a-z0-9_]+\.def$/i, def);
+  }
 });
