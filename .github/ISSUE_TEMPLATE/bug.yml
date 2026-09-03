@@ -1,0 +1,58 @@
+name: Relatar um problema
+description: Algo não funciona como deveria
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Antes de tudo: **não anexe microdado real de saúde aqui.** Issues são
+        públicos. Se precisar de um arquivo para reproduzir, diga qual é o
+        conjunto (sistema, tipo, UF, ano) — quem for investigar baixa o mesmo.
+
+  - type: textarea
+    id: o-que-aconteceu
+    attributes:
+      label: O que aconteceu
+      description: E o que você esperava que acontecesse.
+    validations:
+      required: true
+
+  - type: textarea
+    id: como-repetir
+    attributes:
+      label: Como repetir
+      description: |
+        Os passos, na ordem. Se envolve um arquivo do DATASUS, diga qual —
+        por exemplo "SINASC · DN · Brasil · 2024".
+      placeholder: |
+        1. Abro tabweb.me
+        2. Escolho ...
+        3. Clico em ...
+        4. Aparece ...
+    validations:
+      required: true
+
+  - type: input
+    id: navegador
+    attributes:
+      label: Navegador e sistema
+      placeholder: Chrome 140 no Android 15 · Firefox 143 no Windows 11
+    validations:
+      required: true
+
+  - type: textarea
+    id: console
+    attributes:
+      label: Erros no console (se houver)
+      description: |
+        F12 → Console no computador. Cole o texto, não uma captura — texto se
+        pesquisa. Em celular, pode pular este campo.
+      render: text
+
+  - type: textarea
+    id: mais
+    attributes:
+      label: Mais alguma coisa
+      description: |
+        Capturas de tela ajudam muito, principalmente se o problema é visual.
+        Confira que não aparece dado real nelas.

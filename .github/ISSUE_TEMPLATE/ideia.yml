@@ -1,0 +1,42 @@
+name: Sugerir uma melhoria
+description: Uma ideia, um dado que falta, uma análise que não dá para fazer
+labels: ["melhoria"]
+body:
+  - type: textarea
+    id: problema
+    attributes:
+      label: Qual o problema
+      description: |
+        Comece pelo que você está tentando fazer e não consegue, não pela
+        solução. A análise que você precisava, o passo que ficou manual, o
+        arquivo que o TabWin abre e este não.
+    validations:
+      required: true
+
+  - type: textarea
+    id: ideia
+    attributes:
+      label: Como você imagina a solução
+      description: Se tiver uma ideia de como resolver. Se não tiver, tudo bem — pule.
+
+  - type: dropdown
+    id: hoje
+    attributes:
+      label: Como você resolve isso hoje
+      options:
+        - Faço no TabWin original
+        - Faço em R ou Python
+        - Faço à mão, em planilha
+        - Não resolvo, desisti dessa análise
+        - Outra coisa (explico abaixo)
+    validations:
+      required: true
+
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Mais contexto
+      description: |
+        Se envolve um sistema específico do DATASUS (SIM, SINASC, SIH, CNES...),
+        diga qual. Cada um tem um formato próprio, e isso muda bastante o
+        tamanho do trabalho.

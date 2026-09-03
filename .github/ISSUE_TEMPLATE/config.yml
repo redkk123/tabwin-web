@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Vulnerabilidade de segurança
+    url: https://github.com/redkk123/tabwin-web/security/advisories/new
+    about: Não abra issue público. Use o relato privado, que fica fechado até haver correção.
+  - name: Dúvida sobre como usar
+    url: https://github.com/redkk123/tabwin-web/blob/main/docs/product/MANUAL_DO_USUARIO.md
+    about: O manual cobre a maior parte do caminho, com telas. Se não cobrir a sua dúvida, isso é um problema do manual — abra um issue.
