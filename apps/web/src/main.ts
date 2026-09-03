@@ -114,6 +114,7 @@ import { nextToPrepare } from '../../../packages/acquisition/src/prepare-ahead.t
 import { parseQuestion, type QuestionMatch } from '../../../packages/acquisition/src/question-parser.ts';
 import { describeRecognition, recognizeArchive } from '../../../packages/acquisition/src/known-archive.ts';
 import { fetchFromMirror } from './mirror-client.ts';
+import { fetchTabnetPreview, tabnetPreviewAvailable } from './tabnet-client.ts';
 import {
   createWorklist,
   describeWorklistPlan,
@@ -583,6 +584,8 @@ const defPicker = element<HTMLElement>('#def-picker');
 const defActive = element<HTMLSelectElement>('#def-active');
 const defActiveNote = element<HTMLElement>('#def-active-note');
 const defInspectorDialog = element<HTMLDialogElement>('#def-inspector-dialog');
+const tabnetDialog = element<HTMLDialogElement>('#tabnet-dialog');
+const tabnetBody = element<HTMLDivElement>('#tabnet-body');
 const defInspectorClose = element<HTMLButtonElement>('#def-inspector-close');
 const defInspectorBody = element<HTMLElement>('#def-inspector-body');
 const resultKicker = element<HTMLElement>('#result-kicker');
@@ -7389,6 +7392,116 @@ async function saveCachedArchiveToDisk(summary: CachedArchiveSummary): Promise<v
 }
 
 /**
+ * Mostra os totais que o TabNet já tem, antes de baixar o microdado.
+ *
+ * O ganho é de ordem de grandeza: a tabulação nacional volta em poucos
+ * segundos e alguns milhares de bytes, contra ~11 s de preparo mais 105 MB
+ * pelo caminho do microdado. Serve para conferir que o conjunto é o certo, e
+ * para responder "quantos foram?" sem baixar nada.
+ *
+ * O diálogo abre antes da resposta, com "consultando", porque a alternativa é
+ * um botão que não faz nada por três segundos.
+ */
+async function renderTabnetPreview(
+  remote: DatasusRemoteFile,
+  query: DatasusSearchQuery | undefined,
+): Promise<void> {
+  if (!query) return;
+  tabnetBody.replaceChildren();
+  const aguarde = document.createElement('p');
+  aguarde.className = 'tabnet-pergunta';
+  aguarde.textContent = `Consultando o TabNet sobre ${remote.name}…`;
+  tabnetBody.append(aguarde);
+  tabnetDialog.showModal();
+
+  try {
+    const preview = await fetchTabnetPreview(query.system, query.fileType, query.year);
+    // Nulo aqui significa que o mapa não cobre este conjunto — e nesse caso o
+    // botão nem deveria ter aparecido.
+    if (!preview) throw new Error('o TabNet não cobre este conjunto');
+
+    const { table, asked } = preview;
+    tabnetBody.replaceChildren();
+
+    // A pergunta feita vem antes da resposta: sem isso a tabela é um número
+    // sem contexto, e quem lê não tem como saber o que foi somado.
+    const pergunta = document.createElement('p');
+    pergunta.className = 'tabnet-pergunta';
+    const forte = document.createElement('b');
+    forte.textContent = asked.measure;
+    pergunta.append(forte, document.createTextNode(` por ${asked.row}, em ${asked.period}. Fonte: TabNet · ${asked.def}`));
+    tabnetBody.append(pergunta);
+
+    const rolagem = document.createElement('div');
+    rolagem.className = 'tabnet-rolagem';
+    const tabela = document.createElement('table');
+    tabela.className = 'tabnet-tabela';
+
+    const cabecalho = document.createElement('thead');
+    const linhaCabecalho = document.createElement('tr');
+    for (const rotulo of [table.rowLabel, ...table.columns]) {
+      const celula = document.createElement('th');
+      celula.textContent = rotulo;
+      linhaCabecalho.append(celula);
+    }
+    cabecalho.append(linhaCabecalho);
+
+    const corpo = document.createElement('tbody');
+    for (const linha of table.rows) {
+      const tr = document.createElement('tr');
+      const nome = document.createElement('td');
+      nome.textContent = linha.label;
+      tr.append(nome);
+      for (const valor of linha.values) {
+        const td = document.createElement('td');
+        // NaN é célula vazia no TabNet, não zero. Escrever "0" inventaria dado.
+        td.textContent = Number.isFinite(valor) ? integerFormat.format(valor) : '—';
+        tr.append(td);
+      }
+      corpo.append(tr);
+    }
+
+    tabela.append(cabecalho, corpo);
+    if (table.total) {
+      const rodape = document.createElement('tfoot');
+      const tr = document.createElement('tr');
+      const nome = document.createElement('td');
+      nome.textContent = table.total.label;
+      tr.append(nome);
+      for (const valor of table.total.values) {
+        const td = document.createElement('td');
+        td.textContent = Number.isFinite(valor) ? integerFormat.format(valor) : '—';
+        tr.append(td);
+      }
+      rodape.append(tr);
+      tabela.append(rodape);
+    }
+    rolagem.append(tabela);
+    tabnetBody.append(rolagem);
+
+    if (table.notes.length) {
+      const notas = document.createElement('ul');
+      notas.className = 'tabnet-notas';
+      for (const nota of table.notes.slice(0, 6)) {
+        const item = document.createElement('li');
+        item.textContent = nota;
+        notas.append(item);
+      }
+      tabnetBody.append(notas);
+    }
+  } catch (error) {
+    tabnetBody.replaceChildren();
+    const falha = document.createElement('p');
+    falha.className = 'tabnet-erro';
+    // O TabNet cai, muda de formato e demora. Dizer o motivo e lembrar que o
+    // download continua disponível evita que a falha da prévia pareça falha
+    // do aplicativo inteiro.
+    falha.textContent = `Não deu para consultar o TabNet: ${error instanceof Error ? error.message : String(error)}. O download do arquivo continua funcionando.`;
+    tabnetBody.append(falha);
+  }
+}
+
+/**
  * Baixa um arquivo do catálogo e grava direto no computador, sem abrir.
  *
  * "Baixar e abrir" serve para tabular aqui; quem vai levar o `.dbc` para o R,
@@ -7835,6 +7948,18 @@ function renderCatalogSearchBatch(
     const buttons = document.createElement('div');
     buttons.className = 'catalog-result-actions';
     buttons.append(button, save);
+    // A prévia só existe onde o TabNet publica o mesmo conjunto. Onde não
+    // publica, o botão não aparece — melhor do que oferecer e falhar.
+    const consulta = remote.catalogQuery ?? auxiliaryQuery;
+    if (tabnetPreviewAvailable(consulta?.system, consulta?.fileType)) {
+      const previa = document.createElement('button');
+      previa.className = 'text-button';
+      previa.type = 'button';
+      previa.textContent = 'Ver totais';
+      previa.title = 'Somar pelo TabNet antes de baixar. Manda a pergunta ao servidor do DATASUS.';
+      previa.addEventListener('click', () => void renderTabnetPreview(remote, consulta));
+      buttons.append(previa);
+    }
     item.append(details, buttons);
     catalogResults.append(item);
   }
@@ -9221,6 +9346,10 @@ defInspectorButton.addEventListener('click', () => {
   defInspectorDialog.showModal();
 });
 defInspectorClose.addEventListener('click', () => defInspectorDialog.close());
+element<HTMLButtonElement>('#tabnet-close').addEventListener('click', () => tabnetDialog.close());
+tabnetDialog.addEventListener('click', (event) => {
+  if (event.target === tabnetDialog) tabnetDialog.close();
+});
 defInspectorDialog.addEventListener('click', (event) => {
   if (event.target === defInspectorDialog) defInspectorDialog.close();
 });

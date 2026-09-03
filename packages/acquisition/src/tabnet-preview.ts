@@ -269,3 +269,33 @@ export function selectTabnetFilesForYear(
   const doisDigitos = ano.slice(-2);
   return files.filter((arquivo) => new RegExp(`${doisDigitos}\\.dbf$`, 'i').test(arquivo.value));
 }
+
+/**
+ * Serializa o corpo do POST em latin-1, que é o que o TabNet entende.
+ *
+ * `URLSearchParams.toString()` percent-codifica em UTF-8: `Região` sairia
+ * como `Regi%C3%A3o`. O TabNet de 1998 lê byte a byte em latin-1 e espera
+ * `Regi%E3o` — com o UTF-8 ele simplesmente não reconhece a opção e devolve
+ * uma página de erro, ou pior, uma tabulação de outra coisa.
+ *
+ * Os valores chegam aqui como vieram do formulário, que foi lido em
+ * windows-1252; cada caractere já é um byte só.
+ */
+export function encodeTabnetBody(body: URLSearchParams): string {
+  const porByte = (texto: string): string => [...texto]
+    .map((caractere) => {
+      const codigo = caractere.codePointAt(0) ?? 0;
+      if (/[A-Za-z0-9_.~-]/.test(caractere)) return caractere;
+      if (codigo > 0xff) {
+        // Fora do latin-1 não há byte para mandar. Acontecer aqui significa
+        // que o valor não veio do formulário, e mandar '?' esconderia o erro.
+        throw new Error(`o TabNet não aceita "${caractere}", que não cabe em latin-1`);
+      }
+      return `%${codigo.toString(16).toUpperCase().padStart(2, '0')}`;
+    })
+    .join('');
+
+  return [...body.entries()]
+    .map(([chave, valor]) => `${porByte(chave)}=${porByte(valor)}`)
+    .join('&');
+}

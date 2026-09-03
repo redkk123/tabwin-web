@@ -701,3 +701,17 @@ dialog p { color: #676d74; font-size: 13px; line-height: 1.6; }
 .query-result td.numero { font-variant-numeric: tabular-nums; text-align: right; }
 .query-result .vazio { color: var(--faint); font-style: italic; }
 .query-fields { width: 100%; padding: 6px; border: 1px solid var(--line-strong); border-radius: 6px; background: var(--surface); color: var(--ink); font-family: ui-monospace, "Cascadia Mono", "Consolas", monospace; font-size: 12px; }
+
+/* Prévia pelo TabNet. O aviso de que a pergunta sai daqui precisa ser visível
+   sem esforço: é a única exceção à promessa de que nada sai do aparelho. */
+.tabnet-aviso { font-size: 12px; padding: 8px 11px; border-radius: 5px; background: #f9f2e1; color: var(--warn); border-left: 3px solid var(--warn); }
+.tabnet-pergunta { font-size: 11px; color: var(--muted); margin: 14px 0 6px; }
+.tabnet-pergunta b { color: var(--ink); font-weight: 600; }
+.tabnet-tabela { width: 100%; border-collapse: collapse; font-size: 11px; }
+.tabnet-tabela th, .tabnet-tabela td { padding: 5px 7px; text-align: left; border-bottom: 1px solid #eff0f1; }
+.tabnet-tabela td:not(:first-child), .tabnet-tabela th:not(:first-child) { text-align: right; font-variant-numeric: tabular-nums; }
+.tabnet-tabela tfoot td { font-weight: 600; border-top: 1px solid var(--line-strong); border-bottom: none; }
+.tabnet-rolagem { max-height: 46vh; overflow: auto; }
+.tabnet-notas { font-size: 11px; color: var(--faint); margin-top: 10px; }
+.tabnet-notas li { margin-bottom: 3px; }
+.tabnet-erro { font-size: 12px; padding: 8px 11px; border-radius: 5px; background: #f9ebe9; color: #984d46; }

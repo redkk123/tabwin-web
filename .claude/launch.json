@@ -26,6 +26,21 @@
         "--strictPort"
       ],
       "port": 4173
+    },
+    {
+      "name": "datasus-proxy-local",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "wrangler",
+        "dev",
+        "--config",
+        "apps/datasus-proxy/wrangler.jsonc",
+        "--port",
+        "8787",
+        "--var",
+        "ALLOWED_ORIGINS:http://localhost:5173"
+      ],
+      "port": 8787
     }
   ]
 }

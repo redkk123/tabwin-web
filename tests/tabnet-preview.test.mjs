@@ -11,6 +11,7 @@ import {
   selectTabnetFilesForYear,
   findTabnetDef,
   TABNET_DEFS,
+  encodeTabnetBody,
 } from '../dist/packages/acquisition/src/tabnet-preview.js';
 
 /**
@@ -181,4 +182,54 @@ test('todo .def do mapa tem a forma que o proxy aceita', () => {
   for (const def of Object.values(TABNET_DEFS)) {
     assert.match(def, /^[a-z0-9_]+\/[a-z0-9_]+\/[a-z0-9_]+\.def$/i, def);
   }
+});
+
+test('o corpo do POST sai em latin-1, não em UTF-8', () => {
+  // Este é o detalhe que decide se a tabulação volta certa ou vem vazia: o
+  // TabNet lê byte a byte em latin-1. Em UTF-8, "Região" viraria Regi%C3%A3o
+  // e ele não reconheceria a opção.
+  const body = new URLSearchParams();
+  body.append('Linha', 'Região');
+  assert.equal(encodeTabnetBody(body), 'Linha=Regi%E3o');
+  assert.notEqual(encodeTabnetBody(body), body.toString());
+});
+
+test('o corpo preserva os caracteres que não precisam de escape', () => {
+  const body = new URLSearchParams();
+  body.append('Arquivos', 'nvuf23.dbf');
+  body.append('mostre', 'Mostra');
+  assert.equal(encodeTabnetBody(body), 'Arquivos=nvuf23.dbf&mostre=Mostra');
+});
+
+test('o corpo escapa o que separaria os campos', () => {
+  // Um & ou = solto no valor viraria outro campo, e a tabulação sairia de
+  // outra coisa sem nenhum erro aparecer.
+  const body = new URLSearchParams();
+  body.append('Incremento', 'Nascim_p/resid.mãe');
+  const saida = encodeTabnetBody(body);
+  assert.equal(saida, 'Incremento=Nascim_p%2Fresid.m%E3e');
+  assert.equal(saida.split('&').length, 1);
+});
+
+test('o corpo recusa o que não cabe em latin-1', () => {
+  // Mandar "?" no lugar esconderia o erro e devolveria uma tabulação de outra
+  // coisa. Falhar aqui diz que o valor não veio do formulário.
+  const body = new URLSearchParams();
+  body.append('Linha', 'emoji \u{1f600}');
+  assert.throws(() => encodeTabnetBody(body), /não cabe em latin-1/);
+});
+
+test('o corpo montado pelo buildTabnetBody atravessa a codificação inteiro', () => {
+  const codificado = encodeTabnetBody(buildTabnetBody({
+    def: 'sinasc/cnv/nvuf.def',
+    row: 'Unidade_da_Federação',
+    measure: 'Nascim_p/resid.mãe',
+    files: ['nvuf23.dbf'],
+  }));
+  // A volta confirma que nada se perdeu: decodifica byte a byte e compara.
+  const decodificado = decodeURIComponent(codificado.replace(/%([0-9A-F]{2})/g, (_, h) => String.fromCharCode(parseInt(h, 16))));
+  assert.match(decodificado, /Linha=Unidade_da_Federação/);
+  assert.match(decodificado, /Coluna=--Não-Ativa--/);
+  assert.match(decodificado, /Arquivos=nvuf23.dbf/);
+  assert.match(decodificado, /mostre=Mostra/);
 });
