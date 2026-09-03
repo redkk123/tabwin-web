@@ -9,6 +9,8 @@ import {
   normalizeCell,
   quoteIdentifier,
   tableNameFor,
+  buildCopyStatement,
+  DUCKDB_EXPORT_FILES,
 } from '../dist/packages/analysis/src/duckdb-surface.js';
 
 test('o nome da tabela sai do nome do arquivo sem virar injeção', () => {
@@ -110,4 +112,54 @@ test('a borda do orçamento é exata, e zero linhas não divide por zero', () =>
   assert.equal(vazio.cells, 0);
   assert.equal(vazio.withinBudget, true);
   assert.equal(vazio.suggestedFields, 87, 'sem linhas não há campo a cortar');
+});
+
+test('o COPY do Parquet sai comprimido e com o destino declarado', () => {
+  // ZSTD porque as colunas de um microdado do DATASUS repetem muito, e
+  // porque pandas, polars, Arrow e R leem sem configuração nenhuma.
+  const sql = buildCopyStatement('SELECT * FROM t', 'parquet');
+  assert.match(sql, /^COPY \(SELECT \* FROM t\) TO 'consulta\.parquet'/);
+  assert.match(sql, /FORMAT PARQUET/);
+  assert.match(sql, /COMPRESSION ZSTD/);
+});
+
+test('o COPY do CSV usa ponto e vírgula, que é o que o Excel em português espera', () => {
+  const sql = buildCopyStatement('SELECT 1', 'csv');
+  assert.match(sql, /FORMAT CSV/);
+  assert.match(sql, /DELIMITER ';'/);
+  assert.match(sql, /HEADER/);
+  // ENCODING no DuckDB é opção de LEITURA; passá-la aqui derruba a escrita
+  // com "not supported for writing". Medido, não suposto.
+  assert.doesNotMatch(sql, /ENCODING/);
+});
+
+test('o ponto e vírgula final é removido antes de entrar no COPY', () => {
+  // É como quase todo mundo escreve SQL, e `COPY (SELECT 1;) TO ...` é erro
+  // de sintaxe. Sem isto, a exportação falharia para a maioria das consultas.
+  assert.match(buildCopyStatement('SELECT 1;', 'csv'), /\(SELECT 1\)/);
+  assert.match(buildCopyStatement('SELECT 1;  \n', 'csv'), /\(SELECT 1\)/);
+  assert.match(buildCopyStatement('  SELECT 1 ;;; ', 'csv'), /\(SELECT 1\)/);
+});
+
+test('mais de uma instrução é recusada com motivo, não repassada ao motor', () => {
+  // Passar adiante daria um erro de sintaxe do DuckDB, que não diz o que
+  // fazer. E emendar duas instruções dentro de um COPY nunca ia funcionar.
+  assert.throws(
+    () => buildCopyStatement('SELECT 1; DROP TABLE t', 'csv'),
+    /uma consulta só/,
+  );
+});
+
+test('consulta vazia é recusada antes de virar SQL', () => {
+  for (const vazia of ['', '   ', ';', ' ;; ']) {
+    assert.throws(() => buildCopyStatement(vazia, 'parquet'), /Não há consulta/, JSON.stringify(vazia));
+  }
+});
+
+test('cada formato escreve num arquivo próprio', () => {
+  // Se os dois escrevessem no mesmo nome, exportar CSV depois de Parquet
+  // entregaria o arquivo antigo, ou falharia por já existir.
+  assert.notEqual(DUCKDB_EXPORT_FILES.parquet, DUCKDB_EXPORT_FILES.csv);
+  assert.match(DUCKDB_EXPORT_FILES.parquet, /\.parquet$/);
+  assert.match(DUCKDB_EXPORT_FILES.csv, /\.csv$/);
 });

@@ -24,23 +24,28 @@
 
 import type { DataRecord } from '../../../packages/core/src/model.ts';
 import {
+  DUCKDB_EXPORT_FILES,
   MAX_RESULT_ROWS,
+  buildCopyStatement,
   inferColumnTypes,
   quoteIdentifier,
   normalizeCell,
   type DuckDbColumn,
+  type DuckDbExportFormat,
   type DuckDbLoadedTable,
   type DuckDbQueryResult,
 } from '../../../packages/analysis/src/duckdb-surface.ts';
 
 export {
   MAX_RESULT_ROWS,
+  buildCopyStatement,
   createTableSql,
   inferColumnTypes,
   normalizeCell,
   quoteIdentifier,
   tableNameFor,
   type DuckDbColumn,
+  type DuckDbExportFormat,
   type DuckDbLoadedTable,
   type DuckDbQueryResult,
 } from '../../../packages/analysis/src/duckdb-surface.ts';
@@ -51,7 +56,12 @@ interface DuckDbRuntime {
     insertArrowTable(table: unknown, options: { name: string; create?: boolean }): Promise<void>;
     close(): Promise<void>;
   };
-  database: { terminate(): Promise<void> };
+  database: {
+    terminate(): Promise<void>;
+    /** Lê um arquivo do sistema virtual, que é para onde o `COPY` escreve. */
+    copyFileToBuffer(name: string): Promise<Uint8Array>;
+    dropFile(name: string): Promise<unknown>;
+  };
   worker: Worker;
 }
 
@@ -165,6 +175,43 @@ export async function loadRecordsAsTable(
   await connection.insertArrowTable(arrowTable, { name: table, create: true });
   onProgress?.(`Tabela ${table} pronta com ${records.length.toLocaleString('pt-BR')} linhas.`);
   return { name: table, rowCount: records.length, columns };
+}
+
+/**
+ * Escreve o resultado **inteiro** de uma consulta num arquivo, e devolve os
+ * bytes.
+ *
+ * A diferença para `runQuery` é a que importa: aquela corta em
+ * `MAX_RESULT_ROWS` para a tela não travar. Esta roda a consulta de novo
+ * dentro do motor e escreve tudo em disco virtual, sem que nenhuma linha
+ * passe por JavaScript — então quatrocentas mil linhas custam a memória do
+ * arquivo, não a de quatrocentos mil objetos.
+ *
+ * O arquivo é apagado do sistema virtual em seguida. Deixá-lo lá faria a
+ * segunda exportação falhar por já existir, e a memória nunca voltaria.
+ */
+export async function exportQuery(
+  sql: string,
+  format: DuckDbExportFormat,
+): Promise<Uint8Array> {
+  const { connection, database } = await ensureDuckDb();
+  const destino = DUCKDB_EXPORT_FILES[format];
+  try {
+    await connection.query(buildCopyStatement(sql, format));
+    const bytes = await database.copyFileToBuffer(destino);
+    if (format !== 'csv') return bytes;
+    // O DuckDB não escreve BOM, e sem ele o Excel em português lê o UTF-8 como
+    // latin-1: "Região" vira "RegiÃ£o" em toda a planilha. Três bytes na frente
+    // resolvem, e nenhuma outra ferramenta se incomoda com eles.
+    const comBom = new Uint8Array(bytes.byteLength + 3);
+    comBom.set([0xef, 0xbb, 0xbf], 0);
+    comBom.set(bytes, 3);
+    return comBom;
+  } finally {
+    // Sem `try`: um arquivo que não chegou a existir faz `dropFile` reclamar,
+    // e uma falha na limpeza não pode esconder a falha real da exportação.
+    try { await database.dropFile(destino); } catch { /* já não existia */ }
+  }
 }
 
 /** Roda uma consulta e devolve linhas já em JavaScript, com o corte declarado. */

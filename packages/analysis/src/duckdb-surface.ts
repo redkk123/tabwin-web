@@ -168,3 +168,45 @@ export function normalizeCell(value: unknown): DuckDbCell {
   if (value instanceof Date) return value;
   return String(value);
 }
+
+/** Formatos que a exportação de consulta sabe escrever. */
+export type DuckDbExportFormat = 'parquet' | 'csv';
+
+export const DUCKDB_EXPORT_FILES: Readonly<Record<DuckDbExportFormat, string>> = Object.freeze({
+  parquet: 'consulta.parquet',
+  csv: 'consulta.csv',
+});
+
+/**
+ * Monta o `COPY` que escreve o resultado inteiro num arquivo.
+ *
+ * Existe por causa de um problema concreto: `runQuery` corta o resultado em
+ * MAX_RESULT_ROWS para a tela não travar, e exportar essas linhas entregaria
+ * um recorte enquanto a interface diz "exporte para ver todas". O `COPY` roda
+ * a consulta de novo dentro do motor e escreve tudo, sem passar por
+ * JavaScript.
+ *
+ * O ponto e vírgula final precisa sair: `COPY (SELECT 1;) TO ...` é erro de
+ * sintaxe, e é a forma como quase todo mundo escreve SQL.
+ */
+export function buildCopyStatement(sql: string, format: DuckDbExportFormat): string {
+  const limpo = sql.trim().replace(/;+\s*$/, '').trim();
+  if (!limpo) throw new Error('Não há consulta para exportar');
+  // Mais de uma instrução não cabe dentro de um COPY, e tentar assim mesmo
+  // daria um erro do motor que não explica nada.
+  if (/;/.test(limpo)) {
+    throw new Error('A exportação aceita uma consulta só; separe as instruções');
+  }
+  const destino = DUCKDB_EXPORT_FILES[format];
+  const opcoes = format === 'parquet'
+    // ZSTD comprime melhor que Snappy e é lido por pandas, polars, Arrow e R
+    // sem configuração. O ganho num microdado do DATASUS é grande: as colunas
+    // são muito repetitivas.
+    ? "FORMAT PARQUET, COMPRESSION ZSTD"
+    // Ponto e vírgula porque o destino provável é o Excel em português, que lê
+    // vírgula como separador decimal. Sem `ENCODING`: no DuckDB ela é opção de
+    // LEITURA, e passá-la aqui derruba a exportação com "not supported for
+    // writing". O BOM que o Excel precisa é acrescentado aos bytes depois.
+    : "FORMAT CSV, DELIMITER ';', HEADER";
+  return `COPY (${limpo}) TO '${destino}' (${opcoes})`;
+}

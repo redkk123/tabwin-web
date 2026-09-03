@@ -98,9 +98,11 @@ import {
 import { StreamIdleTimeoutError } from '../../../packages/acquisition/src/stream-reader.ts';
 import { checkIngestBudget } from '../../../packages/analysis/src/duckdb-surface.ts';
 import {
+  exportQuery,
   loadRecordsAsTable,
   quoteIdentifier,
   runQuery,
+  type DuckDbExportFormat,
   shutdownDuckDb,
   tableNameFor,
   type DuckDbQueryResult,
@@ -9531,6 +9533,7 @@ const queryStatus = element<HTMLElement>('#query-status');
 const querySql = element<HTMLTextAreaElement>('#query-sql');
 const queryRun = element<HTMLButtonElement>('#query-run');
 const queryExport = element<HTMLButtonElement>('#query-export');
+const queryExportParquet = element<HTMLButtonElement>('#query-export-parquet');
 const queryUnload = element<HTMLButtonElement>('#query-unload');
 const queryLoad = element<HTMLButtonElement>('#query-load');
 const queryResult = element<HTMLElement>('#query-result');
@@ -9657,6 +9660,7 @@ queryRun.addEventListener('click', () => {
       queryLastResult = resultado;
       renderQueryResult(resultado);
       queryExport.disabled = !resultado.rows.length;
+      queryExportParquet.disabled = !resultado.rows.length;
       const corte = resultado.truncated
         ? ` Mostrando as primeiras ${integerFormat.format(resultado.rows.length)}; exporte para ver todas.`
         : '';
@@ -9667,28 +9671,55 @@ queryRun.addEventListener('click', () => {
     .catch((error: unknown) => {
       queryLastResult = null;
       queryExport.disabled = true;
+      queryExportParquet.disabled = true;
       queryResult.replaceChildren();
       setQueryStatus(error instanceof Error ? error.message : String(error), 'erro');
     })
     .finally(() => { queryRun.disabled = false; });
 });
 
-queryExport.addEventListener('click', () => {
-  if (!queryLastResult) return;
-  const escape = (valor: unknown): string => {
-    const texto = valor === null ? ''
-      : valor instanceof Date ? valor.toISOString().slice(0, 10) : String(valor);
-    return /[",\n;]/.test(texto) ? `"${texto.replace(/"/g, '""')}"` : texto;
-  };
-  const linhas = [
-    queryLastResult.columns.map((c) => escape(c.name)).join(';'),
-    ...queryLastResult.rows.map((linha) => linha.map(escape).join(';')),
-  ];
-  downloadBlob(
-    new Blob([`\ufeff${linhas.join('\r\n')}\r\n`], { type: 'text/csv;charset=utf-8' }),
-    `consulta-${new Date().toISOString().slice(0, 10)}.csv`,
-  );
-});
+/**
+ * Exporta o resultado INTEIRO da consulta.
+ *
+ * O que havia aqui antes escrevia `queryLastResult.rows`, que já vem cortado
+ * em MAX_RESULT_ROWS — enquanto o status dizia "exporte para ver todas". Quem
+ * consultasse quatrocentas mil linhas levava cinco mil acreditando ter tudo,
+ * e nada na tela desmentia. Agora o próprio motor escreve o arquivo, rodando
+ * a consulta de novo: as linhas não passam por JavaScript, então o custo é o
+ * do arquivo e não o de um objeto por registro.
+ */
+async function exportQueryResult(format: DuckDbExportFormat): Promise<void> {
+  const sql = querySql.value.trim();
+  if (!sql) { setQueryStatus('Escreva uma consulta antes de exportar.', 'erro'); return; }
+  const botoes = [queryExport, queryExportParquet];
+  for (const botao of botoes) botao.disabled = true;
+  try {
+    setQueryStatus(`Escrevendo o ${format === 'parquet' ? 'Parquet' : 'CSV'} com o resultado completo…`, 'trabalhando');
+    const inicio = performance.now();
+    const bytes = await exportQuery(sql, format);
+    const nome = `consulta-${new Date().toISOString().slice(0, 10)}.${format}`;
+    downloadBlob(
+      new Blob([bytes as BlobPart], {
+        type: format === 'parquet' ? 'application/vnd.apache.parquet' : 'text/csv;charset=utf-8',
+      }),
+      nome,
+    );
+    const mb = bytes.byteLength / 1048576;
+    setQueryStatus(
+      `${nome} pronto: ${mb >= 1 ? `${mb.toFixed(1)} MB` : `${Math.round(bytes.byteLength / 1024)} kB`}`
+      + ` em ${((performance.now() - inicio) / 1000).toFixed(1)} s, com todas as linhas do resultado.`,
+    );
+  } catch (error) {
+    setQueryStatus(error instanceof Error ? error.message : String(error), 'erro');
+  } finally {
+    // Só volta a habilitar o que fazia sentido antes: sem resultado na tela,
+    // não há consulta conferida para exportar.
+    for (const botao of botoes) botao.disabled = !queryLastResult?.rows.length;
+  }
+}
+
+queryExport.addEventListener('click', () => void exportQueryResult('csv'));
+queryExportParquet.addEventListener('click', () => void exportQueryResult('parquet'));
 
 queryUnload.addEventListener('click', () => {
   queryUnload.disabled = true;
@@ -9698,6 +9729,7 @@ queryUnload.addEventListener('click', () => {
     queryResult.replaceChildren();
     queryRun.disabled = true;
     queryExport.disabled = true;
+    queryExportParquet.disabled = true;
     setQueryStatus('Motor descarregado. A memória dele voltou para o navegador.');
   });
 });
