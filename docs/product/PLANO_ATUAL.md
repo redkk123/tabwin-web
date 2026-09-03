@@ -158,8 +158,23 @@ falta só a interface.
 
 Ordem por valor sobre esforço, não por ordem de chegada.
 
-- [ ] **Exportar Parquet.** Formato colunar é o que R e Python querem hoje, e
-      é o único item da revisão externa que não existe de alguma forma.
+- [x] **Exportar Parquet.** ✅ Botão na aba de consulta, ao lado do CSV. O
+      DuckDB já estava aqui, então foi ligar o `COPY` do motor — não escrever
+      um codificador.
+
+      No caminho apareceu coisa maior que o pedido: o exportador de CSV
+      escrevia as linhas **já cortadas** em `MAX_RESULT_ROWS` enquanto o
+      status dizia "exporte para ver todas". Quem consultasse 400 mil linhas
+      levava 5 mil achando ter tudo. Os dois formatos passam pelo `COPY`, que
+      roda a consulta de novo dentro do motor. Medido: tela 5.000, arquivo
+      20.000, conferido lendo o Parquet de volta com a soma batendo.
+
+      Duas armadilhas que só a verificação no navegador mostrou, registradas
+      para ninguém reintroduzir: `ENCODING` no DuckDB é opção de **leitura** e
+      derruba a escrita com "not supported for writing"; e sem ela some o BOM,
+      sem o qual o Excel em português lê UTF-8 como latin-1 e transforma
+      "Região" em "RegiÃ£o" na planilha inteira. O BOM é acrescentado aos
+      bytes.
 - [ ] **Primeiro DBC absurdamente fluido.** A revisão apontou isto como o que
       vende o projeto sozinho: buscar no DATASUS → escolher → abrir → tabela,
       sem atrito. Medir o caminho inteiro e atacar o pior trecho.
